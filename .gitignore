@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.addin
+.vscode/
+.vs/**/copilot-chat/

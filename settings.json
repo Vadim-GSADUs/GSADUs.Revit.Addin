@@ -1,0 +1,207 @@
+{
+  "LogDir": "G:\\\\Shared drives\\\\GSADUs Projects\\\\Our Models\\\\0 - CATALOG\\\\Config\\\\CSV Logs",
+  "DefaultOutputDir": "G:\\\\Shared drives\\\\GSADUs Projects\\\\Our Models\\\\0 - CATALOG\\\\Output",
+  "DefaultRunAuditBeforeExport": false,
+  "DefaultSaveBefore": false,
+  "DefaultRecenterXY": false,
+  "DefaultOverwrite": true,
+  "DefaultCleanup": false,
+  "OpenOutputFolder": true,
+  "ValidateStagingArea": false,
+  "SelectionSeedCategories": [
+    -2000011,
+    -2000032,
+    -2000035
+  ],
+  "SelectionProxyCategories": [
+    -2000080,
+    -2008234,
+    -2000011,
+    -2000023,
+    -2001060,
+    -2001350,
+    -2001160,
+    -2000014,
+    -2000100,
+    -2001140,
+    -2000032,
+    -2000151,
+    -2000260,
+    -2000160,
+    -2000480,
+    -2000460,
+    -2000450,
+    -2000079,
+    -2003200,
+    -2005020,
+    -2001000,
+    -2000035,
+    -2000066,
+    -2001390,
+    -2001391,
+    -2001320,
+    -2000170,
+    -2000320,
+    -2000171,
+    -2000038,
+    -2000126,
+    -2000946,
+    -2000530,
+    -2001120,
+    -2001330,
+    -2008016,
+    -2001360,
+    -2000321,
+    -2000051
+  ],
+  "SelectionProxyDistance": 1,
+  "CleanupBlacklistCategories": [
+    -2008119,
+    -2003101,
+    -2003100,
+    -2001342,
+    -2001272,
+    -2001271,
+    -2000977,
+    -2000573,
+    -2000570,
+    -2000510,
+    -2000301,
+    -2000280,
+    -2000279,
+    -2000240,
+    -2000045
+  ],
+  "Version": 1,
+  "DeepAnnoStatus": false,
+  "DryrunDiagnostics": false,
+  "PurgeCompact": false,
+  "PerfDiagnostics": false,
+  "DrawAmbiguousRectangles": false,
+  "Workflows": [
+    {
+      "Id": "17f3c86dcc0f45b1b209e266a46135ac",
+      "Name": "RVT Model",
+      "Kind": 1,
+      "Output": 0,
+      "Scope": "CurrentSet",
+      "Description": "RVT file Export",
+      "ActionIds": [
+        "export-rvt",
+        "recenter",
+        "cleanup",
+        "backup-cleanup"
+      ],
+      "Parameters": {
+        "thumbnailViewName": "First Floor"
+      },
+      "Enabled": true,
+      "Order": 0
+    },
+    {
+      "Id": "b3b6e1c7bab74a76b4f978eab7389ca7",
+      "Name": "PDF Floor Plan",
+      "Kind": 0,
+      "Output": 1,
+      "Scope": "CurrentSet",
+      "Description": "Single Sheet Print Set test",
+      "ActionIds": [
+        "export-pdf"
+      ],
+      "Parameters": {
+        "printSetName": "Floor Plan",
+        "exportSetupName": "GSADUs",
+        "fileNamePattern": "{SetName}.pdf"
+      },
+      "Enabled": true,
+      "Order": 1
+    },
+    {
+      "Id": "1c94f99a8e6c494897bc891a76456619",
+      "Name": "PNG Floor Plan",
+      "Kind": 0,
+      "Output": 2,
+      "Scope": "CurrentSet",
+      "Description": "Single View PNG Print Test 600dpi",
+      "ActionIds": [
+        "export-image"
+      ],
+      "Parameters": {
+        "fileNamePattern": "{SetName}",
+        "cropMode": "Auto",
+        "cropOffset": "1",
+        "resolutionPreset": "Ultra",
+        "imageFormat": "PNG",
+        "exportScope": "SingleView",
+        "singleViewId": "369"
+      },
+      "Enabled": true,
+      "Order": 2
+    },
+    {
+      "Id": "500f8e2a305744eba6b8d8a42191a53b",
+      "Name": "CSV ? Schedule ? Room",
+      "Kind": 0,
+      "Output": 3,
+      "Scope": "CurrentSet",
+      "Description": "Export Room schedule CSV (stub)",
+      "ActionIds": [
+        "export-csv"
+      ],
+      "Parameters": {},
+      "Enabled": true,
+      "Order": 3
+    },
+    {
+      "Id": "3907004ca0ee4c47a4f2b4dd02a8a079",
+      "Name": "PDF Full Set",
+      "Kind": 0,
+      "Output": 1,
+      "Scope": "CurrentSet",
+      "Description": "Multi-sheet print set Test",
+      "ActionIds": [
+        "export-pdf"
+      ],
+      "Parameters": {
+        "printSetName": "Full Set",
+        "exportSetupName": "GSADUs",
+        "fileNamePattern": "{SetName}.pdf"
+      },
+      "Enabled": true,
+      "Order": 0
+    },
+    {
+      "Id": "a34f742aa7d7475dbefecec2915392dc",
+      "Name": "Tiff",
+      "Kind": 0,
+      "Output": 2,
+      "Scope": "CurrentSet",
+      "Description": "",
+      "ActionIds": [
+        "export-image"
+      ],
+      "Parameters": {
+        "fileNamePattern": "{SetName}",
+        "cropMode": "Auto",
+        "cropOffset": "1",
+        "resolutionPreset": "High",
+        "imageFormat": "TIFF",
+        "exportScope": "SingleView",
+        "singleViewId": "369"
+      },
+      "Enabled": true,
+      "Order": 0
+    }
+  ],
+  "SelectedWorkflowIds": [
+    "3907004ca0ee4c47a4f2b4dd02a8a079"
+  ],
+  "CurrentSetParameterName": "CurrentSet",
+  "StagingWidth": 200,
+  "StagingHeight": 200,
+  "StagingBuffer": 10,
+  "StageMoveMode": "CentroidToOrigin",
+  "UseStageMoveForExternal": false,
+  "StagingAuthorizedUids": [],
+  "StagingAuthorizedCategoryNames": []
+}

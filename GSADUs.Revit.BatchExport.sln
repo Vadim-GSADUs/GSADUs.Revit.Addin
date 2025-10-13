@@ -1,0 +1,51 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GSADUs.Revit.Addin", "src\GSADUs.Revit.Addin\GSADUs.Revit.Addin.csproj", "{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Misc references", "Misc references", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+	ProjectSection(SolutionItems) = preProject
+		..\Visual Studio\AI-Prompt.md = ..\Visual Studio\AI-Prompt.md
+		..\Powershell\Install-GSADUsAddin.ps1 = ..\Powershell\Install-GSADUsAddin.ps1
+		MigrationPlan.md = MigrationPlan.md
+		README.md = README.md
+		RVT.md = RVT.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Debug|Any CPU.Build.0 = Debug|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Debug|x64.ActiveCfg = Debug|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Debug|x64.Build.0 = Debug|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Debug|x86.ActiveCfg = Debug|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Debug|x86.Build.0 = Debug|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Release|Any CPU.ActiveCfg = Release|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Release|Any CPU.Build.0 = Release|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Release|x64.ActiveCfg = Release|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Release|x64.Build.0 = Release|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Release|x86.ActiveCfg = Release|x64
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE}.Release|x86.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9F4C6F8F-19E5-49DD-9064-ABF6319C77DE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0A0EEF37-92AB-46B4-82BF-A13B51AA8B17}
+	EndGlobalSection
+EndGlobal
