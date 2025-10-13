@@ -6,3 +6,53 @@ obj/
 *.addin
 .vscode/
 .vs/**/copilot-chat/
+
+# OS / cloud sync
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.shortcut.json   # Google Drive
+# Shortcuts / archives
+*.lnk
+*.zip
+*.7z
+*.rar
+# Visual Studio / .NET
+Debug/
+Release/
+*.cache
+*.pdb
+*.log
+*.trx
+*.nupkg
+# VS Code (ignore all; track specific files explicitly if needed)
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+# Repo-local only
+.git_backup/
+gsync.ps1
+Config_WorkTree_Setup.md
+# CAD / binaries not wanted here (repo is code-centric)
+*.rvt
+*.rfa
+*.rte
+*.dwg
+*.dwt
+*.nwc
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tif
+*.tiff
+# CAD temp/backups
+*.rvt~
+*.0001.rvt
+*.bak
+Archive/
+Old/
+backups/
+

@@ -1,0 +1,39 @@
+# Normalize text: LF in repo, CRLF on Windows checkout
+* text=auto
+
+# Text and diffs
+*.cs       text diff=csharp
+*.csproj   text
+*.sln      text
+*.json     text
+*.xml      text
+*.xaml     text
+*.md       text
+*.txt      text
+*.py       text
+*.ps1      text
+*.yml      text
+*.yaml     text
+*.csv      text
+# Explicit binaries (kept out of text normalization)
+*.dll binary
+*.exe binary
+*.pdb binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.bmp binary
+*.tif binary
+*.tiff binary
+*.ico binary
+*.zip binary
+*.7z  binary
+# OPTIONAL: LFS for CAD if ever needed
+# *.rvt filter=lfs diff=lfs merge=lfs -text
+# *.rfa filter=lfs diff=lfs merge=lfs -text
+# *.rte filter=lfs diff=lfs merge=lfs -text
+# *.dwg filter=lfs diff=lfs merge=lfs -text
+# *.dwt filter=lfs diff=lfs merge=lfs -text
+# *.nwc filter=lfs diff=lfs merge=lfs -text
+
