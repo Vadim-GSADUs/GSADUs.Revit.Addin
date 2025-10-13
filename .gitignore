@@ -59,3 +59,8 @@ backups/
 
 Tools/
 
+# keep code tracked
+!src/**/*.cs
+!src/**/*.xaml
+!src/**/*.csproj
+!src/**/
