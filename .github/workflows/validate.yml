@@ -16,3 +16,13 @@ jobs:
         run: dotnet restore .\GSADUs.Revit.BatchExport.sln
       - name: Format check
         run: dotnet format --verify-no-changes
+      - name: Build (warnings as errors)
+        run: dotnet build .\src\GSADUs.Revit.Addin\GSADUs.Revit.Addin.csproj -c Release -warnaserror
+"
+git -C C:\GSADUs\Dev add .github/workflows/validate.yml
+git -C C:\GSADUs\Dev commit -m "CI: treat warnings as errors"
+git -C C:\GSADUs\Dev push
+
+Add-Content C:\GSADUs\Dev\.github\workflows\validate.yml @"
+      - name: Build (warnings as errors)
+        run: dotnet build .\src\GSADUs.Revit.Addin\GSADUs.Revit.Addin.csproj -c Release -warnaserror
