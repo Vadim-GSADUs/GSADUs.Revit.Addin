@@ -1,0 +1,191 @@
+<Window x:Class="GSADUs.Revit.Addin.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" Width="720" Height="560" MinWidth="520" MinHeight="460"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Main content: tabs -->
+        <TabControl Grid.Row="0">
+            <TabItem Header="General">
+                <Grid Margin="12" HorizontalAlignment="Stretch">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="170"/> <!-- wider label column -->
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Paths -->
+                    <TextBlock Text="Log directory:" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBox x:Name="LogDirBox" Grid.Column="1" Margin="0,0,8,8" HorizontalAlignment="Stretch" MinWidth="300"/>
+                    <Button Content="Browse..." Grid.Column="2" Margin="0,0,0,8" Padding="10,2" Click="BrowseLog_Click"/>
+
+                    <TextBlock Grid.Row="1" Text="Default output directory:" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBox x:Name="OutDirBox" Grid.Row="1" Grid.Column="1" Margin="0,0,8,8" HorizontalAlignment="Stretch" MinWidth="300"/>
+                    <Button Grid.Row="1" Grid.Column="2" Content="Browse..." Margin="0,0,0,8" Padding="10,2" Click="BrowseOut_Click"/>
+
+                    <!-- Display-only paths -->
+                    <TextBlock Grid.Row="2" Text="Settings file (read-only):" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBox x:Name="SettingsPathBox" Grid.Row="2" Grid.Column="1" Margin="0,0,8,8" IsReadOnly="True" HorizontalAlignment="Stretch" MinWidth="300"/>
+
+                    <TextBlock Grid.Row="3" Text="Shared parameters file (read-only):" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBox x:Name="SharedParamsPathBox" Grid.Row="3" Grid.Column="1" Margin="0,0,8,8" IsReadOnly="True" HorizontalAlignment="Stretch" MinWidth="300"/>
+
+                    <!-- Cross-workflow toggles with inline descriptions -->
+                    <CheckBox x:Name="RunAuditBox" Grid.Row="4" Content="Audit before export" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="Pre-audit selected sets before export; updates only selected rows in the Batch Export log." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                    <CheckBox x:Name="SaveBeforeBox" Grid.Row="5" Content="Save before export" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="5" Grid.Column="1" Text="Save the active model before making file copies." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                    <CheckBox x:Name="OverwriteBox" Grid.Row="6" Content="Overwrite" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="6" Grid.Column="1" Text="Allow replacing existing output files with the same name." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                    <CheckBox x:Name="DeepAnnoBox" Grid.Row="7" Content="Deep-Anno Status" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="7" Grid.Column="1" Text="Include annotation text/dimension values in status checks (marks Needs Update when these change)." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                    <CheckBox x:Name="DryrunDiagBox" Grid.Row="8" Content="Dryrun &amp; Diagnostics" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="8" Grid.Column="1" Text="Use dry-run mode with open copy and unsuppressed warnings; processes only the first selected set." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                    <CheckBox x:Name="PerfDiagBox" Grid.Row="9" Content="Performance Diagnostics" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="9" Grid.Column="1" Text="Write timing rows to 'Performance Log.csv' in the log directory." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                    <CheckBox x:Name="OpenOutputFolderBox" Grid.Row="10" Content="Open Output Folder" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="10" Grid.Column="1" Text="After a batch export completes, open the output directory in Explorer (ignored if already open)." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Selection Sets">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="170"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Seed Categories -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Seed Categories:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <TextBlock x:Name="SeedSummary" Grid.Row="0" Grid.Column="1" Text="(none - Defaults to Walls, Floors, Roofs)" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <Button Grid.Row="0" Grid.Column="2" Content="Pick..." Width="90" Click="PickSeed_Click"/>
+
+                    <!-- Proxy Categories -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Proxy Categories:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <TextBlock x:Name="ProxySummary" Grid.Row="1" Grid.Column="1" Text="(none - Defaults to Scope: Selection Set Categories)" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <Button Grid.Row="1" Grid.Column="2" Content="Pick..." Width="90" Click="PickProxy_Click"/>
+
+                    <!-- Proxy Distance -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Proxy Distance:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <TextBox x:Name="ProxyDistanceBox" Grid.Row="2" Grid.Column="2" Margin="0,1,0,7" Width="80"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="(model units)" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                    <!-- Ambiguous Rectangles Diagnostic -->
+                    <CheckBox x:Name="ChkDrawAmbiguousRectangles" Grid.Row="3" Grid.Column="0" Content="Ambiguous Rectangles" Margin="4,6,4,0"/>
+
+                    <!-- Blacklist by Category -->
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Blacklist by Category:" Margin="0,8,8,0" />
+                    <TextBlock x:Name="CleanupBlacklistSummary" Grid.Row="4" Grid.Column="1" Margin="0,8,8,0" />
+                    <Button   Grid.Row="4" Grid.Column="2" Content="Pick..." Click="PickCleanupBlacklist_Click" Margin="0,8,0,0" />
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Cleanup">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="170"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Staging">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="170"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Current Set Parameter:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <TextBox x:Name="StageParamNameBox" Grid.Row="0" Grid.Column="1" Margin="0,0,8,8"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Staging Width:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <TextBox x:Name="StageWidthBox" Grid.Row="1" Grid.Column="1" Margin="0,0,8,8"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Staging Height:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <TextBox x:Name="StageHeightBox" Grid.Row="2" Grid.Column="1" Margin="0,0,8,8"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Staging Buffer:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <TextBox x:Name="StageBufferBox" Grid.Row="3" Grid.Column="1" Margin="0,0,8,8"/>
+
+                    <!-- Stage Move Mode row: Combo + checkbox inline in second column -->
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Stage Move Mode:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,0,8,8">
+                        <ComboBox x:Name="StageMoveModeCombo" Width="180"/>
+                        <CheckBox x:Name="UseStageExternalBox" Content="Use Stage Move For External Clone" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Whitelist by Category -->
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Whitelist by Category:" VerticalAlignment="Center" Margin="0,12,8,8"/>
+                    <TextBlock x:Name="StageWhitelistCatSummary" Grid.Row="5" Grid.Column="1" Text="(none)" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="0,12,0,8" TextWrapping="Wrap"/>
+                    <Button Grid.Row="5" Grid.Column="2" Content="Pick..." Width="90" Margin="0,12,0,8" Click="PickStageWhitelistCategories_Click"/>
+
+                    <!-- Whitelist by Element -->
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Whitelist by Element:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="StageWhitelistElemSummary" Grid.Row="6" Grid.Column="1" Text="(none)" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="0,0,0,0" TextWrapping="Wrap"/>
+                    <Button Grid.Row="6" Grid.Column="2" Content="Pick..." Width="90" Click="PickStageWhitelistElements_Click"/>
+
+                    <CheckBox x:Name="ValidateStagingBox" Grid.Row="7" Grid.Column="0" Content="Validate Staging Area" Margin="0,12,0,2"/>
+                    <TextBlock Grid.Row="7" Grid.Column="1" Text="Check for unauthorized elements occupying the staging area before export; uncheck to skip validation and related prompts." Foreground="Gray" FontSize="11" Margin="0,12,0,8" TextWrapping="Wrap"/>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Global Save/Cancel buttons anchored bottom-right -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,12,12">
+            <Button Width="90" Margin="0,0,8,0" Content="Save" IsDefault="True" Click="OK_Click"/>
+            <Button Width="90" Content="Cancel" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

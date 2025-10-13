@@ -1,0 +1,73 @@
+<Window x:Class="GSADUs.Revit.Addin.UI.CategoriesPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Select Categories" SizeToContent="WidthAndHeight" MinWidth="620"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
+	<Grid Margin="12">
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto"/>
+			<RowDefinition Height="Auto"/>
+			<RowDefinition Height="*"/>
+			<RowDefinition Height="Auto"/>
+		</Grid.RowDefinitions>
+
+		<!-- Filter row -->
+		<DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,8">
+			<TextBlock Text="Filter:" Margin="0,0,6,0" Width="41"/>
+			<TextBox x:Name="FilterBox" Width="226" TextChanged="FilterBox_TextChanged"/>
+
+			<StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+				<Button x:Name="SelectAllBtn" Content="Select All" Margin="8,0,0,0" Click="SelectAll_Click"/>
+				<Button x:Name="SelectNoneBtn" Content="Select None" Margin="8,0,0,0" Click="SelectNone_Click"/>
+				<CheckBox x:Name="ShowModelBox"      Content="Model"      IsChecked="True" Margin="16,0,0,0" Checked="GroupFilterChanged" Unchecked="GroupFilterChanged"/>
+				<CheckBox x:Name="ShowAnnoBox"       Content="Annotation" IsChecked="True" Margin="8,0,0,0" Checked="GroupFilterChanged" Unchecked="GroupFilterChanged"/>
+				<CheckBox x:Name="ShowAnalyticalBox" Content="Analytical" IsChecked="True" Margin="8,0,0,0" Checked="GroupFilterChanged" Unchecked="GroupFilterChanged"/>
+				<CheckBox x:Name="ShowImportedBox"   Content="Imported"   IsChecked="True" Margin="8,0,0,0" Checked="GroupFilterChanged" Unchecked="GroupFilterChanged"/>
+			</StackPanel>
+		</DockPanel>
+
+		<!-- Scope/Discipline row -->
+		<DockPanel Grid.Row="1" LastChildFill="False" Margin="0,0,0,8">
+			<StackPanel Orientation="Horizontal">
+				<TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,6,0" Width="41"/>
+				<ComboBox x:Name="ScopeCombo" Width="362" SelectionChanged="ScopeCombo_SelectionChanged">
+					<ComboBoxItem Content="Show All Revit Categories"/>
+					<ComboBoxItem Content="Show Current File Categories Only"/>
+					<ComboBoxItem Content="Show Current Selection Set Categories"/>
+                    <ComboBoxItem Content="Show Staging Area Categories Only"/>
+				</ComboBox>
+
+				<TextBlock Text="  Discipline:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+				<ComboBox x:Name="DisciplineCombo" Width="235" SelectionChanged="DisciplineCombo_SelectionChanged">
+					<ComboBoxItem Content="Show All"/>
+					<ComboBoxItem Content="Architectural"/>
+					<ComboBoxItem Content="Mechanical"/>
+					<ComboBoxItem Content="Electrical"/>
+					<ComboBoxItem Content="Piping"/>
+					<ComboBoxItem Content="Infrastructure"/>
+				</ComboBox>
+			</StackPanel>
+		</DockPanel>
+
+		<Border Grid.Row="2" BorderThickness="1" BorderBrush="LightGray">
+			<!-- Remove outer ScrollViewer so ListBox's own ScrollViewer handles mouse wheel -->
+			<ListBox x:Name="ItemsList" MinWidth="580"
+					 ScrollViewer.VerticalScrollBarVisibility="Auto"
+					 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+					 ScrollViewer.CanContentScroll="True"
+					 VirtualizingPanel.IsVirtualizing="True"
+					 VirtualizingPanel.VirtualizationMode="Recycling">
+				<ListBox.ItemTemplate>
+					<DataTemplate>
+						<CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding DisplayName}"/>
+					</DataTemplate>
+				</ListBox.ItemTemplate>
+			</ListBox>
+		</Border>
+
+		<StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+			<Button Width="90" Margin="0,0,8,0" Content="OK" IsDefault="True" Click="OK_Click"/>
+			<Button Width="90" Content="Cancel" IsCancel="True"/>
+		</StackPanel>
+	</Grid>
+</Window>

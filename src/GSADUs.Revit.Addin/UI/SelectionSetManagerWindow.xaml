@@ -1,0 +1,69 @@
+<Window x:Class="GSADUs.Revit.Addin.UI.SelectionSetManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Selection Set Manager" Height="480" Width="820" WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize">
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <ListView x:Name="RowsList" Grid.Row="0" SelectionMode="Extended" VirtualizingPanel.IsVirtualizing="True" SelectionChanged="RowsList_SelectionChanged" MouseDoubleClick="RowsList_MouseDoubleClick">
+      <ListView.View>
+        <GridView>
+          <GridViewColumn Header="Set" Width="220">
+            <GridViewColumn.CellTemplate>
+              <DataTemplate>
+                <Grid>
+                  <TextBlock x:Name="SetNameDisplay" Text="{Binding SetName}" VerticalAlignment="Center"/>
+                  <TextBox x:Name="SetNameEditor"
+                           Text="{Binding EditName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           Visibility="Collapsed" MinWidth="200"
+                           VerticalContentAlignment="Center"
+                           LostFocus="SetNameEditor_LostFocus"
+                           KeyDown="SetNameEditor_KeyDown"/>
+                </Grid>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                    <Setter TargetName="SetNameDisplay" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="SetNameEditor" Property="Visibility" Value="Visible"/>
+                    <Setter TargetName="SetNameEditor" Property="FocusManager.FocusedElement" Value="{Binding RelativeSource={RelativeSource Self}}"/>
+                  </DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </GridViewColumn.CellTemplate>
+          </GridViewColumn>
+          <GridViewColumn Header="Before" DisplayMemberBinding="{Binding Before}" Width="70"/>
+          <GridViewColumn Header="+Added" DisplayMemberBinding="{Binding Added}" Width="70"/>
+          <GridViewColumn Header="-Removed" DisplayMemberBinding="{Binding Removed}" Width="80"/>
+          <GridViewColumn Header="After" DisplayMemberBinding="{Binding After}" Width="70"/>
+          <GridViewColumn Header="Ambiguous" DisplayMemberBinding="{Binding Ambiguous}" Width="80"/>
+          <GridViewColumn Header="Details" Width="300">
+            <GridViewColumn.CellTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Details}" TextWrapping="Wrap" ToolTip="{Binding Details}"/>
+              </DataTemplate>
+            </GridViewColumn.CellTemplate>
+          </GridViewColumn>
+        </GridView>
+      </ListView.View>
+    </ListView>
+
+    <Border Grid.Row="1" Margin="0,8,0,8" Padding="8" BorderThickness="1" BorderBrush="#DDD" Background="#FAFAFA">
+      <StackPanel>
+        <TextBlock Text="Summary" FontWeight="Bold" Margin="0,0,0,6"/>
+        <TextBlock x:Name="SummaryBlock" TextWrapping="Wrap"/>
+      </StackPanel>
+    </Border>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="RunBtn" Width="100" Margin="0,0,8,0" Content="Run Audit" Click="RunAudit_Click"/>
+      <Button x:Name="RenameBtn" Width="100" Margin="0,0,8,0" Content="Rename Set" Click="RenameBtn_Click" IsEnabled="False"/>
+      <Button x:Name="DeleteBtn" Width="100" Margin="0,0,8,0" Content="Delete Set" Click="DeleteBtn_Click" IsEnabled="False"/>
+      <Button x:Name="SaveBtn" Width="150" Margin="0,0,8,0" Content="Save &amp; Log Changes" IsDefault="True" Click="SaveBtn_Click"/>
+      <Button x:Name="CloseBtn" Width="90" Content="Close" IsCancel="True"/>
+    </StackPanel>
+  </Grid>
+</Window>

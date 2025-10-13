@@ -1,0 +1,164 @@
+<Window x:Class="GSADUs.Revit.Addin.UI.BatchExportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Batch Export"
+        Width="960" Height="660" MinWidth="720" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Loaded="Window_Loaded" Closing="Window_Closing" SizeChanged="Window_SizeChanged"
+        PreviewKeyDown="Window_PreviewKeyDown">
+  <Grid x:Name="RootGrid" Margin="8">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*" MinHeight="160" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" MinHeight="140" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- Selection Sets Section -->
+    <GroupBox Header="Selection Sets" Grid.Row="0" Margin="0,0,0,8">
+      <DockPanel LastChildFill="True">
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,6">
+          <TextBlock Text="From Batch Export Log" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <ToggleButton x:Name="SetsColumnsToggle" Content="Choose Columns..." MinWidth="130" />
+          <Popup x:Name="SetsColumnsPopup" PlacementTarget="{Binding ElementName=SetsColumnsToggle}"
+                 IsOpen="{Binding IsChecked, ElementName=SetsColumnsToggle}"
+                 StaysOpen="False" Closed="SetsColumnsPopup_Closed">
+            <Border Background="White" BorderBrush="Gray" BorderThickness="1" Padding="6">
+              <ScrollViewer MaxHeight="260" MinWidth="260">
+                <ItemsControl ItemsSource="{Binding ColumnChoices, RelativeSource={RelativeSource AncestorType=Window}}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected, Mode=TwoWay}" Margin="0,2,0,2"/>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Border>
+          </Popup>
+          <TextBox x:Name="SetsFilterBox" Tag="Search Filter" Width="240" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip="Type to filter rows" TextChanged="SetsFilterBox_TextChanged">
+            <TextBox.Style>
+              <Style TargetType="TextBox">
+                <Setter Property="Template">
+                  <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                      <Grid>
+                        <ScrollViewer x:Name="PART_ContentHost"/>
+                        <TextBlock Text="{TemplateBinding Tag}" Foreground="#7F000000" Margin="4,2,0,0" IsHitTestVisible="False">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                              <Setter Property="Visibility" Value="Collapsed"/>
+                              <Style.Triggers>
+                                <MultiDataTrigger>
+                                  <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}" Value=""/>
+                                    <Condition Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource TemplatedParent}}" Value="False"/>
+                                  </MultiDataTrigger.Conditions>
+                                  <Setter Property="Visibility" Value="Visible"/>
+                                </MultiDataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+                      </Grid>
+                    </ControlTemplate>
+                  </Setter.Value>
+                </Setter>
+              </Style>
+            </TextBox.Style>
+          </TextBox>
+        </StackPanel>
+
+        <ListView x:Name="SetsList" SelectionMode="Extended" ScrollViewer.CanContentScroll="True" ScrollViewer.VerticalScrollBarVisibility="Auto">
+          <ListView.Resources>
+            <Style TargetType="GridViewColumnHeader">
+              <EventSetter Event="Click" Handler="SetsHeader_Click"/>
+            </Style>
+          </ListView.Resources>
+          <ListView.View>
+            <GridView />
+          </ListView.View>
+        </ListView>
+      </DockPanel>
+    </GroupBox>
+
+    <!-- GridSplitter between sections (fixed height, non-stretching content) -->
+    <GridSplitter x:Name="MainSplitter" Grid.Row="1" Height="2" Background="#DDD" HorizontalAlignment="Stretch"
+                  DragDelta="MainSplitter_DragDelta" />
+
+    <!-- Workflows Section -->
+    <GroupBox Header="Workflows" Grid.Row="2" Margin="0,0,0,8">
+      <DockPanel LastChildFill="True">
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,6">
+          <TextBlock Text="From Workflow Manager" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <ToggleButton x:Name="WfColumnsToggle" Content="Choose Columns..." MinWidth="130" />
+          <Popup x:Name="WfColumnsPopup" PlacementTarget="{Binding ElementName=WfColumnsToggle}"
+                 IsOpen="{Binding IsChecked, ElementName=WfColumnsToggle}"
+                 StaysOpen="False" Closed="WfColumnsPopup_Closed">
+            <Border Background="White" BorderBrush="Gray" BorderThickness="1" Padding="6">
+              <ScrollViewer MaxHeight="260" MinWidth="260">
+                <ItemsControl ItemsSource="{Binding WorkColumnChoices, RelativeSource={RelativeSource AncestorType=Window}}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected, Mode=TwoWay}" Margin="0,2,0,2"/>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Border>
+          </Popup>
+          <TextBox x:Name="WfFilterBox" Tag="Search Filter" Width="240" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip="Type to filter rows" TextChanged="WfFilterBox_TextChanged">
+            <TextBox.Style>
+              <Style TargetType="TextBox">
+                <Setter Property="Template">
+                  <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                      <Grid>
+                        <ScrollViewer x:Name="PART_ContentHost"/>
+                        <TextBlock Text="{TemplateBinding Tag}" Foreground="#7F000000" Margin="4,2,0,0" IsHitTestVisible="False">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                              <Setter Property="Visibility" Value="Collapsed"/>
+                              <Style.Triggers>
+                                <MultiDataTrigger>
+                                  <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}" Value=""/>
+                                    <Condition Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource TemplatedParent}}" Value="False"/>
+                                  </MultiDataTrigger.Conditions>
+                                  <Setter Property="Visibility" Value="Visible"/>
+                                </MultiDataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+                      </Grid>
+                    </ControlTemplate>
+                  </Setter.Value>
+                </Setter>
+              </Style>
+            </TextBox.Style>
+          </TextBox>
+        </StackPanel>
+
+        <ListView x:Name="WorkflowsListView" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.CanContentScroll="True">
+          <ListView.Resources>
+            <Style TargetType="GridViewColumnHeader">
+              <EventSetter Event="Click" Handler="WfHeader_Click"/>
+            </Style>
+          </ListView.Resources>
+          <ListView.View>
+            <GridView />
+          </ListView.View>
+        </ListView>
+      </DockPanel>
+    </GroupBox>
+
+    <!-- Bottom buttons (pinned to bottom) -->
+    <UniformGrid Grid.Row="3" Rows="1" Columns="4" HorizontalAlignment="Stretch" Margin="0">
+      <Button x:Name="SettingsBtn" MinWidth="90" Margin="4,0" Content="Settings" Click="Settings_Click"/>
+      <Button x:Name="AuditBtn"    MinWidth="90" Margin="4,0" Content="Manage Sets" Click="Audit_Click"/>
+      <Button x:Name="ManageWorkflowsBtn" MinWidth="110" Margin="4,0" Content="Manage Workflows" Click="ManageWorkflows_Click"/>
+      <Button x:Name="RunBtn"      MinWidth="90" Margin="4,0" Content="Batch Export"   IsDefault="True" Click="Run_Click"/>
+    </UniformGrid>
+  </Grid>
+</Window>
+
