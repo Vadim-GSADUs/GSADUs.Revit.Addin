@@ -27,3 +27,13 @@ if (-not (git diff --cached --quiet)) {
 
 # Push to upstream
 git push -u origin $Branch
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "`n--------------------------------------------"
+    Write-Host "✅  Push completed successfully."
+    Write-Host "--------------------------------------------"
+} else {
+    Write-Host "`n❌  Push failed. Check the messages above."
+}
+Read-Host "Press Enter to close"
+
