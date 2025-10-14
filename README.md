@@ -51,9 +51,6 @@ The following is the comprehensive file structure of the `src/GSADUs.Revit.Addin
 ### Audit
 - `src/GSADUs.Revit.Addin/Domain/Audit/AuditComputeCache.cs`: Per-document cache of category IDs and non-template views supporting audit computations. 
 
-### Cleanup
-- `src/GSADUs.Revit.Addin/Domain/Cleanup/DeletePlanCache.cs`: Stores and retrieves delete plans per document with helpers for clearing specific or all cached entries. 
-
 ## Infrastructure
 - `src/GSADUs.Revit.Addin/Infrastructure/ActionRegistry.cs`: Concrete action registry seeded with known export actions and ordering metadata. 
 - `src/GSADUs.Revit.Addin/Infrastructure/BatchExportPrefs.cs`: Loads and saves window layout preferences for the batch export UI, including column layout and filters. 

@@ -152,7 +152,7 @@ namespace GSADUs.Revit.Addin
                     Scope = "Model",
                     Description = "Deliverable RVT clone",
                     Order = 0,
-                    ActionIds = new List<string> { "export-rvt", "cleanup", "backup-cleanup" }
+                    ActionIds = new List<string> { "export-rvt" }
                 });
                 s.Workflows.Add(new WorkflowDefinition
                 {
