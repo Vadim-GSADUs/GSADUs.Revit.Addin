@@ -81,7 +81,7 @@ $xml = @"
     <Name>GSADUs Batch Export</Name>
     <Assembly>$dstDll</Assembly>
     <AddInId>$CmdAddInId</AddInId>
-    <FullClassName>$CmdFullClassName</FullClassName>
+    <FullClassName>$CmdFullClass</FullClassName>
     <VendorId>$VendorId</VendorId>
     <VendorDescription>$VendorDesc</VendorDescription>
   </AddIn>
