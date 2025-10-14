@@ -45,11 +45,6 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
             };
 
             var targetDoc = outDoc ?? sourceDoc;
-            if (targetDoc == null)
-            {
-                Trace.WriteLine($"SKIP_TX SaveAsRvtAction reason=no-target-doc set=\"{setName}\" corr={RunLog.CorrId}");
-                return;
-            }
 
             try
             {
