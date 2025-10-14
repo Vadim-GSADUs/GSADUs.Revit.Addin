@@ -61,10 +61,6 @@
 	  <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Folder Include="Domain\Cleanup\" />
-	</ItemGroup>
-
   <!-- Ensure custom XAML pages are compiled -->
 
   <!-- Force a deploy step after every successful build -->
