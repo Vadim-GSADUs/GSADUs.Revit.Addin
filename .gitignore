@@ -64,3 +64,7 @@ Tools/
 !src/**/*.xaml
 !src/**/*.csproj
 !src/**/
+
+src/**/bin/
+src/**/obj/
+
