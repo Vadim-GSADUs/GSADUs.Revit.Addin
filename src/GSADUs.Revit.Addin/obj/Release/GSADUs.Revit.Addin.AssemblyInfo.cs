@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("GSADUs.Revit.Addin")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+59537e4ed981fe87a09602f3a396532ba9cee32b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f589c0f369e1fc4a2f5398fa90b481470d1a15e7")]
 [assembly: System.Reflection.AssemblyProductAttribute("GSADUs.Revit.Addin")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GSADUs.Revit.Addin")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

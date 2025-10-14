@@ -105,6 +105,10 @@ Steps:
 4) Verify scheduled tasks: GSADUs_AutoPull_OnLogon, GSADUs_AutoPull_2h show LastTaskResult = 0.
 "@ | Add-Content -Path $Plan -Encoding UTF8
 
+# run once per machine (or add to your bootstrap)
+git config --global pull.rebase true
+git config --global fetch.prune true
+
 # Commit and push
 git -C $Repo add Powershell/Install-HomePC-Bootstrap.ps1 MigrationPlan.md
 git -C $Repo commit -m "Add Home PC bootstrap script and run-book section"

@@ -1,0 +1,17 @@
+# build + IDE noise
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# deployment output
+GSADUs.Revit.Addin.deps.json
+GSADUs.Revit.Addin.pdb
+GSADUs.Revit.Addin.dll
+C:/GSADUs/RevitAddin/        # <-- DO NOT use absolute paths; instead:
+RevitAddin/                  # if you ever copy outputs into a repo subfolder, ignore it
+
+# agents/logs/temp
+**/Logs/
+**/*.log
