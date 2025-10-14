@@ -112,19 +112,6 @@ The following is the comprehensive file structure of the `src/GSADUs.Revit.Addin
 - `src/GSADUs.Revit.Addin/Workflows/Pdf/PdfWorkflowKeys.cs`: Parameter key definitions for PDF workflows (print set, export setup, naming pattern). 
 - `src/GSADUs.Revit.Addin/Workflows/Pdf/PdfWorkflowRunner.cs`: Resolves view sets and export setups, sanitizes filenames, executes Revit PDF export, and reports generated artifacts. 
 
-### Rvt
-- `src/GSADUs.Revit.Addin/Workflows/Rvt/BackupCleanupAction.cs`: Removes Revit backup files created during export from the target directory. 
-- `src/GSADUs.Revit.Addin/Workflows/Rvt/CleanupExportsAction.cs`: Executes element cleanup on exported documents using `ExportCleanup` when cleanup is enabled. 
-- `src/GSADUs.Revit.Addin/Workflows/Rvt/ExportCleanup.cs`: Builds delete plans, filters preserved elements, and deletes model/annotation content with diagnostic reporting. 
-  - #TODO: Expand this 380+ LOC utility with structured logging, persistence, and configurable include/exclude lists as noted in code comments. 
-- `src/GSADUs.Revit.Addin/Workflows/Rvt/OpenForDryRunAction.cs`: Placeholder action for opening cloned documents in dry-run scenarios. 
-  - #TODO: Implement actual document activation/opening once runner supplies cloned file context. 
-- `src/GSADUs.Revit.Addin/Workflows/Rvt/ResaveRvtAction.cs`: Saves or compacts the exported document based on settings, ensuring final deliverables are persisted. 
-- `src/GSADUs.Revit.Addin/Workflows/Rvt/RvtWorkflowKeys.cs`: Constant keys specific to RVT workflow options such as cleanup and purge toggles. 
-- `src/GSADUs.Revit.Addin/Workflows/Rvt/RvtWorkflowRunner.cs`: Stub runner orchestrating RVT-specific steps with structured logging hooks. 
-  - #TODO: Replace stubbed sections with real SaveAs, dry-run opening, cleanup, and backup removal implementations. 
-- `src/GSADUs.Revit.Addin/Workflows/Rvt/SaveAsRvtAction.cs`: Saves the source document to the configured output directory with sanitized filenames and logging. 
-
 ## obj/x64/Debug
 - `.NETCoreApp,Version=v8.0.AssemblyAttributes.cs`
 - `GSADUs.Revit.Addin.AssemblyInfo.cs`
