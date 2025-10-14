@@ -187,7 +187,6 @@ namespace GSADUs.Revit.Addin.UI
             RefreshMainList();
             RefreshSavedCombos();
             InitScopeCombos();
-            PopulateRvtThumbnailList();
             UpdateImageBlacklistSummary();
 
             // Phase 2: minimal load hook
@@ -538,90 +537,6 @@ namespace GSADUs.Revit.Addin.UI
             catch { }
         }
 
-        // ----- RVT helpers -----
-        private void PopulateRvtThumbnailList()
-        {
-            try
-            {
-                var cb = FindName("RvtThumbnailCombo") as ComboBox; if (cb == null) return;
-                cb.Items.Clear();
-                if (_doc != null)
-                {
-                    var names = new FilteredElementCollector(_doc)
-                        .OfClass(typeof(ViewPlan))
-                        .Cast<ViewPlan>()
-                        .Where(v => !v.IsTemplate && v.ViewType == ViewType.FloorPlan)
-                        .OrderBy(v => v.Name)
-                        .Select(v => v.Name)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    foreach (var n in names) cb.Items.Add(n);
-                }
-                else
-                {
-                    var general = AppSettingsStore.Load().ThumbnailViewName;
-                    if (!string.IsNullOrWhiteSpace(general)) cb.Items.Add(general);
-                }
-            }
-            catch { }
-        }
-
-        private void ApplyRvtThumbnailToUi(WorkflowDefinition wf)
-        {
-            var cb = FindName("RvtThumbnailCombo") as ComboBox; if (cb == null) return;
-            string? name = null;
-            try
-            {
-                if (wf.Parameters != null && wf.Parameters.TryGetValue("thumbnailViewName", out var je))
-                {
-                    if (je.ValueKind == JsonValueKind.String) name = je.GetString();
-                }
-            }
-            catch { }
-            cb.SelectedItem = name ?? (cb.Items.Count > 0 ? cb.Items[0] : null);
-        }
-
-        private void SaveRvtThumbnailFromUi(WorkflowDefinition wf)
-        {
-            var cb = FindName("RvtThumbnailCombo") as ComboBox; if (cb == null) return;
-            var selected = cb.SelectedItem as string; if (string.IsNullOrWhiteSpace(selected)) return;
-            wf.Parameters ??= new Dictionary<string, JsonElement>();
-            wf.Parameters["thumbnailViewName"] = ToJson(selected);
-        }
-
-        private static bool GetBoolParam(WorkflowDefinition wf, string key, bool def)
-        {
-            try
-            {
-                if (wf.Parameters != null && wf.Parameters.TryGetValue(key, out var je))
-                {
-                    if (je.ValueKind == JsonValueKind.True) return true;
-                    if (je.ValueKind == JsonValueKind.False) return false;
-                    if (je.ValueKind == JsonValueKind.String && bool.TryParse(je.GetString(), out var b)) return b;
-                }
-            }
-            catch { }
-            return def;
-        }
-
-        private void RvtThumbnailCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            MarkDirty("Rvt");
-            UpdateCanSaveFor("Rvt");
-        }
-
-        private void RvtCleanupCheck_Changed(object sender, RoutedEventArgs e)
-        {
-            MarkDirty("Rvt");
-            UpdateCanSaveFor("Rvt");
-        }
-
-        private void RvtCompactCheck_Changed(object sender, RoutedEventArgs e)
-        {
-            MarkDirty("Rvt");
-            UpdateCanSaveFor("Rvt");
-        }
-
         // ----- Main tab actions -----
         private void DupBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -728,7 +643,6 @@ namespace GSADUs.Revit.Addin.UI
                 (FindName(tag + "ScopeCombo") as ComboBox)!.SelectedItem = wf?.Scope;
                 (FindName(tag + "DescBox") as TextBox)!.Text = wf?.Description ?? string.Empty;
                 (FindName(tag + "NameBox") as TextBox)!.Text = wf?.Name ?? string.Empty;
-                if (tag == "Rvt" && wf != null) ApplyRvtThumbnailToUi(wf);
                 if (tag == "Pdf") WorkflowManagerWindow_Loaded(this, new RoutedEventArgs());
                 if (tag == "Image") HydrateImageWorkflow(wf);
                 if (tag == "Rvt") { _isDirtyRvt = false; SetSaveVisual("RvtSaveBtn", false); }
@@ -1242,9 +1156,6 @@ namespace GSADUs.Revit.Addin.UI
                 case OutputType.Image:
                     PersistImageParameters(existing); break;
                 case OutputType.Rvt:
-                    // Sync RVT checkboxes to global settings
-                    _settings.DefaultCleanup = (FindName("RvtCleanupBox") as CheckBox)?.IsChecked == true;
-                    _settings.PurgeCompact = (FindName("RvtPurgeBox") as CheckBox)?.IsChecked == true;
                     EnsureActionId(existing, "export-rvt"); break;
                 case OutputType.Csv:
                     EnsureActionId(existing, "export-csv"); break;

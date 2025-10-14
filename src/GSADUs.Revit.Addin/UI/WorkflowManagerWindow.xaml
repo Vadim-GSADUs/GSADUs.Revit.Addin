@@ -85,14 +85,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-
-                            <CheckBox x:Name="RvtCleanupBox" Grid.Row="0" Content="Cleanup Exports" Margin="0,2,0,2" Checked="RvtOption_Checked" Unchecked="RvtOption_Checked"/>
-                            <CheckBox x:Name="RvtPurgeBox"   Grid.Row="2" Content="Compact on Save" Margin="0,2,0,2" ToolTip="Revit API does not support purge during export. This flag only compacts on SaveAs." Checked="RvtOption_Checked" Unchecked="RvtOption_Checked"/>
-
-                            <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,6,0,2">
-                                <TextBlock Text="Thumbnail View:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <ComboBox x:Name="RvtThumbnailCombo" Width="280" SelectionChanged="RvtThumbnailCombo_SelectionChanged"/>
-                            </StackPanel>
+                            <!-- All controls removed for refactoring: RVT options group is now empty. -->
                         </Grid>
                     </GroupBox>
 
