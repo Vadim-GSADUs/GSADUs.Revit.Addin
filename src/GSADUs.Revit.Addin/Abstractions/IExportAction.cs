@@ -1,5 +1,3 @@
-using GSADUs.Revit.Addin.Workflows.Rvt;
-
 namespace GSADUs.Revit.Addin
 {
     // Minimal synchronous action interface for Phase 2
@@ -18,8 +16,6 @@ namespace GSADUs.Revit.Addin
                      Autodesk.Revit.DB.Document? outDoc,
                      string setName,
                      System.Collections.Generic.IList<string> preserveUids,
-                     CleanupDiagnostics? cleanupDiag,
-                     DeletePlan? planForThisRun,
                      bool isDryRun);
     }
 }

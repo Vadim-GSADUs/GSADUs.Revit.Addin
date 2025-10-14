@@ -1,7 +1,6 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using GSADUs.Revit.Addin.UI;
-using GSADUs.Revit.Addin.Workflows.Rvt;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
@@ -31,7 +30,6 @@ namespace GSADUs.Revit.Addin.Orchestration
             bool anyCompleted = false;
             while (true)
             {
-                try { DeletePlanCache.Clear(doc); } catch { }
                 var outcome = RunOnce(uiapp, uidoc);
                 if (outcome == RunOutcome.Completed)
                 {
@@ -58,7 +56,6 @@ namespace GSADUs.Revit.Addin.Orchestration
             bool anyCompleted = false;
             while (true)
             {
-                try { DeletePlanCache.Clear(uidoc.Document); } catch { }
                 var outcome = RunOnce(uiapp, uidoc);
                 if (outcome == RunOutcome.Completed)
                 {
@@ -88,8 +85,6 @@ namespace GSADUs.Revit.Addin.Orchestration
             var doc = uidoc.Document;
             var appSettings = AppSettingsStore.Load();
 
-            DeletePlan? deletePlan = null;
-
             var allSetsForWindow = SelectionSets.Get(doc);
             Trace.WriteLine($"COLLECT_SHEETS requested={allSetsForWindow.Count} corr={Logging.RunLog.CorrId}");
 
@@ -109,7 +104,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                 return RunOutcome.CanceledBeforeStart;
             }
 
-            var isDryRun = win.IsDryRun();
+            var isDryRun = win.IsDryRun(); // is this a RVT-specific remnant?
 
             appSettings = AppSettingsStore.Load();
             var uiOpts = win.Result!; // now contains SetIds + SetNames
@@ -128,25 +123,6 @@ namespace GSADUs.Revit.Addin.Orchestration
                 chosenActionIds.Add("export-pdf");
             if (workflows.Any(w => w.Output == OutputType.Image) && !chosenActionIds.Any(a => string.Equals(a, "export-image", StringComparison.OrdinalIgnoreCase)))
                 chosenActionIds.Add("export-image");
-
-            // Add RVT-specific actions
-            if (workflows.Any(w => w.Output == OutputType.Rvt))
-            {
-                if (!chosenActionIds.Any(a => string.Equals(a, "export-rvt", StringComparison.OrdinalIgnoreCase)))
-                    chosenActionIds.Add("export-rvt");
-
-                if (isDryRun && !chosenActionIds.Any(a => string.Equals(a, "open-dryrun", StringComparison.OrdinalIgnoreCase)))
-                    chosenActionIds.Add("open-dryrun");
-
-                if (!chosenActionIds.Any(a => string.Equals(a, "cleanup", StringComparison.OrdinalIgnoreCase)))
-                    chosenActionIds.Add("cleanup");
-
-                if (!chosenActionIds.Any(a => string.Equals(a, "resave-rvt", StringComparison.OrdinalIgnoreCase)))
-                    chosenActionIds.Add("resave-rvt");
-
-                if (!chosenActionIds.Any(a => string.Equals(a, "backup-cleanup", StringComparison.OrdinalIgnoreCase)))
-                    chosenActionIds.Add("backup-cleanup");
-            }
 
             // BatchExportSettings now includes SetIds (optional, preferred)
             var request = new BatchExportSettings(
@@ -262,10 +238,6 @@ namespace GSADUs.Revit.Addin.Orchestration
                 catch { }
             }
 
-            // (Removed redundant first confirmation popup to streamline UX)
-            // Summary confirmation (names for readability) now skipped; will proceed directly.
-            // If future estimate added, integrate into a single dialog outside this coordinator
-
             // One-time staging area validation
             using (PerfLogger.Measure("Batch.OneTimePrep", string.Empty))
             {
@@ -287,10 +259,7 @@ namespace GSADUs.Revit.Addin.Orchestration
             var logPath = System.IO.Path.Combine(appOutDir, csvName);
             var log = logFactory.Load(logPath);
 
-            // (Optional pre-audit can later be adapted for SetId; omitted here to keep minimal diff)
-
             if (request.SaveBefore && doc.IsModified) doc.Save();
-            // Removed UserPrefs.SaveLastOutputDir(request.OutputDir);
 
             Directory.CreateDirectory(AppSettingsStore.FallbackLogDir);
             var modelNameSan = System.IO.Path.GetFileNameWithoutExtension(doc.PathName) ?? "Model";
@@ -368,25 +337,14 @@ namespace GSADUs.Revit.Addin.Orchestration
                     catch { stageDelta = XYZ.Zero; }
                 }
 
-                bool pdfExportSuccess = false; // legacy meaning: new file appeared
-
                 try
                 {
                     // Ensure setName is valid
                     if (string.IsNullOrWhiteSpace(setName))
                     {
-                        TaskDialog.Show("RVT Export", "Select or define a valid SetName.");
+                        TaskDialog.Show("Batch Export", "Select or define a valid SetName.");
                         return RunOutcome.CanceledBeforeStart;
                     }
-
-                    // Compute output path based on OutputDir
-                    var settings = AppSettingsStore.Load();
-                    var baseDir = AppSettingsStore.GetEffectiveOutputDir(settings);
-                    Directory.CreateDirectory(baseDir);
-
-                    var outName = $"{San(setName)}.rvt";
-                    var outFile = Path.Combine(baseDir, outName);
-                    System.Diagnostics.Trace.WriteLine($"RVT open target: {outFile}");
 
                     var preserveUids = memberUidsBySetId.GetValueOrDefault(setId) ?? new List<string>();
 
@@ -397,83 +355,13 @@ namespace GSADUs.Revit.Addin.Orchestration
                             using (PerfLogger.Measure($"Action.{a.desc.Id}", setName))
                             {
                                 Trace.WriteLine($"Executing action: {a.desc.Id}");
-                                a.impl.Execute(uiapp, doc, null, setName, preserveUids!, null, null, isDryRun);
+                                a.impl.Execute(uiapp, doc, null, setName, preserveUids!, isDryRun);
                                 Trace.WriteLine($"Action {a.desc.Id} completed.");
                             }
                             UI.ProgressWindow.DoEvents();
                             if (cts.IsCancellationRequested) { breakAfterThisSet = true; break; }
                         }
                         if (breakAfterThisSet) throw new OperationCanceledException();
-
-                        Document? outDoc = null;
-
-                        if (requiresClone)
-                        {
-                            entry["Export Date"] = logFactory.NowStamp();
-
-                            if (!request.Overwrite && File.Exists(outFile))
-                                throw new IOException("File exists and Overwrite is off.");
-
-                            using (PerfLogger.Measure("Export.Copy", outFile))
-                            {
-                                File.Copy(doc.PathName, outFile, request.Overwrite);
-                            }
-                            UI.ProgressWindow.DoEvents();
-
-                            if (cts.IsCancellationRequested) { breakAfterThisSet = true; }
-
-                            DeletePlan? planForThisRun = null;
-                            if (deletePlan != null)
-                            {
-                                planForThisRun = new DeletePlan();
-                                foreach (var uid2 in deletePlan.AreaUids) if (!(preserveUids?.Contains(uid2) ?? false)) planForThisRun.AreaUids.Add(uid2);
-                                foreach (var uid2 in deletePlan.OtherUids) if (!(preserveUids?.Contains(uid2) ?? false)) planForThisRun.OtherUids.Add(uid2);
-                            }
-
-                            if (isDryRun)
-                            {
-                                using (PerfLogger.Measure("Export.OpenActivate", outFile))
-                                {
-                                    var uidocOpened = uiapp.OpenAndActivateDocument(outFile);
-                                    outDoc = uidocOpened?.Document;
-                                }
-                                if (outDoc == null) throw new InvalidOperationException("Failed to open exported copy.");
-                                try { outDoc.Save(); } catch { }
-                            }
-                            else
-                            {
-                                using (PerfLogger.Measure("Export.Open", outFile))
-                                {
-                                    outDoc = uiapp.Application.OpenDocumentFile(outFile);
-                                }
-                                if (outDoc == null) throw new InvalidOperationException("Failed to open exported copy.");
-                            }
-
-                            UI.ProgressWindow.DoEvents();
-                            if (cts.IsCancellationRequested) { breakAfterThisSet = true; }
-
-                            foreach (var a in externalActions)
-                            {
-                                using (PerfLogger.Measure($"Action.{a.desc.Id}", setName))
-                                {
-                                    a.impl.Execute(uiapp, doc, outDoc, setName, preserveUids!, isDryRun ? new CleanupDiagnostics() : null, planForThisRun, isDryRun);
-                                }
-                                UI.ProgressWindow.DoEvents();
-                                if (cts.IsCancellationRequested) { breakAfterThisSet = true; break; }
-                            }
-
-                            // Verify RVT clone exists after actions
-                            if (!string.IsNullOrEmpty(outFile) && !File.Exists(outFile))
-                            {
-                                System.Diagnostics.Trace.WriteLine($"RVT export missing: {outFile}");
-                                TaskDialog.Show("RVT Export", $"No RVT file was created at:\n{outFile}");
-                                return RunOutcome.Failed;
-                            }
-                            else
-                            {
-                                System.Diagnostics.Trace.WriteLine($"RVT export present: {outFile}");
-                            }
-                        }
                     }
                 }
 
@@ -507,15 +395,6 @@ namespace GSADUs.Revit.Addin.Orchestration
                 }
             }
 
-            try
-            {
-                if (resolved.Any(a => a.desc.Id == "backup-cleanup") && !string.IsNullOrWhiteSpace(request.OutputDir) && Directory.Exists(request.OutputDir))
-                {
-                    // Removed direct call to FileCleanup.DeleteRvtBackups
-                }
-            }
-            catch { }
-
             try { progressWin.ForceClose(); } catch { }
             sw.Stop();
 
@@ -525,7 +404,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                 return RunOutcome.CancelledDuringRun;
             }
 
-            dialogs.Info("Batch Export", isDryRun ? "Dry run completed." : "Done.");
+            dialogs.Info("Batch Export", isDryRun ? "Dry run completed." : "Done."); // is this a RVT-specific remnant?
 
             // New: optionally open output folder after completion
             try

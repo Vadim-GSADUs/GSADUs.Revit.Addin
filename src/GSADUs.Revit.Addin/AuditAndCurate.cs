@@ -1,6 +1,5 @@
-﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using GSADUs.Revit.Addin.Workflows.Rvt;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,15 +9,6 @@ namespace GSADUs.Revit.Addin
 {
     public static class AuditAndCurate
     {
-        // Build and cache a DeletePlan for re-use during batch processing.
-        // Only physical model elements and view-specific annotations, excluding blacklisted categories.
-        public static DeletePlan BuildAndCacheDeletePlan(Document doc)
-        {
-            var plan = ExportCleanup.BuildDeletePlan(doc, new CleanupOptions());
-            DeletePlanCache.Store(doc, plan);
-            return plan;
-        }
-
         public sealed class AuditOptions
         {
             public double BbInflationOffset { get; set; } = 1.0;

@@ -1,6 +1,5 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using GSADUs.Revit.Addin.Workflows.Rvt;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -188,7 +187,7 @@ namespace GSADUs.Revit.Addin.Workflows.Image
         private static bool TryComputePixelSize3D(View3D v, int dpi, out int pixelSize, out string reason, out bool clamped, out int raw)
         { pixelSize = 0; reason = string.Empty; clamped = false; raw = 0; if (!TryGet3DExtents(v, out var wFt, out var hFt, out reason)) return false; int scale = 0; try { scale = v.Scale; } catch { } if (scale <= 0) { reason = "invalid_scale"; return false; } double wIn = wFt * 12.0 / scale; double hIn = hFt * 12.0 / scale; if (wIn <= 0 || hIn <= 0) { reason = "invalid_inches"; return false; } int px = (int)Math.Ceiling(Math.Max(wIn, hIn) * dpi); raw = px; if (px <= 0) { reason = "zero_px"; return false; } pixelSize = Math.Clamp(px, 64, 16384); clamped = raw > 16384; return true; }
 
-        public void Execute(UIApplication uiapp, Document sourceDoc, Document? outDoc, string setName, IList<string> preserveUids, CleanupDiagnostics? cleanupDiag, DeletePlan? planForThisRun, bool isDryRun)
+        public void Execute(UIApplication uiapp, Document sourceDoc, Document? outDoc, string setName, IList<string> preserveUids, bool isDryRun)
         {
             AppSettings app; try { app = AppSettingsStore.Load(); } catch { return; }
             if (app.Workflows == null || app.SelectedWorkflowIds == null) return;

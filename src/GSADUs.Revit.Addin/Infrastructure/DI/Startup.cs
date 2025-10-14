@@ -2,7 +2,6 @@ using Autodesk.Revit.UI;
 using GSADUs.Revit.Addin.Orchestration;
 using GSADUs.Revit.Addin.Workflows.Image;
 using GSADUs.Revit.Addin.Workflows.Pdf; // Updated namespace for ExportPdfAction
-using GSADUs.Revit.Addin.Workflows.Rvt; // added for BatchRunCoordinator
 using Microsoft.Extensions.DependencyInjection;
 using System;
 
@@ -43,8 +42,6 @@ namespace GSADUs.Revit.Addin
             services.AddSingleton<IActionRegistry, ActionRegistry>();
 
             // Built-in action implementations (execution)
-            services.AddSingleton<IExportAction, CleanupExportsAction>();
-            services.AddSingleton<IExportAction, BackupCleanupAction>();
 
             // In-place action stubs
             services.AddSingleton<IExportAction, ExportPdfAction>();

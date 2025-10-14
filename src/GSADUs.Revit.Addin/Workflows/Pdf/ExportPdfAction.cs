@@ -1,6 +1,5 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using GSADUs.Revit.Addin.Workflows.Rvt;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -13,7 +12,7 @@ namespace GSADUs.Revit.Addin.Workflows.Pdf
         public int Order => 500;
         public bool RequiresExternalClone => false;
         public bool IsEnabled(AppSettings app, BatchExportSettings request) => true;
-        public void Execute(UIApplication uiapp, Document sourceDoc, Document? outDoc, string setName, IList<string> preserveUids, CleanupDiagnostics? cleanupDiag, DeletePlan? planForThisRun, bool isDryRun)
+        public void Execute(UIApplication uiapp, Document sourceDoc, Document? outDoc, string setName, IList<string> preserveUids, bool isDryRun)
         {
             var appSettings = AppSettingsStore.Load();
             var selectedWorkflowIds = new System.Collections.Generic.HashSet<string>(appSettings.SelectedWorkflowIds ?? new System.Collections.Generic.List<string>());
