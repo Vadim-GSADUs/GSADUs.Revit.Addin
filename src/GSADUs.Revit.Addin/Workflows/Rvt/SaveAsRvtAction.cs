@@ -1,7 +1,8 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using GSADUs.Revit.Addin.Logging; // Added namespace for RunLog
+using GSADUs.Revit.Addin.Logging;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -43,21 +44,27 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                 OverwriteExistingFile = true
             };
 
+            var targetDoc = outDoc ?? sourceDoc;
+            if (targetDoc == null)
+            {
+                Trace.WriteLine($"SKIP_TX SaveAsRvtAction reason=no-target-doc set=\"{setName}\" corr={RunLog.CorrId}");
+                return;
+            }
+
             try
             {
                 RunLog.BeginSubsection("SaveAsRvtAction", destinationPath);
-                System.Diagnostics.Trace.WriteLine($"BEGIN SaveAsRvtAction for set: {setName}");
-                sourceDoc.SaveAs(destinationPath, saveAsOptions);
-                System.Diagnostics.Trace.WriteLine($"RVT export saved: {destinationPath}");
+                Trace.WriteLine($"BEGIN_TX SaveAsRvtAction set=\"{setName}\" target=\"{destinationPath}\" corr={RunLog.CorrId}");
+                targetDoc.SaveAs(destinationPath, saveAsOptions);
+                Trace.WriteLine($"END_TX SaveAsRvtAction status=success set=\"{setName}\" corr={RunLog.CorrId}");
             }
             catch (System.Exception ex)
             {
-                System.Diagnostics.Trace.WriteLine($"RVT export failed: {ex.GetType().Name}: {ex.Message}");
+                Trace.WriteLine($"END_TX SaveAsRvtAction status=fail set=\"{setName}\" ex={ex.GetType().Name} msg=\"{ex.Message}\" corr={RunLog.CorrId}");
                 throw;
             }
             finally
             {
-                System.Diagnostics.Trace.WriteLine($"END SaveAsRvtAction for set: {setName}");
                 RunLog.EndSubsection("SaveAsRvtAction");
             }
         }

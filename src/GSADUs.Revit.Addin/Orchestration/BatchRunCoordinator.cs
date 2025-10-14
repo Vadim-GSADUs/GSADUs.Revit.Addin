@@ -349,6 +349,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                 };
 
                 bool toggled = false;
+                bool stageMoveSucceeded = false;
                 XYZ stageDelta = XYZ.Zero;
                 var sfilter = doc.GetElement(setId) as SelectionFilterElement; // legacy direct resolution
                 IList<ElementId> stageIds = sfilter?.GetElementIds()?.ToList() ?? new List<ElementId>();
@@ -361,11 +362,12 @@ namespace GSADUs.Revit.Addin.Orchestration
                     {
                         if (stageIds.Count > 0)
                         {
-                            if (!TryStageMove(doc, stageIds, appSettings, out stageDelta))
+                            stageMoveSucceeded = TryStageMove(doc, stageIds, appSettings, out stageDelta);
+                            if (!stageMoveSucceeded)
                                 stageDelta = XYZ.Zero;
                         }
                     }
-                    catch { stageDelta = XYZ.Zero; }
+                    catch { stageMoveSucceeded = false; stageDelta = XYZ.Zero; }
                 }
 
                 bool pdfExportSuccess = false; // legacy meaning: new file appeared
@@ -452,18 +454,44 @@ namespace GSADUs.Revit.Addin.Orchestration
                             UI.ProgressWindow.DoEvents();
                             if (cts.IsCancellationRequested) { breakAfterThisSet = true; }
 
-                            foreach (var a in externalActions)
-                            {
-                                using (PerfLogger.Measure($"Action.{a.desc.Id}", setName))
-                                {
-                                    a.impl.Execute(uiapp, doc, outDoc, setName, preserveUids!, isDryRun ? new CleanupDiagnostics() : null, planForThisRun, isDryRun);
-                                }
-                                UI.ProgressWindow.DoEvents();
-                                if (cts.IsCancellationRequested) { breakAfterThisSet = true; break; }
-                            }
+                        var saveAsAction = externalActions.FirstOrDefault(a => string.Equals(a.desc.Id, "export-rvt", StringComparison.OrdinalIgnoreCase));
+                        var externalWithoutSaveAs = saveAsAction == null
+                            ? externalActions
+                            : externalActions.Where(a => !string.Equals(a.desc.Id, "export-rvt", StringComparison.OrdinalIgnoreCase)).ToList();
 
-                            // Verify RVT clone exists after actions
-                            if (!string.IsNullOrEmpty(outFile) && !File.Exists(outFile))
+                        foreach (var a in externalWithoutSaveAs)
+                        {
+                            using (PerfLogger.Measure($"Action.{a.desc.Id}", setName))
+                            {
+                                Trace.WriteLine($"Executing action: {a.desc.Id}");
+                                a.impl.Execute(uiapp, doc, outDoc, setName, preserveUids!, isDryRun ? new CleanupDiagnostics() : null, planForThisRun, isDryRun);
+                                Trace.WriteLine($"Action {a.desc.Id} completed.");
+                            }
+                            UI.ProgressWindow.DoEvents();
+                            if (cts.IsCancellationRequested) { breakAfterThisSet = true; break; }
+                        }
+
+                        if (!breakAfterThisSet && saveAsAction != null)
+                        {
+                            using (PerfLogger.Measure($"Action.{saveAsAction.desc.Id}", setName))
+                            {
+                                Trace.WriteLine($"Executing action: {saveAsAction.desc.Id}");
+                                if (!stageMoveSucceeded)
+                                {
+                                    Trace.WriteLine($"SKIP SaveAsRvtAction reason=stage-move-failed corr={Logging.RunLog.CorrId}");
+                                }
+                                else
+                                {
+                                    saveAsAction.impl.Execute(uiapp, doc, outDoc, setName, preserveUids!, isDryRun ? new CleanupDiagnostics() : null, planForThisRun, isDryRun);
+                                    Trace.WriteLine($"Action {saveAsAction.desc.Id} completed.");
+                                }
+                            }
+                            UI.ProgressWindow.DoEvents();
+                            if (cts.IsCancellationRequested) { breakAfterThisSet = true; }
+                        }
+
+                        // Verify RVT clone exists after actions
+                        if (!string.IsNullOrEmpty(outFile) && !File.Exists(outFile))
                             {
                                 System.Diagnostics.Trace.WriteLine($"RVT export missing: {outFile}");
                                 TaskDialog.Show("RVT Export", $"No RVT file was created at:\n{outFile}");
@@ -488,7 +516,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                         try
                         {
                             if (stageIds.Count > 0 && stageDelta != null && !stageDelta.IsAlmostEqualTo(XYZ.Zero))
-                                TryRestoreStage(doc, stageIds, stageDelta);
+                                TryResetStage(doc, stageIds, stageDelta);
                         }
                         catch { }
                         try { if (toggled) TryToggleCurrentSet(doc, appSettings, memberUidsBySetId.GetValueOrDefault(setId) ?? new List<string>(), false); } catch { }
@@ -687,6 +715,8 @@ namespace GSADUs.Revit.Addin.Orchestration
         {
             delta = XYZ.Zero;
             if (doc == null || ids == null || ids.Count == 0) return false;
+            Trace.WriteLine($"BEGIN_TX TryStageMove count={ids.Count} corr={Logging.RunLog.CorrId}");
+            var status = "fail";
             try
             {
                 // Compute combined bounds in model coords
@@ -721,12 +751,14 @@ namespace GSADUs.Revit.Addin.Orchestration
                     ElementTransformUtils.MoveElements(doc, ids, delta);
                     tx.Commit();
                     Trace.WriteLine("TryStageMove successful: " + string.Join(", ", ids));
+                    status = "success";
                     return true;
                 }
                 catch
                 {
                     try { tx.RollBack(); } catch { }
                     delta = XYZ.Zero;
+                    status = "rollback";
                     return false;
                 }
             }
@@ -735,12 +767,18 @@ namespace GSADUs.Revit.Addin.Orchestration
                 delta = XYZ.Zero;
                 return false;
             }
+            finally
+            {
+                Trace.WriteLine($"END_TX TryStageMove status={status} delta=({delta.X:F3},{delta.Y:F3},{delta.Z:F3}) corr={Logging.RunLog.CorrId}");
+            }
         }
 
-        private static bool TryRestoreStage(Document doc, IList<ElementId> ids, XYZ delta)
+        private static bool TryResetStage(Document doc, IList<ElementId> ids, XYZ delta)
         {
             if (doc == null || ids == null || ids.Count == 0) return false;
             if (delta == null || delta.IsAlmostEqualTo(XYZ.Zero)) return true;
+            Trace.WriteLine($"BEGIN_TX TryResetStage count={ids.Count} corr={Logging.RunLog.CorrId}");
+            var status = "fail";
             try
             {
                 using var tx = new Transaction(doc, "Restore stage move");
@@ -749,15 +787,21 @@ namespace GSADUs.Revit.Addin.Orchestration
                 {
                     ElementTransformUtils.MoveElements(doc, ids, new XYZ(-delta.X, -delta.Y, -delta.Z));
                     tx.Commit();
+                    status = "success";
                     return true;
                 }
                 catch
                 {
                     try { tx.RollBack(); } catch { }
+                    status = "rollback";
                     return false;
                 }
             }
             catch { return false; }
+            finally
+            {
+                Trace.WriteLine($"END_TX TryResetStage status={status} corr={Logging.RunLog.CorrId}");
+            }
         }
 
         private static BoundingBoxXYZ? ComputeSetCropBox(Document doc, IEnumerable<string> preserveUids, View view)
