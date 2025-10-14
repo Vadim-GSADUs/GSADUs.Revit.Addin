@@ -454,10 +454,19 @@ namespace GSADUs.Revit.Addin.Orchestration
                             UI.ProgressWindow.DoEvents();
                             if (cts.IsCancellationRequested) { breakAfterThisSet = true; }
 
-                        var saveAsAction = externalActions.FirstOrDefault(a => string.Equals(a.desc.Id, "export-rvt", StringComparison.OrdinalIgnoreCase));
-                        var externalWithoutSaveAs = saveAsAction == null
-                            ? externalActions
-                            : externalActions.Where(a => !string.Equals(a.desc.Id, "export-rvt", StringComparison.OrdinalIgnoreCase)).ToList();
+                        ActionType? saveAsAction = null;
+                        var externalWithoutSaveAs = new List<ActionType>();
+                        foreach (var a in externalActions)
+                        {
+                            if (string.Equals(a.desc.Id, "export-rvt", StringComparison.OrdinalIgnoreCase) && saveAsAction == null)
+                            {
+                                saveAsAction = a;
+                            }
+                            else
+                            {
+                                externalWithoutSaveAs.Add(a);
+                            }
+                        }
 
                         foreach (var a in externalWithoutSaveAs)
                         {
