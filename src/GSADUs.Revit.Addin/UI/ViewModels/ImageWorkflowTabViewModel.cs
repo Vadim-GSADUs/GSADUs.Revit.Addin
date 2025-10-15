@@ -3,7 +3,7 @@ using System.ComponentModel;
 
 namespace GSADUs.Revit.Addin.UI
 {
-    internal sealed class ImageWorkflowTabViewModel : INotifyPropertyChanged
+    internal sealed class ImageWorkflowTabViewModel : WorkflowTabBaseViewModel
     {
         private string _pattern = ""; // extensionless
         private string? _selectedSetName;
@@ -22,15 +22,12 @@ namespace GSADUs.Revit.Addin.UI
         public string Resolution { get => _resolution; set { if (_resolution != value) { _resolution = value; OnChanged(nameof(Resolution)); Recompute(); } } }
         public bool IsSaveEnabled { get => _isSaveEnabled; private set { if (_isSaveEnabled != value) { _isSaveEnabled = value; OnChanged(nameof(IsSaveEnabled)); } } }
 
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnChanged(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
-
         private void Recompute()
         {
             var hasSet = !string.IsNullOrWhiteSpace(SelectedSetName);
             var hasPrintSet = !string.IsNullOrWhiteSpace(SelectedPrintSet);
             var hasPattern = !string.IsNullOrWhiteSpace(Pattern) && Pattern.Contains("{SetName}"); // extensionless by design
-            IsSaveEnabled = hasSet && hasPrintSet && hasPattern;
+            IsSaveEnabled = hasSet && hasPrintSet && hasPattern && IsBaseSaveEnabled;
         }
     }
 }

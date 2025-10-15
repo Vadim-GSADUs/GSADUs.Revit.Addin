@@ -13,6 +13,11 @@ namespace GSADUs.Revit.Addin.UI
         private readonly WorkflowCatalogService _catalog;
         private readonly IDialogService _dialogs;
 
+        public WorkflowTabBaseViewModel RvtBase { get; } = new WorkflowTabBaseViewModel();
+        public PdfWorkflowTabViewModel PdfWorkflow { get; } = new PdfWorkflowTabViewModel();
+        public ImageWorkflowTabViewModel ImageWorkflow { get; } = new ImageWorkflowTabViewModel();
+        public WorkflowTabBaseViewModel CsvBase { get; } = new WorkflowTabBaseViewModel();
+
         public WorkflowManagerPresenter(WorkflowCatalogService catalog, IDialogService dialogs)
         {
             _catalog = catalog;

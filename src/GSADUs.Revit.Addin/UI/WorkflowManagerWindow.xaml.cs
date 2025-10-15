@@ -144,36 +144,46 @@ namespace GSADUs.Revit.Addin.UI
 
         private void ImageScopeRadio_Checked(object sender, RoutedEventArgs e)
         {
-            if (_hydratingImage) return;
-            ApplyImageScopeUiState();
-            // Clear the text/selection of the inactive picker to avoid ambiguity
-            if (ImageScopeSingleViewRadio?.IsChecked == true)
+            try
             {
-                if (ImagePrintSetCombo != null)
+                if (_hydratingImage) return;
+                ApplyImageScopeUiState();
+                // Clear the text/selection of the inactive picker to avoid ambiguity
+                if (ImageScopeSingleViewRadio?.IsChecked == true)
                 {
-                    ImagePrintSetCombo.SelectedIndex = -1;
-                    if (ImagePrintSetCombo.IsEditable) ImagePrintSetCombo.Text = string.Empty;
+                    if (ImagePrintSetCombo != null)
+                    {
+                        ImagePrintSetCombo.SelectedIndex = -1;
+                        if (ImagePrintSetCombo.IsEditable) ImagePrintSetCombo.Text = string.Empty;
+                    }
                 }
-            }
-            else // PrintSet
-            {
-                if (ImageSingleViewCombo != null)
+                else // PrintSet
                 {
-                    ImageSingleViewCombo.SelectedIndex = -1;
-                    ImageSingleViewCombo.Text = string.Empty;
+                    if (ImageSingleViewCombo != null)
+                    {
+                        ImageSingleViewCombo.SelectedIndex = -1;
+                        ImageSingleViewCombo.Text = string.Empty;
+                    }
                 }
+
+                // Safe mark-dirty signaling
+                try { _presenter?.OnMarkDirty("Image"); } catch { }
+                MarkDirty("Image");
+                UpdateImageSaveState();
             }
-            _presenter.OnMarkDirty("Image");
-            MarkDirty("Image");
-            UpdateImageSaveState();
+            catch { }
         }
 
         private void ImageSingleViewCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
-            if (_hydratingImage) return;
-            _presenter.OnMarkDirty("Image");
-            MarkDirty("Image");
-            UpdateImageSaveState();
+            try
+            {
+                if (_hydratingImage) return;
+                try { _presenter?.OnMarkDirty("Image"); } catch { }
+                MarkDirty("Image");
+                UpdateImageSaveState();
+            }
+            catch { }
         }
 
         public WorkflowManagerWindow(AppSettings? settings = null) : this(null, settings) { }
@@ -192,6 +202,12 @@ namespace GSADUs.Revit.Addin.UI
             _doc = doc;
 
             _presenter.OnWindowConstructed(this);
+
+            // NEW: set tab DataContexts to their respective VMs
+            try { (FindName("PdfTabRoot") as FrameworkElement)!.DataContext = _presenter.PdfWorkflow; } catch { }
+            try { (FindName("ImageTabRoot") as FrameworkElement)!.DataContext = _presenter.ImageWorkflow; } catch { }
+            try { (FindName("RvtTabRoot") as FrameworkElement)!.DataContext = _presenter.RvtBase; } catch { }
+            try { (FindName("CsvTabRoot") as FrameworkElement)!.DataContext = _presenter.CsvBase; } catch { }
 
             _imageBlacklistIds = new List<int>(_settings.ImageBlacklistCategoryIds ?? new List<int>());
             RefreshMainList();
@@ -628,11 +644,24 @@ namespace GSADUs.Revit.Addin.UI
         {
             try
             {
-                var tag = (sender as FrameworkElement)?.Name?.StartsWith("Rvt") == true ? "Rvt"
-                          : (sender as FrameworkElement)?.Name?.StartsWith("Pdf") == true ? "Pdf"
-                          : (sender as FrameworkElement)?.Name?.StartsWith("Image") == true ? "Image" : "Csv";
-                var wf = GetSelectedFromTab(tag); if (wf == null) return;
-                wf.Description = (sender as TextBox)?.Text ?? wf.Description;
+                var fe = sender as FrameworkElement;
+                var tag = fe?.Name?.StartsWith("Rvt") == true ? "Rvt"
+                          : fe?.Name?.StartsWith("Pdf") == true ? "Pdf"
+                          : fe?.Name?.StartsWith("Image") == true ? "Image" : "Csv";
+
+                // Update VM only; defer model persistence to Save
+                WorkflowTabBaseViewModel? baseVm = tag switch
+                {
+                    "Pdf" => _presenter.PdfWorkflow,
+                    "Image" => _presenter.ImageWorkflow,
+                    "Rvt" => _presenter.RvtBase,
+                    _ => _presenter.CsvBase
+                };
+                if (baseVm != null)
+                {
+                    baseVm.Description = (sender as TextBox)?.Text ?? string.Empty;
+                }
+
                 _presenter.OnMarkDirty(tag);
                 MarkDirty(tag);
             }
@@ -647,9 +676,26 @@ namespace GSADUs.Revit.Addin.UI
             _presenter.OnSavedComboChanged(tag, wf, this);
             try
             {
+                // Hydrate the tab's base VM first (Name, Scope, Description)
+                WorkflowTabBaseViewModel? baseVm = tag switch
+                {
+                    "Pdf" => _presenter.PdfWorkflow,
+                    "Image" => _presenter.ImageWorkflow,
+                    "Rvt" => _presenter.RvtBase,
+                    _ => _presenter.CsvBase
+                };
+                if (baseVm != null)
+                {
+                    baseVm.Name = wf?.Name ?? string.Empty;
+                    baseVm.WorkflowScope = wf?.Scope ?? string.Empty;
+                    baseVm.Description = wf?.Description ?? string.Empty;
+                }
+
+                // Keep legacy UI sync to avoid regressions during migration
                 (FindName(tag + "ScopeCombo") as ComboBox)!.SelectedItem = wf?.Scope;
                 (FindName(tag + "DescBox") as TextBox)!.Text = wf?.Description ?? string.Empty;
                 (FindName(tag + "NameBox") as TextBox)!.Text = wf?.Name ?? string.Empty;
+
                 if (tag == "Pdf") WorkflowManagerWindow_Loaded(this, new RoutedEventArgs());
                 if (tag == "Image") HydrateImageWorkflow(wf);
                 if (tag == "Rvt") { _isDirtyRvt = false; SetSaveVisual("RvtSaveBtn", false); }
@@ -965,11 +1011,13 @@ namespace GSADUs.Revit.Addin.UI
             // pattern: store WITHOUT extension now
             var patternRaw = (FindName("ImageFileNamePatternBox") as TextBox)?.Text?.Trim();
             if (string.IsNullOrWhiteSpace(patternRaw)) patternRaw = "{SetName}";
-            patternRaw = patternRaw.Replace("[SetName]", "{SetName}");
-            if (!patternRaw.Contains("{SetName}")) patternRaw = "{SetName}";
-            // remove any extension if user typed one
-            patternRaw = Path.GetFileNameWithoutExtension(patternRaw);
-            patternRaw = SanitizeFileComponent(patternRaw);
+            patternRaw = patternRaw.Replace("[SetName]", "{SetName}"); // normalize legacy brackets
+            if (patternRaw.Contains("{SetName}")) // only sanitize if it looks like a pattern
+            {
+                // remove any extension if user typed one
+                patternRaw = Path.GetFileNameWithoutExtension(patternRaw);
+                patternRaw = SanitizeFileComponent(patternRaw);
+            }
             SP(ImageWorkflowKeys.fileNamePattern, patternRaw);
 
             var prefixRaw = SanitizeFileComponent((FindName("ImagePrefixBox") as TextBox)?.Text?.Trim());
@@ -1080,7 +1128,7 @@ namespace GSADUs.Revit.Addin.UI
                 {
                     var caret = tb.SelectionStart;
                     tb.Text = tb.Text.Replace("[SetName]", "{SetName}");
-                    tb.SelectionStart = Math.Min(caret, tb.Text.Length);
+                    tb.SelectionStart = System.Math.Min(caret, tb.Text.Length);
                 }
             }
             catch { }
@@ -1097,7 +1145,7 @@ namespace GSADUs.Revit.Addin.UI
         {
             try
             {
-                var modeCombo = FindName("ImageCropModeCombo") as ComboBox; 
+                var modeCombo = FindName("ImageCropModeCombo") as ComboBox;
                 var box = FindName("ImageCropOffsetBox") as TextBox;
                 if (modeCombo == null || box == null) return;
                 var sel = (modeCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Static";
@@ -1133,11 +1181,30 @@ namespace GSADUs.Revit.Addin.UI
             var btn = sender as FrameworkElement; if (btn == null) return;
             var tag = (btn.Tag as string) ?? string.Empty;
             if (tag == "Png") tag = "Image"; // backward tag mapping
-            string name = (FindName(tag + "NameBox") as TextBox)?.Text?.Trim() ?? string.Empty;
-            string scope = (FindName(tag + "ScopeCombo") as ComboBox)?.SelectedItem as string ?? string.Empty;
-            string desc = (FindName(tag + "DescBox") as TextBox)?.Text ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(scope)) { _dialogs.Info("Save", "Name and Scope required."); return; }
+
+            // Prefer VM values for base fields, with control fallback to preserve legacy behavior
+            WorkflowTabBaseViewModel? baseVm = tag switch
+            {
+                "Pdf" => _presenter.PdfWorkflow,
+                "Image" => _presenter.ImageWorkflow,
+                "Rvt" => _presenter.RvtBase,
+                _ => _presenter.CsvBase
+            };
+
+            string nameVal = baseVm?.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(nameVal)) nameVal = (FindName(tag + "NameBox") as TextBox)?.Text?.Trim() ?? string.Empty;
+
+            string scopeVal = baseVm?.WorkflowScope ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(scopeVal)) scopeVal = (FindName(tag + "ScopeCombo") as ComboBox)?.SelectedItem as string ?? string.Empty;
+
+            string descVal = baseVm?.Description ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(descVal)) descVal = (FindName(tag + "DescBox") as TextBox)?.Text ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(nameVal) || string.IsNullOrWhiteSpace(scopeVal)) { _dialogs.Info("Save", "Name and Scope required."); return; }
+
             var output = tag switch { "Rvt" => OutputType.Rvt, "Pdf" => OutputType.Pdf, "Image" => OutputType.Image, "Csv" => OutputType.Csv, _ => OutputType.Pdf };
+
+            // Keep/identify current workflow (create if needed)
             var existing = GetSelectedFromTab(tag);
             if (existing == null)
             {
@@ -1145,33 +1212,72 @@ namespace GSADUs.Revit.Addin.UI
                 _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
                 _catalog.Settings.Workflows.Add(existing);
             }
-            existing.Name = name; existing.Scope = scope; existing.Description = desc;
+
+            // Persist base fields, including Description
+            existing.Name = nameVal; existing.Scope = scopeVal; existing.Description = descVal;
+
             switch (output)
             {
                 case OutputType.Pdf:
+                {
                     var p = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
                     void S(string k, string? v) { if (!string.IsNullOrWhiteSpace(v)) p[k] = ToJson(v); }
-                    var setSel = (FindName("ViewSetCombo") as ComboBox)?.SelectedItem as string;
-                    var setupSel = (FindName("ExportSetupCombo") as ComboBox)?.SelectedItem as string;
-                    var pattern = (FindName("FileNamePatternBox") as TextBox)?.Text?.Trim();
-                    if (string.IsNullOrWhiteSpace(pattern) || !pattern.Contains("{SetName}")) pattern = "{SetName}.pdf";
-                    if (!pattern.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) pattern += ".pdf";
-                    pattern = SanitizeFileComponent(pattern);
-                    S(PdfWorkflowKeys.PrintSetName, setSel);
-                    S(PdfWorkflowKeys.ExportSetupName, setupSel);
-                    S(PdfWorkflowKeys.FileNamePattern, pattern);
-                    existing.Parameters = p; EnsureActionId(existing, "export-pdf"); break;
+
+                    var pdfVm = _presenter.PdfWorkflow;
+                    var pdfSetName = pdfVm?.SelectedSetName ?? (FindName("ViewSetCombo") as ComboBox)?.SelectedItem as string;
+                    var pdfSetupName = pdfVm?.SelectedPrintSet ?? (FindName("ExportSetupCombo") as ComboBox)?.SelectedItem as string;
+                    var pdfPattern = pdfVm?.Pattern ?? (FindName("FileNamePatternBox") as TextBox)?.Text?.Trim();
+
+                    if (string.IsNullOrWhiteSpace(pdfPattern) || !pdfPattern.Contains("{SetName}")) pdfPattern = "{SetName}.pdf";
+                    if (!pdfPattern.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) pdfPattern += ".pdf";
+                    pdfPattern = SanitizeFileComponent(pdfPattern);
+
+                    S(PdfWorkflowKeys.PrintSetName, pdfSetName);
+                    S(PdfWorkflowKeys.ExportSetupName, pdfSetupName);
+                    S(PdfWorkflowKeys.FileNamePattern, pdfPattern);
+                    existing.Parameters = p; EnsureActionId(existing, "export-pdf");
+                    break;
+                }
                 case OutputType.Image:
-                    PersistImageParameters(existing); break;
+                {
+                    PersistImageParameters(existing);
+                    break;
+                }
                 case OutputType.Rvt:
-                    EnsureActionId(existing, "export-rvt"); break;
+                {
+                    EnsureActionId(existing, "export-rvt");
+                    break;
+                }
                 case OutputType.Csv:
-                    EnsureActionId(existing, "export-csv"); break;
+                {
+                    EnsureActionId(existing, "export-csv");
+                    break;
+                }
             }
+
+            // Persist to disk and refresh UI lists
             _catalog.SaveAndRefresh();
-            RefreshMainList(); RefreshSavedCombos();
+            RefreshMainList();
+            RefreshSavedCombos();
+
+            // Restore selection so controls don't blank out
+            try
+            {
+                SelectInCombo(tag + "SavedCombo", existing.Id);
+            }
+            catch { }
+
+            // Mark as clean and recompute buttons/preview
             MarkDirty(tag, false);
-            UpdateCanSaveFor(tag); UpdateImageSaveState();
+            UpdateCanSaveFor(tag);
+            UpdateImageSaveState();
+        }
+
+        private void RvtOption_Checked(object sender, RoutedEventArgs e)
+        {
+            _presenter.OnMarkDirty("Rvt");
+            MarkDirty("Rvt");
+            UpdateCanSaveFor("Rvt");
         }
 
         private void PdfManageSetupBtn_Click(object sender, RoutedEventArgs e)
@@ -1183,13 +1289,6 @@ namespace GSADUs.Revit.Addin.UI
                 if (cmd != null && uiapp.CanPostCommand(cmd)) uiapp.PostCommand(cmd);
             }
             catch { }
-        }
-
-        private void RvtOption_Checked(object sender, RoutedEventArgs e)
-        {
-            _presenter.OnMarkDirty("Rvt");
-            MarkDirty("Rvt");
-            UpdateCanSaveFor("Rvt");
         }
     }
 }

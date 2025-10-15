@@ -50,7 +50,7 @@
             </TabItem>
 
             <TabItem Header="RVT">
-                <Grid Margin="8">
+                <Grid x:Name="RvtTabRoot" Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -68,12 +68,12 @@
 
                     <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,6">
                         <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBox x:Name="RvtNameBox" Width="340" TextChanged="NameBox_TextChanged"/>
+                        <TextBox x:Name="RvtNameBox" Width="340" TextChanged="NameBox_TextChanged" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
 
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,6">
                         <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox x:Name="RvtScopeCombo" Width="260" SelectionChanged="ScopeCombo_SelectionChanged"/>
+                        <ComboBox x:Name="RvtScopeCombo" Width="260" SelectionChanged="ScopeCombo_SelectionChanged" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
 
                     <GroupBox Grid.Row="3" Header="Options" Margin="0,4,0,6">
@@ -91,7 +91,7 @@
 
                     <StackPanel Grid.Row="4">
                         <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
-                        <TextBox x:Name="RvtDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged"/>
+                        <TextBox x:Name="RvtDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
 
                     <DockPanel Grid.Row="5" LastChildFill="False" Margin="0,8,0,0">
@@ -102,7 +102,7 @@
 
             <TabItem Header="PDF">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8" Orientation="Vertical" >
+                    <StackPanel x:Name="PdfTabRoot" Margin="8" Orientation="Vertical" >
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -112,22 +112,22 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox x:Name="PdfNameBox" Width="240" TextChanged="PdfNameBox_TextChanged"/>
+                            <TextBox x:Name="PdfNameBox" Width="240" TextChanged="PdfNameBox_TextChanged" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Text="  Scope:" VerticalAlignment="Center" Margin="12,0,8,0"/>
-                            <ComboBox x:Name="PdfScopeCombo" Width="200" SelectionChanged="ScopeCombo_SelectionChanged"/>
+                            <ComboBox x:Name="PdfScopeCombo" Width="200" SelectionChanged="ScopeCombo_SelectionChanged" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <GroupBox Header="PDF Export Range" Margin="0,4,0,6">
                           <StackPanel Margin="6" Orientation="Horizontal">
                             <TextBlock Text="View/Sheet Set:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="ViewSetCombo" Width="320"/>
+                            <ComboBox x:Name="ViewSetCombo" Width="320" SelectedItem="{Binding SelectedSetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                           </StackPanel>
                         </GroupBox>
 
                         <GroupBox Header="PDF Export Setup" Margin="0,4,0,6">
                             <StackPanel Orientation="Horizontal" Margin="6">
                                 <TextBlock Text="Export Setup:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <ComboBox x:Name="ExportSetupCombo" Width="320"/>
+                                <ComboBox x:Name="ExportSetupCombo" Width="320" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 <Button x:Name="PdfManageSetupBtn" Content="Manage PDF Export Setup" Width="220" Margin="8,0,0,0" Click="PdfManageSetupBtn_Click"/>
                             </StackPanel>
                         </GroupBox>
@@ -136,7 +136,7 @@
                             <StackPanel Margin="6" Orientation="Vertical">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="FileNamePatternBox" Width="360"/>
+                                    <TextBox x:Name="FileNamePatternBox" Width="360" Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"/>
                                     <TextBlock Text="  (must include {SetName})" VerticalAlignment="Center" Foreground="Gray" Margin="8,0,0,0"/>
                                     <Button x:Name="PdfPatternFieldsBtn" Content="Fields..." Margin="8,0,0,0" Width="70" IsEnabled="False" ToolTip="Future: Insert available tokens"/>
                                 </StackPanel>
@@ -153,7 +153,7 @@
 
                         <StackPanel>
                             <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
-                            <TextBox x:Name="PdfDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged"/>
+                            <TextBox x:Name="PdfDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
@@ -166,7 +166,7 @@
 
             <TabItem Header="Image">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8" Orientation="Vertical">
+                    <StackPanel x:Name="ImageTabRoot" Margin="8" Orientation="Vertical">
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -176,9 +176,9 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox x:Name="ImageNameBox" Width="240" TextChanged="NameBox_TextChanged"/>
+                            <TextBox x:Name="ImageNameBox" Width="240" TextChanged="NameBox_TextChanged" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Text="  Scope:" VerticalAlignment="Center" Margin="12,0,8,0"/>
-                            <ComboBox x:Name="ImageScopeCombo" Width="200" SelectionChanged="ScopeCombo_SelectionChanged"/>
+                            <ComboBox x:Name="ImageScopeCombo" Width="200" SelectionChanged="ScopeCombo_SelectionChanged" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <GroupBox Header="Image Export Range" Margin="0,8,0,0">
@@ -271,7 +271,7 @@
 
                         <StackPanel>
                             <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
-                            <TextBox x:Name="ImageDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged"/>
+                            <TextBox x:Name="ImageDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
@@ -282,7 +282,7 @@
             </TabItem>
 
             <TabItem Header="CSV">
-                <Grid Margin="8">
+                <Grid x:Name="CsvTabRoot" Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -299,17 +299,17 @@
 
                     <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,6">
                         <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBox x:Name="CsvNameBox" Width="340" TextChanged="NameBox_TextChanged"/>
+                        <TextBox x:Name="CsvNameBox" Width="340" TextChanged="NameBox_TextChanged" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" Grid.Row="2" Margin="0,0,0,6">
                         <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox x:Name="CsvScopeCombo" Width="260" SelectionChanged="ScopeCombo_SelectionChanged"/>
+                        <ComboBox x:Name="CsvScopeCombo" Width="260" SelectionChanged="ScopeCombo_SelectionChanged" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
 
                     <StackPanel Grid.Row="3">
                         <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
-                        <TextBox x:Name="CsvDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged"/>
+                        <TextBox x:Name="CsvDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
 
                     <DockPanel Grid.Row="4" LastChildFill="False" Margin="0,8,0,0">
