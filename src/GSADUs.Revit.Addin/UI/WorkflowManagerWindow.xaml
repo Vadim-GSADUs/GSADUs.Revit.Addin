@@ -120,14 +120,14 @@
                         <GroupBox Header="PDF Export Range" Margin="0,4,0,6">
                           <StackPanel Margin="6" Orientation="Horizontal">
                             <TextBlock Text="View/Sheet Set:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="ViewSetCombo" Width="320" SelectedItem="{Binding SelectedSetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox x:Name="ViewSetCombo" Width="320" ItemsSource="{Binding AvailableViewSets}" SelectedItem="{Binding SelectedSetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                           </StackPanel>
                         </GroupBox>
 
                         <GroupBox Header="PDF Export Setup" Margin="0,4,0,6">
                             <StackPanel Orientation="Horizontal" Margin="6">
                                 <TextBlock Text="Export Setup:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <ComboBox x:Name="ExportSetupCombo" Width="320" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                <ComboBox x:Name="ExportSetupCombo" Width="320" ItemsSource="{Binding AvailableExportSetups}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 <Button x:Name="PdfManageSetupBtn" Content="Manage PDF Export Setup" Width="220" Margin="8,0,0,0" Click="PdfManageSetupBtn_Click"/>
                             </StackPanel>
                         </GroupBox>
@@ -157,7 +157,7 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Pdf" IsEnabled="False" Opacity="0.5"/>
+                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Pdf" IsEnabled="{Binding IsSaveEnabled}" Opacity="0.5"/>
                         </DockPanel>
 
                     </StackPanel>
@@ -190,12 +190,12 @@
                                            GroupName="ImageExportRange"
                                            Content=""
                                            Tag="PrintSet"
-                                           IsChecked="True"
+                                           IsChecked="{Binding Path=ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=PrintSet}"
                                            Width="20"
                                            VerticalAlignment="Center"
                                            Checked="ImageScopeRadio_Checked"/>
                               <TextBlock Text="Print set:" Width="110" VerticalAlignment="Center"/>
-                              <ComboBox x:Name="ImagePrintSetCombo" Width="300"/>
+                              <ComboBox x:Name="ImagePrintSetCombo" Width="300" ItemsSource="{Binding AvailablePrintSets}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
 
                             <!-- Single View row -->
@@ -204,12 +204,12 @@
                                            GroupName="ImageExportRange"
                                            Content=""
                                            Tag="SingleView"
+                                           IsChecked="{Binding Path=ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=SingleView}"
                                            Width="20"
                                            VerticalAlignment="Center"
                                            Checked="ImageScopeRadio_Checked"/>
                               <TextBlock Text="Single view:" Width="110" VerticalAlignment="Center"/>
-                              <ComboBox x:Name="ImageSingleViewCombo" Width="300" IsEnabled="False"
-                                        ToolTip="Select 'Single View' to enable. Populated with eligible 2D views."/>
+                              <ComboBox x:Name="ImageSingleViewCombo" Width="300" ItemsSource="{Binding AvailableSingleViews}" DisplayMemberPath="Label" SelectedValuePath="Id" SelectedValue="{Binding SelectedSingleViewId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
 
                           </StackPanel>
@@ -219,19 +219,19 @@
                             <StackPanel Orientation="Vertical" Margin="6">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Resolution:" VerticalAlignment="Center" Margin="0,0,8,0" Width="80"/>
-                                    <ComboBox x:Name="ImageResolutionPresetCombo" Width="140" SelectionChanged="ImageResolutionPresetCombo_SelectionChanged">
+                                    <ComboBox x:Name="ImageResolutionPresetCombo" Width="140" SelectedValuePath="Content" SelectedValue="{Binding Resolution, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                                         <ComboBoxItem Content="Low"/>
                                         <ComboBoxItem Content="Medium"/>
                                         <ComboBoxItem Content="High"/>
                                         <ComboBoxItem Content="Ultra"/>
                                     </ComboBox>
                                     <TextBlock Text="  Crop Mode:" VerticalAlignment="Center" Margin="32,0,8,0"/>
-                                    <ComboBox x:Name="ImageCropModeCombo" Width="140" SelectionChanged="ImageCropModeCombo_SelectionChanged">
+                                    <ComboBox x:Name="ImageCropModeCombo" Width="140" SelectedValuePath="Content" SelectedValue="{Binding CropMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                                         <ComboBoxItem Content="Static"/>
                                         <ComboBoxItem Content="Auto"/>
                                     </ComboBox>
                                     <TextBlock Text="  Crop Offset (ft):" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                                    <TextBox x:Name="ImageCropOffsetBox" Width="60" TextChanged="ImageCropOffsetBox_TextChanged"/>
+                                    <TextBox x:Name="ImageCropOffsetBox" Width="60" Text="{Binding CropOffset, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
@@ -240,24 +240,24 @@
                             <StackPanel Orientation="Vertical" Margin="6">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="ImageFileNamePatternBox" Width="300" TextChanged="ImageFileNamePatternBox_TextChanged"/>
+                                    <TextBox x:Name="ImageFileNamePatternBox" Width="300" Text="{Binding Pattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                     <TextBlock Text="  (must include {SetName})" VerticalAlignment="Center" Foreground="Gray" Margin="8,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Prefix:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="ImagePrefixBox" Width="120" TextChanged="ImagePrefixBox_TextChanged"/>
+                                    <TextBox x:Name="ImagePrefixBox" Width="120" Text="{Binding Prefix, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                     <TextBlock Text="  Suffix:" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                                    <TextBox x:Name="ImageSuffixBox" Width="120" TextChanged="ImageSuffixBox_TextChanged"/>
+                                    <TextBox x:Name="ImageSuffixBox" Width="120" Text="{Binding Suffix, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Format:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="ImageFormatCombo" Width="100" SelectionChanged="ImageFormatCombo_SelectionChanged">
+                                    <ComboBox x:Name="ImageFormatCombo" Width="100" SelectedValuePath="Content" SelectedValue="{Binding Format, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                                         <ComboBoxItem Content="PNG"/>
                                         <ComboBoxItem Content="BMP"/>
                                         <ComboBoxItem Content="TIFF"/>
                                     </ComboBox>
                                 </StackPanel>
-                                <TextBlock x:Name="ImagePreviewText" Foreground="Gray" Margin="0,4,0,0" Text="Preview: {SetName}.png"/>
+                                <TextBlock x:Name="ImagePreviewText" Foreground="Gray" Margin="0,4,0,0" Text="{Binding Preview}"/>
                             </StackPanel>
                         </GroupBox>
 
@@ -271,11 +271,11 @@
 
                         <StackPanel>
                             <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
-                            <TextBox x:Name="ImageDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox x:Name="ImageDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Image" IsEnabled="False" Opacity="0.5"/>
+                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Image" IsEnabled="{Binding IsSaveEnabled}" Opacity="0.5"/>
                         </DockPanel>
                     </StackPanel>
                 </ScrollViewer>

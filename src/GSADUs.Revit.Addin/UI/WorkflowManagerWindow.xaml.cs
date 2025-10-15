@@ -290,7 +290,7 @@ namespace GSADUs.Revit.Addin.UI
                     if (imgPrintSetCombo != null)
                     {
                         imgPrintSetCombo.ItemsSource = setNamesForImage;
-                        // hook selection changed to persist & enable saving
+                        // keep handler for now
                         imgPrintSetCombo.SelectionChanged -= ImagePrintSetCombo_SelectionChanged;
                         imgPrintSetCombo.SelectionChanged += ImagePrintSetCombo_SelectionChanged;
                     }
@@ -309,70 +309,47 @@ namespace GSADUs.Revit.Addin.UI
                 PopulateImageSingleViewList();
                 ApplyImageScopeUiState();
 
-                // Also hydrate Image simple fields if an Image workflow is selected (viewKind + pattern)
+                // Hydrate PDF ItemsSource via VM (MVVM)
                 try
                 {
-                    var imageWf = GetSelectedFromTab("Image");
-                    if (imageWf != null && imageWf.Output == OutputType.Image)
-                    {
-                        HydrateImageWorkflow(imageWf);
-                    }
+                    var setNames = new FilteredElementCollector(doc)
+                        .OfClass(typeof(ViewSheetSet))
+                        .Cast<ViewSheetSet>()
+                        .Select(s => s.Name)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(n => n)
+                        .ToList();
+                    var pdfVm = _presenter.PdfWorkflow;
+                    pdfVm.AvailableViewSets.Clear();
+                    foreach (var n in setNames) pdfVm.AvailableViewSets.Add(n);
+
+                    var setupNames = new FilteredElementCollector(doc)
+                        .OfClass(typeof(ExportPDFSettings))
+                        .Cast<ExportPDFSettings>()
+                        .Select(s => s.Name)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(n => n)
+                        .ToList();
+                    pdfVm.AvailableExportSetups.Clear();
+                    foreach (var n in setupNames) pdfVm.AvailableExportSetups.Add(n);
                 }
                 catch { }
 
-                // View/Sheet Sets (PDF)
-                var setNames = new FilteredElementCollector(doc)
-                    .OfClass(typeof(ViewSheetSet))
-                    .Cast<ViewSheetSet>()
-                    .Select(s => s.Name)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(n => n)
-                    .ToList();
-                var viewSetCombo = FindName("ViewSetCombo") as ComboBox;
-                if (viewSetCombo != null)
-                {
-                    viewSetCombo.ItemsSource = setNames;
-                    viewSetCombo.SelectionChanged -= PdfSelectionChanged;
-                    viewSetCombo.SelectionChanged += PdfSelectionChanged;
-                }
-
-                // Export PDF Setups
-                var setupNames = new FilteredElementCollector(doc)
-                    .OfClass(typeof(ExportPDFSettings))
-                    .Cast<ExportPDFSettings>()
-                    .Select(s => s.Name)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(n => n)
-                    .ToList();
-                var setupCombo = FindName("ExportSetupCombo") as ComboBox;
-                if (setupCombo != null)
-                {
-                    setupCombo.ItemsSource = setupNames;
-                    setupCombo.SelectionChanged -= PdfSelectionChanged;
-                    setupCombo.SelectionChanged += PdfSelectionChanged;
-                }
-
-                // Apply saved values if present
+                // Apply saved values if present (PDF)
                 var p = wf?.Parameters ?? new Dictionary<string, JsonElement>();
                 string Gs(string k) => p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String ? (v.GetString() ?? string.Empty) : string.Empty;
                 var savedSet = Gs(PdfWorkflowKeys.PrintSetName);
                 var savedSetup = Gs(PdfWorkflowKeys.ExportSetupName);
                 var savedPattern = Gs(PdfWorkflowKeys.FileNamePattern);
 
-                var viewSetComboLocal = viewSetCombo; // avoid closure confusion
-                if (viewSetComboLocal != null && !string.IsNullOrWhiteSpace(savedSet) && setNames.Contains(savedSet, StringComparer.OrdinalIgnoreCase))
-                    viewSetComboLocal.SelectedItem = setNames.First(n => string.Equals(n, savedSet, StringComparison.OrdinalIgnoreCase));
-
-                if (setupCombo != null && !string.IsNullOrWhiteSpace(savedSetup) && setupNames.Contains(savedSetup, StringComparer.OrdinalIgnoreCase))
-                    setupCombo.SelectedItem = setupNames.First(n => string.Equals(n, savedSetup, StringComparison.OrdinalIgnoreCase));
-
-                var patBox = FindName("FileNamePatternBox") as TextBox;
-                if (patBox != null)
+                try
                 {
-                    patBox.Text = string.IsNullOrWhiteSpace(savedPattern) ? "{SetName}.pdf" : savedPattern;
-                    patBox.TextChanged -= PdfPatternChanged;
-                    patBox.TextChanged += PdfPatternChanged;
+                    var pdfVm = _presenter.PdfWorkflow;
+                    if (!string.IsNullOrWhiteSpace(savedSet)) pdfVm.SelectedSetName = savedSet;
+                    if (!string.IsNullOrWhiteSpace(savedSetup)) pdfVm.SelectedPrintSet = savedSetup;
+                    if (!string.IsNullOrWhiteSpace(savedPattern)) pdfVm.Pattern = savedPattern;
                 }
+                catch { }
 
                 // Read-only labels from raw settings (no fallback logic per spec)
                 try
