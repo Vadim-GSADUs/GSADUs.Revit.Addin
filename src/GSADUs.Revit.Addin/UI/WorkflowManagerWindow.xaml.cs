@@ -33,6 +33,7 @@ namespace GSADUs.Revit.Addin.UI
         // --- end singleton management ---
 
         private readonly WorkflowCatalogService _catalog;
+        private readonly WorkflowManagerPresenter _presenter;
         private AppSettings _settings;
         private readonly IDialogService _dialogs;
         private readonly Document? _doc;
@@ -162,6 +163,7 @@ namespace GSADUs.Revit.Addin.UI
                     ImageSingleViewCombo.Text = string.Empty;
                 }
             }
+            _presenter.OnMarkDirty("Image");
             MarkDirty("Image");
             UpdateImageSaveState();
         }
@@ -169,6 +171,7 @@ namespace GSADUs.Revit.Addin.UI
         private void ImageSingleViewCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
             if (_hydratingImage) return;
+            _presenter.OnMarkDirty("Image");
             MarkDirty("Image");
             UpdateImageSaveState();
         }
@@ -183,8 +186,12 @@ namespace GSADUs.Revit.Addin.UI
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
             _catalog = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogService)) as WorkflowCatalogService
                        ?? new WorkflowCatalogService(new SettingsPersistence());
+            _presenter = ServiceBootstrap.Provider.GetService(typeof(WorkflowManagerPresenter)) as WorkflowManagerPresenter
+                         ?? new WorkflowManagerPresenter(_catalog, _dialogs);
             _settings = _catalog.Settings; // central settings source
             _doc = doc;
+
+            _presenter.OnWindowConstructed(this);
 
             _imageBlacklistIds = new List<int>(_settings.ImageBlacklistCategoryIds ?? new List<int>());
             RefreshMainList();
@@ -240,6 +247,8 @@ namespace GSADUs.Revit.Addin.UI
                 // Determine active document (prefer ctor doc, else UI context)
                 var uiDoc = RevitUiContext.Current?.ActiveUIDocument;
                 var doc = _doc ?? uiDoc?.Document;
+
+                _presenter.OnLoaded(uiDoc, this);
 
                 // Guard: disable PDF tab if no valid project document
                 if (doc == null || doc.IsFamilyDocument)
@@ -385,12 +394,14 @@ namespace GSADUs.Revit.Addin.UI
 
         private void PdfSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            _presenter.OnMarkDirty("Pdf");
             MarkDirty("Pdf");
             UpdatePdfEnableState();
         }
 
         private void PdfPatternChanged(object sender, TextChangedEventArgs e)
         {
+            _presenter.OnMarkDirty("Pdf");
             MarkDirty("Pdf");
             UpdatePdfEnableState();
         }
@@ -452,6 +463,7 @@ namespace GSADUs.Revit.Addin.UI
         private void NameBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             string tag = ((FrameworkElement)sender).Name.Contains("Rvt") ? "Rvt" : ((FrameworkElement)sender).Name.Contains("Image") ? "Image" : "Csv";
+            _presenter.OnMarkDirty(tag);
             MarkDirty(tag);
             UpdateCanSaveFor(tag);
             UpdateImageSaveState();
@@ -459,12 +471,14 @@ namespace GSADUs.Revit.Addin.UI
 
         private void PdfNameBox_TextChanged(object sender, TextChangedEventArgs e)
         {
+            _presenter.OnMarkDirty("Pdf");
             MarkDirty("Pdf");
             UpdatePdfEnableState();
         }
 
         private void PdfConfigChanged(object sender, RoutedEventArgs e)
         {
+            _presenter.OnMarkDirty("Pdf");
             MarkDirty("Pdf");
             UpdatePdfEnableState();
         }
@@ -586,7 +600,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void SaveCloseBtn_Click(object sender, RoutedEventArgs e)
         {
-            try { _catalog.Save(); } catch { }
+            try { _presenter.SaveSettings(); } catch { }
             DialogResult = true;
         }
 
@@ -602,6 +616,7 @@ namespace GSADUs.Revit.Addin.UI
                 var cb = sender as ComboBox; if (cb == null) return;
                 var val = cb.SelectedItem as string;
                 if (!string.IsNullOrWhiteSpace(val)) wf.Scope = val;
+                _presenter.OnMarkDirty(tag);
                 MarkDirty(tag);
                 if (tag == "Pdf") UpdatePdfEnableState();
             }
@@ -618,6 +633,7 @@ namespace GSADUs.Revit.Addin.UI
                           : (sender as FrameworkElement)?.Name?.StartsWith("Image") == true ? "Image" : "Csv";
                 var wf = GetSelectedFromTab(tag); if (wf == null) return;
                 wf.Description = (sender as TextBox)?.Text ?? wf.Description;
+                _presenter.OnMarkDirty(tag);
                 MarkDirty(tag);
             }
             catch { }
@@ -628,6 +644,7 @@ namespace GSADUs.Revit.Addin.UI
             var combo = sender as ComboBox; if (combo == null) return;
             string tag = combo.Name.StartsWith("Rvt") ? "Rvt" : combo.Name.StartsWith("Pdf") ? "Pdf" : combo.Name.StartsWith("Image") ? "Image" : "Csv";
             var wf = GetSelectedFromTab(tag);
+            _presenter.OnSavedComboChanged(tag, wf, this);
             try
             {
                 (FindName(tag + "ScopeCombo") as ComboBox)!.SelectedItem = wf?.Scope;
@@ -1053,8 +1070,8 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
-        private void ImageResolutionPresetCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { MarkDirty("Image"); UpdateImageSaveState(); }
-        private void ImageCropOffsetBox_TextChanged(object s, TextChangedEventArgs e) { MarkDirty("Image"); UpdateImageSaveState(); }
+        private void ImageResolutionPresetCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImageSaveState(); }
+        private void ImageCropOffsetBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImageSaveState(); }
         private void ImageFileNamePatternBox_TextChanged(object s, TextChangedEventArgs e)
         {
             try
@@ -1067,13 +1084,14 @@ namespace GSADUs.Revit.Addin.UI
                 }
             }
             catch { }
+            _presenter.OnMarkDirty("Image");
             MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState();
         }
-        private void ImagePrefixBox_TextChanged(object s, TextChangedEventArgs e) { MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
-        private void ImageSuffixBox_TextChanged(object s, TextChangedEventArgs e) { MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
-        private void ImageCropModeCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { UpdateCropOffsetEnable(); MarkDirty("Image"); UpdateImageSaveState(); }
-        private void ImageFormatCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
-        private void ImagePrintSetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) { MarkDirty("Image"); UpdateImageSaveState(); }
+        private void ImagePrefixBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
+        private void ImageSuffixBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
+        private void ImageCropModeCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { UpdateCropOffsetEnable(); _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImageSaveState(); }
+        private void ImageFormatCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
+        private void ImagePrintSetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImageSaveState(); }
 
         private void UpdateCropOffsetEnable()
         {
@@ -1169,6 +1187,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void RvtOption_Checked(object sender, RoutedEventArgs e)
         {
+            _presenter.OnMarkDirty("Rvt");
             MarkDirty("Rvt");
             UpdateCanSaveFor("Rvt");
         }

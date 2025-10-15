@@ -5,8 +5,8 @@ using System;
 namespace GSADUs.Revit.Addin.UI
 {
     /// <summary>
-    /// Phase 2 presenter stub. Mediates window lifecycle and selection routing.
-    /// Initially thin; expanded in later PRs.
+    /// Phase 2 presenter. Mediates window lifecycle and selection routing.
+    /// Currently thin to keep behavior unchanged; expanded in later PRs.
     /// </summary>
     internal sealed class WorkflowManagerPresenter
     {
@@ -21,9 +21,25 @@ namespace GSADUs.Revit.Addin.UI
 
         public AppSettings Settings => _catalog.Settings;
 
-        public void OnLoaded(UIDocument? uidoc)
+        public void OnWindowConstructed(WorkflowManagerWindow win)
         {
-            // Placeholder: future hydration coordination.
+            // Placeholder: could set DataContexts in future.
+        }
+
+        public void OnLoaded(UIDocument? uidoc, WorkflowManagerWindow win)
+        {
+            // Placeholder: hook for future hydration orchestration.
+        }
+
+        public void OnSavedComboChanged(string tag, WorkflowDefinition? wf, WorkflowManagerWindow win)
+        {
+            // Placeholder: will coordinate tab routing later.
+        }
+
+        public void OnMarkDirty(string tag)
+        {
+            // Placeholder: could surface dirty-state telemetry.
+            try { PerfLogger.Write("WorkflowManager.MarkDirty", tag, TimeSpan.Zero); } catch { }
         }
 
         public void SaveSettings() => _catalog.Save();
