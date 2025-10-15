@@ -451,80 +451,6 @@ namespace GSADUs.Revit.Addin.Orchestration
             return RunOutcome.Completed;
         }
 
-        private static int SafeElemInt(ElementId id)
-        {
-            if (id == null) return 0;
-            try
-            {
-                var p = typeof(ElementId).GetProperty("IntegerValue");
-                if (p != null) return (int)p.GetValue(id);
-            }
-            catch { }
-            try { return id.GetHashCode(); } catch { return 0; }
-        }
-
-        private static bool PdfExportSucceeded(string pdfDir, HashSet<string> before, string setName)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(pdfDir) || !Directory.Exists(pdfDir)) return false;
-                var after = Directory.GetFiles(pdfDir, "*.pdf", SearchOption.TopDirectoryOnly);
-                foreach (var f in after)
-                {
-                    if (before.Contains(f)) continue;
-                    var fileName = Path.GetFileName(f);
-                    if (new FileInfo(f).Length <= 0) continue;
-                    if (fileName.IndexOf(setName, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        fileName.IndexOf(San(setName), StringComparison.OrdinalIgnoreCase) >= 0)
-                        return true;
-                }
-            }
-            catch { }
-            return false;
-        }
-
-        // NEW: Presence (not strictly "new"), used to trigger write-back on overwrite or new file.
-        private static bool PdfFilePresent(string pdfDir, string setName)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(pdfDir) || !Directory.Exists(pdfDir)) return false;
-                var files = Directory.GetFiles(pdfDir, "*.pdf", SearchOption.TopDirectoryOnly);
-                foreach (var f in files)
-                {
-                    var fi = new FileInfo(f);
-                    if (fi.Length <= 0) continue;
-                    var fileName = fi.Name;
-                    if (fileName.IndexOf(setName, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        fileName.IndexOf(San(setName), StringComparison.OrdinalIgnoreCase) >= 0)
-                        return true;
-                }
-            }
-            catch { }
-            return false;
-        }
-
-        private static void MarkPdfExport(IBatchLog log, string setId, string membersHash)
-        {
-            if (string.IsNullOrWhiteSpace(setId)) return;
-
-            var exists = log.GetRows().Any(r => r.TryGetValue("SetId", out var v) &&
-                                                string.Equals(v, setId, StringComparison.OrdinalIgnoreCase));
-            if (!exists)
-            {
-                try { PerfLogger.Write("BatchExport.SkipWrite", $"missing row for SetId={setId}", TimeSpan.Zero); } catch { }
-                return;
-            }
-
-            const string wf = "export-pdf";
-            var currSig = HashUtil.Fnv1a64Hex(membersHash + "|" + wf);
-
-            log.Upsert(setId, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [$"{wf}_ExportDate"] = BatchLog.NowIso(),
-                [$"{wf}_ExportSig"] = currSig
-            });
-        }
 
         private static bool TryToggleCurrentSet(Document doc, AppSettings settings, IEnumerable<string> uids, bool value)
         {
@@ -637,33 +563,6 @@ namespace GSADUs.Revit.Addin.Orchestration
                 }
             }
             catch { return false; }
-        }
-
-        private static BoundingBoxXYZ? ComputeSetCropBox(Document doc, IEnumerable<string> preserveUids, View view)
-        {
-            if (doc == null || preserveUids == null || view == null) return null;
-            double minx = double.PositiveInfinity, miny = double.PositiveInfinity;
-            double maxx = double.NegativeInfinity, maxy = double.NegativeInfinity;
-            bool any = false;
-            foreach (var uid in preserveUids)
-            {
-                if (string.IsNullOrWhiteSpace(uid)) continue;
-                Element? el = null; try { el = doc.GetElement(uid); } catch { }
-                if (el == null) continue;
-                BoundingBoxXYZ? bb = null;
-                try { bb = el.get_BoundingBox(view); } catch { bb = null; }
-                if (bb == null) continue;
-                minx = Math.Min(minx, bb.Min.X); miny = Math.Min(miny, bb.Min.Y);
-                maxx = Math.Max(maxx, bb.Max.X); maxy = Math.Max(maxy, bb.Max.Y);
-                any = true;
-            }
-            if (!any) return null;
-
-            return new BoundingBoxXYZ
-            {
-                Min = new XYZ(minx, miny, 0),
-                Max = new XYZ(maxx, maxy, 0)
-            };
         }
 
         private static string San(string name)

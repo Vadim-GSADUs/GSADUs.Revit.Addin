@@ -32,6 +32,7 @@ namespace GSADUs.Revit.Addin.UI
         }
         // --- end singleton management ---
 
+        private readonly WorkflowCatalogService _catalog;
         private AppSettings _settings;
         private readonly IDialogService _dialogs;
         private readonly Document? _doc;
@@ -180,7 +181,9 @@ namespace GSADUs.Revit.Addin.UI
             RegisterInstance();
 
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
-            _settings = settings ?? AppSettingsStore.Load();
+            _catalog = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogService)) as WorkflowCatalogService
+                       ?? new WorkflowCatalogService(new SettingsPersistence());
+            _settings = _catalog.Settings; // central settings source
             _doc = doc;
 
             _imageBlacklistIds = new List<int>(_settings.ImageBlacklistCategoryIds ?? new List<int>());
@@ -223,7 +226,7 @@ namespace GSADUs.Revit.Addin.UI
                 {
                     _imageBlacklistIds = dlg.ResultIds.ToList();
                     _settings.ImageBlacklistCategoryIds = _imageBlacklistIds.Distinct().ToList();
-                    try { AppSettingsStore.Save(_settings); } catch { }
+                    try { _catalog.Save(); } catch { }
                     UpdateImageBlacklistSummary();
                 }
             }
@@ -468,7 +471,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void RefreshSavedCombosAndMain()
         {
-            try { AppSettingsStore.Save(_settings); } catch { }
+            try { _catalog.SaveAndRefresh(); } catch { }
             RefreshMainList();
             RefreshSavedCombos();
         }
@@ -477,7 +480,7 @@ namespace GSADUs.Revit.Addin.UI
         {
             try
             {
-                var rows = (_settings.Workflows ?? new List<WorkflowDefinition>())
+                var rows = (_catalog.Workflows ?? new System.Collections.ObjectModel.ObservableCollection<WorkflowDefinition>())
                     .Select(w => new { w.Id, w.Name, w.Output, w.Scope, w.Description })
                     .ToList();
                 (FindName("WorkflowsList") as ListView)!.ItemsSource = rows;
@@ -520,14 +523,14 @@ namespace GSADUs.Revit.Addin.UI
             if (sel == null) return null;
             var idProp = sel.GetType().GetProperty("Id");
             var id = idProp?.GetValue(sel) as string;
-            return (_settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase));
+            return (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase));
         }
 
         private void RefreshSavedCombos()
         {
             try
             {
-                var all = _settings.Workflows ?? new List<WorkflowDefinition>();
+                var all = _catalog.Workflows?.ToList() ?? new List<WorkflowDefinition>();
                 var mk = static (WorkflowDefinition w) => new { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" };
                 (FindName("RvtSavedCombo") as ComboBox)!.ItemsSource = all.Where(w => w.Output == OutputType.Rvt).Select(mk).ToList();
                 (FindName("PdfSavedCombo") as ComboBox)!.ItemsSource = all.Where(w => w.Output == OutputType.Pdf).Select(mk).ToList();
@@ -543,20 +546,7 @@ namespace GSADUs.Revit.Addin.UI
             var lv = FindName("WorkflowsList") as ListView;
             var sel = lv?.SelectedItem; if (sel == null) { _dialogs.Info("Duplicate", "Select a workflow."); return; }
             var id = sel.GetType().GetProperty("Id")?.GetValue(sel) as string; if (id == null) return;
-            var s = (_settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => w.Id == id); if (s == null) return;
-            var copy = new WorkflowDefinition
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                Name = (s.Name ?? "Workflow") + " (Copy)",
-                Output = s.Output,
-                Kind = s.Kind,
-                Scope = s.Scope,
-                Description = s.Description,
-                ActionIds = new List<string>(s.ActionIds ?? new List<string>()),
-                Parameters = new Dictionary<string, JsonElement>(s.Parameters ?? new Dictionary<string, JsonElement>())
-            };
-            _settings.Workflows ??= new List<WorkflowDefinition>();
-            _settings.Workflows.Add(copy);
+            _ = _catalog.Duplicate(id);
             RefreshSavedCombosAndMain();
         }
 
@@ -566,10 +556,10 @@ namespace GSADUs.Revit.Addin.UI
             var sel = lv?.SelectedItem; if (sel == null) return;
             var id = sel.GetType().GetProperty("Id")?.GetValue(sel) as string;
             if (id == null) return;
-            var wf = (_settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => w.Id == id);
+            var wf = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => w.Id == id);
             if (wf == null) return;
             var input = Microsoft.VisualBasic.Interaction.InputBox("New name:", "Rename Workflow", wf.Name);
-            if (!string.IsNullOrWhiteSpace(input)) { wf.Name = input.Trim(); RefreshSavedCombosAndMain(); }
+            if (!string.IsNullOrWhiteSpace(input)) { _catalog.Rename(id, input.Trim()); RefreshSavedCombosAndMain(); }
         }
 
         private void DelBtn_Click(object sender, RoutedEventArgs e)
@@ -577,11 +567,11 @@ namespace GSADUs.Revit.Addin.UI
             var lv = FindName("WorkflowsList") as ListView;
             var sel = lv?.SelectedItem; if (sel == null) return;
             var id = sel.GetType().GetProperty("Id")?.GetValue(sel) as string; if (id == null) return;
-            var wf = (_settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => w.Id == id);
+            var wf = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => w.Id == id);
             if (wf == null) return;
             if (_dialogs.ConfirmYesNo("Delete Workflow", $"Delete '{wf.Name}'?", "This cannot be undone.", defaultYes: false))
             {
-                _settings.Workflows!.RemoveAll(w => w.Id == id);
+                _catalog.Delete(id);
                 RefreshSavedCombosAndMain();
             }
         }
@@ -596,7 +586,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void SaveCloseBtn_Click(object sender, RoutedEventArgs e)
         {
-            try { AppSettingsStore.Save(_settings); } catch { }
+            try { _catalog.Save(); } catch { }
             DialogResult = true;
         }
 
@@ -661,7 +651,7 @@ namespace GSADUs.Revit.Addin.UI
             {
                 var lv = sender as ListView; if (lv?.SelectedItem == null) return;
                 var id = lv.SelectedItem.GetType().GetProperty("Id")?.GetValue(lv.SelectedItem) as string;
-                var wf = (_settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => w.Id == id);
+                var wf = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => w.Id == id);
                 if (wf == null) return;
                 var tabIndex = wf.Output switch { OutputType.Rvt => 1, OutputType.Pdf => 2, OutputType.Image => 3, OutputType.Csv => 4, _ => 0 };
                 (Tabs as TabControl)!.SelectedIndex = tabIndex;
@@ -694,8 +684,8 @@ namespace GSADUs.Revit.Addin.UI
                     ActionIds = new List<string> { "export-pdf" },
                     Parameters = new Dictionary<string, JsonElement>()
                 };
-                _settings.Workflows ??= new List<WorkflowDefinition>();
-                _settings.Workflows.Add(wf);
+                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
+                _catalog.Settings.Workflows.Add(wf);
                 RefreshSavedCombosAndMain();
                 Tabs.SelectedIndex = 2;
                 var pdfCombo = FindName("PdfSavedCombo") as ComboBox;
@@ -726,8 +716,8 @@ namespace GSADUs.Revit.Addin.UI
                     ActionIds = new List<string> { "export-rvt", "cleanup" },
                     Parameters = new Dictionary<string, System.Text.Json.JsonElement>()
                 };
-                _settings.Workflows ??= new List<WorkflowDefinition>();
-                _settings.Workflows.Add(wf);
+                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
+                _catalog.Settings.Workflows.Add(wf);
                 RefreshSavedCombosAndMain();
                 Tabs.SelectedIndex = 1;
                 SelectInCombo("RvtSavedCombo", wf.Id);
@@ -750,8 +740,8 @@ namespace GSADUs.Revit.Addin.UI
                     ActionIds = new List<string> { "export-image" },
                     Parameters = new Dictionary<string, JsonElement>()
                 };
-                _settings.Workflows ??= new List<WorkflowDefinition>();
-                _settings.Workflows.Add(wf);
+                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
+                _catalog.Settings.Workflows.Add(wf);
                 RefreshSavedCombosAndMain();
                 Tabs.SelectedIndex = 3;
                 SelectInCombo("ImageSavedCombo", wf.Id);
@@ -774,8 +764,8 @@ namespace GSADUs.Revit.Addin.UI
                     ActionIds = new List<string> { "export-csv" },
                     Parameters = new Dictionary<string, JsonElement>()
                 };
-                _settings.Workflows ??= new List<WorkflowDefinition>();
-                _settings.Workflows.Add(wf);
+                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
+                _catalog.Settings.Workflows.Add(wf);
                 RefreshSavedCombosAndMain();
                 Tabs.SelectedIndex = 4;
                 SelectInCombo("CsvSavedCombo", wf.Id);
@@ -1134,8 +1124,8 @@ namespace GSADUs.Revit.Addin.UI
             if (existing == null)
             {
                 existing = new WorkflowDefinition { Id = Guid.NewGuid().ToString("N"), Kind = WorkflowKind.Internal, Output = output, ActionIds = new List<string>(), Parameters = new Dictionary<string, JsonElement>() };
-                _settings.Workflows ??= new List<WorkflowDefinition>();
-                _settings.Workflows.Add(existing);
+                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
+                _catalog.Settings.Workflows.Add(existing);
             }
             existing.Name = name; existing.Scope = scope; existing.Description = desc;
             switch (output)
@@ -1160,7 +1150,7 @@ namespace GSADUs.Revit.Addin.UI
                 case OutputType.Csv:
                     EnsureActionId(existing, "export-csv"); break;
             }
-            AppSettingsStore.Save(_settings);
+            _catalog.SaveAndRefresh();
             RefreshMainList(); RefreshSavedCombos();
             MarkDirty(tag, false);
             UpdateCanSaveFor(tag); UpdateImageSaveState();

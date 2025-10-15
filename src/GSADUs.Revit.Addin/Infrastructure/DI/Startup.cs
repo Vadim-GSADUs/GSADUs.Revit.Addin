@@ -47,6 +47,11 @@ namespace GSADUs.Revit.Addin
             services.AddSingleton<IExportAction, ExportPdfAction>();
             services.AddSingleton<IExportAction, ExportImageAction>();
 
+            // Phase 2: settings persistence abstraction and catalog/presenter scaffolding
+            services.AddSingleton<ISettingsPersistence, SettingsPersistence>();
+            services.AddSingleton<WorkflowCatalogService>();
+            services.AddSingleton<GSADUs.Revit.Addin.UI.WorkflowManagerPresenter>();
+
             return services.BuildServiceProvider();
         }
     }
