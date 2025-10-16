@@ -1,89 +1,93 @@
-# Workflow Manager Phase 2 Reanalysis
+# Workflow Manager Phase 2 Reanalysis (Updated)
 
-## 1. Current hotspots blocking LOC reduction
-- **WorkflowManagerWindow.xaml.cs remains large** and still hosts workflow hydration, validation, and persistence logic, preventing the 60-70% shrinkage target from the Phase 2 guide.
-- The `Loaded` handler rehydrates PDF and Image tabs by hand (sheet set collectors, label updates) instead of delegating to presenter/VM layers, keeping tight coupling with Revit APIs and WPF controls.
-- PDF enablement, dirty tracking, and save-state rendering are still partially computed via `FindName` lookups (`UpdateCanSaveFor`, `SetSaveVisual`), duplicating logic that already exists in tab view models.
-- Image tab persistence/validation and preview remain partially duplicated between VM and window, risking drift.
-- `SaveWorkflow_Click` still performs action ID manipulation and JSON plumbing; persistence should be presenter/service-owned.
+This document tracks progress and the remaining steps to complete the MVVM simplification for `WorkflowManagerWindow` with minimal legacy dependencies.
 
-## 2. Deviations from the Phase 2 workflow plan
-- The plan called for the presenter to set tab DataContexts and own hydration; the window still performs much of the wiring.
-- Base fields (name/scope/description) are read directly from controls on save instead of trusting VMs.
-- Code-behind event handlers remain for grid sorting, name changes, and image scope toggles; bindings/commands should replace these.
-- Image preview and enablement are calculated in multiple places (VM + window).
+## A. Changes completed in this phase
+- Replaced header-click sorting with a `CollectionViewSource` (`WorkflowsView`) sorted by `Name` ascending; removed header-click sorting logic.
+- Main list now binds to the `CollectionViewSource` (no ad-hoc sorting in code-behind).
+- Removed the "Audit" column and related button from the Main tab.
+- Duplicated PDF/Image XAML controls and old handlers were cleaned where relevant.
+- Wired PDF/Image "New" buttons to `NewCommand` on their tab view models (`PdfWorkflowTabViewModel`, `ImageWorkflowTabViewModel`), which clear state and mark dirty.
+- Kept presenter-owned persistence: window delegates to presenter (`SavePdfWorkflow`, `SaveImageWorkflow`).
+- PDF labels (`OutputFolder`, `OverwritePolicyText`) and Image preview are VM-bound (no manual label setting).
 
-## 3. Refactoring opportunities aligned with "stupid simple"
-- Promote view models to single source of truth for all tab state; delete window-side enablement/preview calculations once bindings drive the buttons directly.
-- Move Revit API hydration into the presenter (populate PDF view/sheet sets and export setups; populate Image print sets and single views).
-- Extract persistence: move JSON parameter assembly to presenter/service methods (e.g., `SavePdfWorkflow`, `SaveImageWorkflow`), with the window delegating.
-- Centralize dirty state inside view models (`HasUnsavedChanges`/`IsSaveEnabled`) and XAML triggers; remove `SetSaveVisual` and ad-hoc enablement.
-- Replace `FindName` sweeps with bindings or strongly typed fields.
+## B. Hotspots still blocking full MVVM
+- Root DataContext for main list is still not a dedicated root VM; code-behind still provisions data for the `CollectionViewSource` via `RefreshMainList`.
+- Saved-workflow combos (`PdfSavedCombo`, `ImageSavedCombo`) still rely on code-behind `RefreshSavedCombos` to set `ItemsSource`.
+- Some code-behind remains around double-click navigation and reflection-based selection of saved workflow items.
+- Presenter is still created within the window; DI/binding from a composition root would improve testability.
+- Window still handles some Revit UI checks (e.g., PDF enablement for family docs) directly instead of via VM state.
 
-## 4. Recommended approach: purge RVT/CSV tabs and reboot later
-RVT and CSV tabs currently have no real workflow logic and add code-behind surface area. To accelerate VM-only convergence and reduce LOC:
+## C. Deviations narrowed (improved vs. original V2 plan)
+- Sorting is now binding-driven (ok).
+- VM `NewCommand` introduced and bound (ok).
+- Save-state visuals are binding-driven (`IsSaveEnabled`, `HasUnsavedChanges`) for both PDF and Image (ok).
+- Persistence is presenter-owned (ok). JSON/parameters remain out of the window (ok).
+- Remaining: root Workflows collection binding, saved-combo `ItemsSource` binding, code-behind reflection and navigation.
 
-- Remove RVT and CSV `TabItem`s from `WorkflowManagerWindow.xaml` for now.
-- Delete RVT/CSV-specific code-behind: handlers (`RvtNewBtn_Click`, `CsvNewBtn_Click`, RVT/CSV branches in `SavedCombo_SelectionChanged`, `UpdateCanSaveFor`, `MarkDirty`, and RVT/CSV cases in `SaveWorkflow_Click`).
-- Trim presenter of `RvtBase`/`CsvBase` VMs and any RVT/CSV wiring; keep only `PdfWorkflow` and `ImageWorkflow`.
-- Main grid options:
-  - Option A: show all workflows, but edit UI exists only for PDF/Image.
-  - Option B (simpler now): filter to PDF/Image to avoid selection paths for missing tabs.
-- When needed later, recreate RVT/CSV tabs by copying PDF/Image tab structure and backing them with small VMs (name/scope/description + future options), following the same VM-only + presenter-save pattern.
+## D. Refactoring targets aligned with "stupid simple"
+- Introduce a root `WorkflowManagerViewModel` exposing:
+  - `ObservableCollection<WorkflowListItem> Workflows` (Main list rows)
+  - `WorkflowListItem? SelectedWorkflow`
+  - `PdfWorkflowTabViewModel Pdf`, `ImageWorkflowTabViewModel Image`
+  - Aggregated `HasUnsavedChanges`, `IsSaveEnabled` (derived or forwarded)
+  - Commands: `Duplicate`, `Rename`, `Delete`, `OpenWorkflow`, `SaveClose`, `Cancel`
+- Bind `WorkflowsView.Source` directly to `WorkflowManagerViewModel.Workflows`; remove `RefreshMainList`.
+- Bind saved combos `ItemsSource` to `Pdf.SavedWorkflows` and `Image.SavedWorkflows`; keep `SelectedValue` bound to `SelectedWorkflowId` (already bound). Remove `RefreshSavedCombos` and reflection-based selection.
+- Keep presenter as the boundary to Revit API and persistence, injected into the VM. Remove presenter/window coupling.
 
-Pros
-- Immediate LOC reduction and lower coupling.
-- Faster move to VM-only source of truth for active tabs.
+## E. RVT/CSV tabs
+- Current scope is PDF/Image only. RVT/CSV editors remain out-of-scope to keep surface area low.
+- Reintroduce RVT/CSV later by cloning PDF/Image tab structure with small VMs.
 
-Cons
-- Temporarily no editor UI for RVT/CSV.
+## F. Incremental MVVM migration roadmap (status)
+- Stage 1: Presenter hydrates PDF/Image sources; window `Loaded` calls presenter methods only. (In progress, window still does some UI enablement.)
+- Stage 2: Remove window-side enablement/dirty code; rely on `IsSaveEnabled`/`HasUnsavedChanges`. (Done for active buttons.)
+- Stage 3: Saved-combo selection is VM-only via `SelectedWorkflowId`. (Partially done: `SelectedValue` is bound, but `ItemsSource` still set in code-behind.)
+- Stage 4: Image whitelist is VM-owned (`WhitelistSummary`, `PickWhitelistCommand`). (Done.)
+- Stage 5: Root `WorkflowManagerViewModel` provides main list rows/sort/selection; remove code-behind provisioning. (Pending.)
 
-## 5. VM-only migration roadmap (incremental)
-- Stage 1: Presenter fully hydrates PDF and Image sources; window `Loaded` calls presenter methods only. PDF/Image save remains presenter-owned. Trust VM for name/scope/description on save.
-- Stage 2: Remove window-side enablement/dirty code; XAML binds buttons to `IsSaveEnabled` and visuals to `HasUnsavedChanges` for both PDF and Image.
-- Stage 3: Replace reflection-based saved-combo lookups with bound `SelectedWorkflowId` per tab VM; presenter updates VM and model on selection.
-- Stage 4: Move Image whitelist (category IDs + summary text + pick command) into Image VM; window binds to VM command/property.
-- Stage 5: Introduce a root `WorkflowManagerViewModel` for main list (rows, sort, selected id) and static settings (output folder/overwrite labels) and bind labels instead of setting via code-behind.
+## G. Next edit checkpoints (actionable)
+1) Root VM and bindings
+- Create `WorkflowManagerViewModel` with `Workflows`, `SelectedWorkflow`, and children: `Pdf`, `Image`.
+- In XAML: set `WorkflowsView.Source="{Binding Workflows}"` and 
+  `WorkflowsList.SelectedItem="{Binding SelectedWorkflow, Mode=TwoWay}"`.
+- In window construction: set `DataContext` to the root VM (prefer DI), remove `RefreshMainList`.
 
-## 6. Next edit checkpoints (concrete steps)
-1) Purge RVT/CSV tabs (UI only)
-- Remove RVT and CSV `TabItem`s from `WorkflowManagerWindow.xaml`.
-- Update XAML bindings and references to avoid dangling element names.
+2) Saved-workflow combos to VM-only
+- Add `ObservableCollection<SavedWorkflowListItem> SavedWorkflows` to each tab VM.
+- Bind `PdfSavedCombo.ItemsSource` and `ImageSavedCombo.ItemsSource` to those collections.
+- Remove `RefreshSavedCombos` and reflection selection logic; presenter updates VM lists and honors `SelectedWorkflowId`.
 
-2) Remove RVT/CSV code paths (code-behind + presenter)
-- In `WorkflowManagerWindow.xaml.cs`:
-  - Delete RVT/CSV branches in `SavedCombo_SelectionChanged`, `UpdateCanSaveFor`, `MarkDirty`, `SaveWorkflow_Click`, `WorkflowsList_MouseDoubleClick`, `RefreshSavedCombos`.
-  - Delete RVT/CSV button handlers (`RvtNewBtn_Click`, `CsvNewBtn_Click`, `RvtOption_Checked`).
-  - Simplify `GetSelectedFromTab` to PDF/Image only.
-- In `WorkflowManagerPresenter.cs`:
-  - Remove `RvtBase`/`CsvBase` fields and any RVT/CSV wiring.
+3) Remove navigation/reflection from window
+- Replace `WorkflowsList_MouseDoubleClick` with a command (e.g., `OpenWorkflowCommand`) on the root VM.
+- Remove header-click remnants, selection reflection, and any remaining `FindName`-based plumbing.
 
-3) Presenter hydration is source of truth
-- Ensure `PopulatePdfSources` and `PopulateImageSources` are the only hydration points; window `Loaded` calls them and assigns VMs to DataContexts.
-- Remove any collector logic from window.
+4) Presenter to service boundary
+- Construct presenter (or services) in the composition root/DI; inject into root VM and tab VMs.
+- Window becomes a dumb view with bindings only.
 
-4) VM-driven save state (PDF/Image)
-- Bind button `IsEnabled` and visuals to `IsSaveEnabled`/`HasUnsavedChanges` on both tabs.
-- Remove `SetSaveVisual`/`MarkDirty`/`UpdateCanSaveFor` branches for PDF/Image.
+5) PDF enablement from VM
+- Provide `IsPdfEnabled` on VM based on active document context; bind controls’ `IsEnabled` instead of toggling in window.
+- Remove `TryDisablePdfControls`.
 
-5) Move PDF labels to bindings
-- Expose `PdfOutputFolder` and `PdfOverwritePolicyText` on a suitable VM (temporary: presenter exposes read-only properties on `PdfWorkflowTabViewModel`).
-- Bind `PdfOutFolderLabel`/`PdfOverwriteLabel` to those properties; remove code-behind assignment.
+## H. Risks / notes
+- Keep presenter/service boundary for Revit API and persistence; do not push Revit calls into VMs directly.
+- Avoid reintroducing control name lookups; prefer bindings/commands everywhere.
 
-6) Image whitelist to VM
-- Add `WhitelistSummary` and `PickWhitelistCommand` to `ImageWorkflowTabViewModel`.
-- Bind UI to those; delete `ImageBlacklistPickBtn_Click` and summary updater from window.
+## I. Quick checklist
+- [x] CollectionViewSource sorting for main list
+- [x] Remove Audit column/button
+- [x] Bind PDF/Image New buttons to VM `NewCommand`
+- [x] Presenter owns persistence (save)
+- [x] Image whitelist in VM
+- [ ] Root `WorkflowManagerViewModel` provides Workflows and selection
+- [ ] Saved-workflow combos: ItemsSource bound to VM (remove RefreshSavedCombos)
+- [ ] Replace double-click handler with bound command
+- [ ] Presenter/Services via DI, no window-owned creation
+- [ ] PDF enablement via VM property (remove TryDisablePdfControls)
 
-7) Saved-combo selection to VM-only
-- Add `SelectedWorkflowId` per tab VM; bind saved Combos to it.
-- Presenter observes changes, locates the model (id), updates VM fields, and clears dirty.
-- Remove reflection-based selection code in window.
-
-## 7. Nice-to-haves (later)
-- Introduce a root `WorkflowManagerViewModel` for main list (rows, sort, selection, commands).
-- Replace `GridViewColumnHeader_Click` sorting with `CollectionViewSource` sorting through bindings/commands.
-- Centralize persistence into `WorkflowCatalogService` helpers (`UpdatePdfWorkflow`, `UpdateImageWorkflow`).
-
-## 8. Status notes
-- {SetName} is now auto-inserted during save for PDF and Image; token validation prompts are no longer needed.
-- Active goal: VM-only source of truth for PDF/Image tabs before reintroducing RVT/CSV.
+## J. Status notes
+- Main-screen sorting is now stable and binding-driven.
+- New-workflow creation is consistent and marks dirty via VM.
+- Remaining window logic focuses on provisioning lists and navigation, which are the next targets for removal.

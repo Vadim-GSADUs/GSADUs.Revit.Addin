@@ -7,7 +7,7 @@
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
     <Window.Resources>
         <ui:EqualityToBooleanConverter x:Key="EqualityToBooleanConverter"/>
-        <CollectionViewSource x:Key="WorkflowsView">
+        <CollectionViewSource x:Key="WorkflowsView" Source="{Binding Workflows}">
             <CollectionViewSource.SortDescriptions>
                 <scm:SortDescription PropertyName="Name" Direction="Ascending"/>
             </CollectionViewSource.SortDescriptions>
@@ -19,7 +19,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TabControl x:Name="Tabs" Grid.Row="0">
+        <TabControl x:Name="Tabs" Grid.Row="0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
             <TabControl.ItemContainerStyle>
                 <Style TargetType="TabItem">
                     <Setter Property="MinWidth" Value="160"/>
@@ -37,8 +37,12 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <ListView x:Name="WorkflowsList" SelectionMode="Single" Grid.ColumnSpan="2" MouseDoubleClick="WorkflowsList_MouseDoubleClick"
-                              ItemsSource="{Binding Source={StaticResource WorkflowsView}}">
+                    <ListView x:Name="WorkflowsList" SelectionMode="Single"
+                              ItemsSource="{Binding Source={StaticResource WorkflowsView}}"
+                              SelectedItem="{Binding SelectedWorkflow, Mode=TwoWay}">
+                        <ListView.InputBindings>
+                            <MouseBinding Gesture="LeftDoubleClick" Command="{Binding DataContext.OpenWorkflowCommand, RelativeSource={RelativeSource AncestorType=TabItem}}" CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                        </ListView.InputBindings>
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Width="220" Header="Name" DisplayMemberBinding="{Binding Name}"/>
@@ -49,9 +53,9 @@
                         </ListView.View>
                     </ListView>
                     <UniformGrid Grid.Row="1" Rows="1" Columns="5" Margin="0,8,0,0" Grid.ColumnSpan="2">
-                        <Button x:Name="DupBtn"     MinWidth="110" Margin="4,0" Content="Duplicate"/>
-                        <Button x:Name="RenBtn"     MinWidth="110" Margin="4,0" Content="Rename Workflow"/>
-                        <Button x:Name="DelBtn"     MinWidth="110" Margin="4,0" Content="Delete Workflow"/>
+                        <Button x:Name="DupBtn"     MinWidth="110" Margin="4,0" Content="Duplicate" Command="{Binding DuplicateSelectedCommand}"/>
+                        <Button x:Name="RenBtn"     MinWidth="110" Margin="4,0" Content="Rename Workflow" Command="{Binding RenameSelectedCommand}"/>
+                        <Button x:Name="DelBtn"     MinWidth="110" Margin="4,0" Content="Delete Workflow" Command="{Binding DeleteSelectedCommand}"/>
                         <Button x:Name="SaveCloseBtn" MinWidth="110" Margin="4,0" Content="Save &amp; Close"/>
                         <Button x:Name="CancelBtn"  MinWidth="110" Margin="4,0" Content="Cancel" IsCancel="True"/>
                     </UniformGrid>
@@ -60,11 +64,11 @@
 
             <TabItem Header="PDF">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="PdfTabRoot" Margin="8" Orientation="Vertical" >
+                    <StackPanel x:Name="PdfTabRoot" Margin="8" Orientation="Vertical" DataContext="{Binding Pdf}">
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="PdfSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" SelectedValue="{Binding SelectedWorkflowId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox x:Name="PdfSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" ItemsSource="{Binding SavedWorkflows}" SelectedValue="{Binding SelectedWorkflowId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <Button x:Name="PdfNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
@@ -75,22 +79,22 @@
                             <ComboBox x:Name="PdfScopeCombo" Width="200" ItemsSource="{Binding Scopes}" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
-                        <GroupBox Header="PDF Export Range" Margin="0,4,0,6">
+                        <GroupBox Header="PDF Export Range" Margin="0,4,0,6" IsEnabled="{Binding IsPdfEnabled}">
                           <StackPanel Margin="6" Orientation="Horizontal">
                             <TextBlock Text="View/Sheet Set:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <ComboBox x:Name="ViewSetCombo" Width="320" ItemsSource="{Binding AvailableViewSets}" SelectedItem="{Binding SelectedSetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                           </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="PDF Export Setup" Margin="0,4,0,6">
+                        <GroupBox Header="PDF Export Setup" Margin="0,4,0,6" IsEnabled="{Binding IsPdfEnabled}">
                             <StackPanel Orientation="Horizontal" Margin="6">
                                 <TextBlock Text="Export Setup:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <ComboBox x:Name="ExportSetupCombo" Width="320" ItemsSource="{Binding AvailableExportSetups}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                                <Button x:Name="PdfManageSetupBtn" Content="Manage PDF Export Setup" Width="220" Margin="8,0,0,0" Click="PdfManageSetupBtn_Click"/>
+                                <Button x:Name="PdfManageSetupBtn" Content="Manage PDF Export Setup" Width="220" Margin="8,0,0,0" Command="{Binding ManagePdfSetupCommand}"/>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="PDF File" Margin="0,4,0,6">
+                        <GroupBox Header="PDF File" Margin="0,4,0,6" IsEnabled="{Binding IsPdfEnabled}">
                             <StackPanel Margin="6" Orientation="Vertical">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -114,18 +118,17 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Pdf"
-                                    IsEnabled="{Binding DataContext.IsSaveEnabled, RelativeSource={RelativeSource AncestorType=TabItem}}">
+                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SaveCommand}" IsEnabled="{Binding IsSaveEnabled}">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Opacity" Value="1.0"/>
                                         <Setter Property="Content" Value="Save Workflow"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding DataContext.HasUnsavedChanges, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="False">
+                                            <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="False">
                                                 <Setter Property="Opacity" Value="0.5"/>
                                                 <Setter Property="Content" Value="Saved"/>
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding DataContext.HasUnsavedChanges, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
+                                            <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
                                                 <Setter Property="Opacity" Value="1.0"/>
                                                 <Setter Property="Content" Value="Save Workflow"/>
                                             </DataTrigger>
@@ -141,11 +144,11 @@
 
             <TabItem Header="Image">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="ImageTabRoot" Margin="8" Orientation="Vertical">
+                    <StackPanel x:Name="ImageTabRoot" Margin="8" Orientation="Vertical" DataContext="{Binding Image}">
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="ImageSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" SelectedValue="{Binding SelectedWorkflowId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox x:Name="ImageSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" ItemsSource="{Binding SavedWorkflows}" SelectedValue="{Binding SelectedWorkflowId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <Button x:Name="ImageNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
@@ -245,18 +248,17 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Image"
-                                    IsEnabled="{Binding DataContext.IsSaveEnabled, RelativeSource={RelativeSource AncestorType=TabItem}}">
+                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SaveCommand}" IsEnabled="{Binding IsSaveEnabled}">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Opacity" Value="1.0"/>
                                         <Setter Property="Content" Value="Save Workflow"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding DataContext.HasUnsavedChanges, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="False">
+                                            <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="False">
                                                 <Setter Property="Opacity" Value="0.5"/>
                                                 <Setter Property="Content" Value="Saved"/>
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding DataContext.HasUnsavedChanges, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
+                                            <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
                                                 <Setter Property="Opacity" Value="1.0"/>
                                                 <Setter Property="Content" Value="Save Workflow"/>
                                             </DataTrigger>

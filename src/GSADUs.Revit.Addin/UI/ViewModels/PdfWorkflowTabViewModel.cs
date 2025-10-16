@@ -1,10 +1,9 @@
-using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 
 namespace GSADUs.Revit.Addin.UI
 {
-    internal sealed class PdfWorkflowTabViewModel : WorkflowTabBaseViewModel, INotifyPropertyChanged
+    internal sealed class PdfWorkflowTabViewModel : WorkflowTabBaseViewModel
     {
         public PdfWorkflowTabViewModel()
         {
@@ -16,6 +15,25 @@ namespace GSADUs.Revit.Addin.UI
         }
 
         public ICommand NewCommand { get; }
+        public ICommand? ManagePdfSetupCommand { get; set; }
+        public ICommand? SaveCommand { get; set; }
+
+        public ObservableCollection<SavedWorkflowListItem> SavedWorkflows { get; } = new();
+
+        private bool _isPdfEnabled = true;
+        public bool IsPdfEnabled
+        {
+            get => _isPdfEnabled;
+            set
+            {
+                if (_isPdfEnabled != value)
+                {
+                    _isPdfEnabled = value;
+                    OnChanged(nameof(IsPdfEnabled));
+                    System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+                }
+            }
+        }
 
         private string? _selectedWorkflowId;
         public string? SelectedWorkflowId
@@ -42,7 +60,7 @@ namespace GSADUs.Revit.Addin.UI
                     _pattern = value;
                     OnChanged(nameof(Pattern));
                     HasUnsavedChanges = true;
-                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                    OnChanged(nameof(HasUnsavedChanges));
                     RecomputeLocal();
                 }
             }
@@ -57,7 +75,7 @@ namespace GSADUs.Revit.Addin.UI
                     _selectedSetName = value;
                     OnChanged(nameof(SelectedSetName));
                     HasUnsavedChanges = true;
-                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                    OnChanged(nameof(HasUnsavedChanges));
                     RecomputeLocal();
                 }
             }
@@ -72,7 +90,7 @@ namespace GSADUs.Revit.Addin.UI
                     _selectedPrintSet = value;
                     OnChanged(nameof(SelectedPrintSet));
                     HasUnsavedChanges = true;
-                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                    OnChanged(nameof(HasUnsavedChanges));
                     RecomputeLocal();
                 }
             }
@@ -98,7 +116,7 @@ namespace GSADUs.Revit.Addin.UI
                 if (_hasUnsavedChanges != value)
                 {
                     _hasUnsavedChanges = value;
-                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                    OnChanged(nameof(HasUnsavedChanges));
                 }
             }
         }
@@ -138,7 +156,7 @@ namespace GSADUs.Revit.Addin.UI
         public void SetDirty(bool dirty)
         {
             HasUnsavedChanges = dirty;
-            OnPropertyChanged(nameof(HasUnsavedChanges));
+            OnChanged(nameof(HasUnsavedChanges));
         }
 
         public ObservableCollection<string> AvailableViewSets { get; set; } = new();
@@ -165,8 +183,5 @@ namespace GSADUs.Revit.Addin.UI
             SetDirty(true);
             RecomputeLocal();
         }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }

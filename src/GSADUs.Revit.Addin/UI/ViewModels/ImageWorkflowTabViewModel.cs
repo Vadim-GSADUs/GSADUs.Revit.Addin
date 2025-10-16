@@ -17,8 +17,11 @@ namespace GSADUs.Revit.Addin.UI
             NewCommand = new DelegateCommand(_ => Reset());
         }
 
+        public ObservableCollection<SavedWorkflowListItem> SavedWorkflows { get; } = new();
+
         public ICommand? PickWhitelistCommand { get; set; }
         public ICommand NewCommand { get; }
+        public ICommand? SaveCommand { get; set; }
 
         public string? SelectedWorkflowId { get; set; }
 

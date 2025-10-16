@@ -35,6 +35,92 @@ namespace GSADUs.Revit.Addin.UI
             // Observe SelectedWorkflowId changes
             PdfWorkflow.PropertyChanged += VmOnPropertyChanged;
             ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
+
+            // Seed saved lists and observe catalog changes via simple method
+            PopulateSavedLists();
+
+            // Wire ManagePdfSetup via presenter to UI API
+            PdfWorkflow.ManagePdfSetupCommand = new DelegateCommand(_ => ExecuteManagePdfSetup(), _ => PdfWorkflow.IsPdfEnabled);
+
+            // Save commands
+            PdfWorkflow.SaveCommand = new DelegateCommand(_ => SaveCurrentPdf(), _ => PdfWorkflow.IsSaveEnabled);
+            ImageWorkflow.SaveCommand = new DelegateCommand(_ => SaveCurrentImage(), _ => ImageWorkflow.IsSaveEnabled);
+        }
+
+        private void SaveCurrentPdf()
+        {
+            var vm = PdfWorkflow;
+            var nameVal = vm?.Name?.Trim() ?? string.Empty;
+            var scopeVal = vm?.WorkflowScope ?? string.Empty;
+            var descVal = vm?.Description ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(nameVal) || string.IsNullOrWhiteSpace(scopeVal)) { _dialogs.Info("Save", "Name and Scope required."); return; }
+
+            var existing = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>())
+                .FirstOrDefault(w => string.Equals(w.Id, vm.SelectedWorkflowId, StringComparison.OrdinalIgnoreCase) && w.Output == OutputType.Pdf);
+            if (existing == null)
+            {
+                existing = new WorkflowDefinition { Id = Guid.NewGuid().ToString("N"), Kind = WorkflowKind.Internal, Output = OutputType.Pdf, ActionIds = new List<string>(), Parameters = new Dictionary<string, JsonElement>() };
+                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
+                _catalog.Settings.Workflows.Add(existing);
+                vm.SelectedWorkflowId = existing.Id;
+            }
+
+            existing.Name = nameVal; existing.Scope = scopeVal; existing.Description = descVal;
+            if (!SavePdfWorkflow(existing)) return;
+            vm.SetDirty(false);
+            RefreshListsAfterSave();
+        }
+
+        private void SaveCurrentImage()
+        {
+            var vm = ImageWorkflow;
+            var nameVal = vm?.Name?.Trim() ?? string.Empty;
+            var scopeVal = vm?.WorkflowScope ?? string.Empty;
+            var descVal = vm?.Description ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(nameVal) || string.IsNullOrWhiteSpace(scopeVal)) { _dialogs.Info("Save", "Name and Scope required."); return; }
+
+            var existing = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>())
+                .FirstOrDefault(w => string.Equals(w.Id, vm.SelectedWorkflowId, StringComparison.OrdinalIgnoreCase) && w.Output == OutputType.Image);
+            if (existing == null)
+            {
+                existing = new WorkflowDefinition { Id = Guid.NewGuid().ToString("N"), Kind = WorkflowKind.Internal, Output = OutputType.Image, ActionIds = new List<string>(), Parameters = new Dictionary<string, JsonElement>() };
+                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
+                _catalog.Settings.Workflows.Add(existing);
+                vm.SelectedWorkflowId = existing.Id;
+            }
+
+            existing.Name = nameVal; existing.Scope = scopeVal; existing.Description = descVal;
+            SaveImageWorkflow(existing);
+            vm.SetDirty(false);
+            RefreshListsAfterSave();
+        }
+
+        private void ExecuteManagePdfSetup()
+        {
+            try
+            {
+                var uiapp = RevitUiContext.Current; if (uiapp == null) { _dialogs.Info("PDF", "Revit UI not available."); return; }
+                var cmd = Autodesk.Revit.UI.RevitCommandId.LookupPostableCommandId(Autodesk.Revit.UI.PostableCommand.ExportPDF);
+                if (cmd != null && uiapp.CanPostCommand(cmd)) uiapp.PostCommand(cmd);
+            }
+            catch { }
+        }
+
+        private void PopulateSavedLists()
+        {
+            try
+            {
+                var all = _catalog.Workflows?.ToList() ?? new List<WorkflowDefinition>();
+                var pdf = all.Where(w => w.Output == OutputType.Pdf)
+                             .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
+                             .ToList();
+                var img = all.Where(w => w.Output == OutputType.Image)
+                             .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
+                             .ToList();
+                PdfWorkflow.SavedWorkflows.Clear(); foreach (var i in pdf) PdfWorkflow.SavedWorkflows.Add(i);
+                ImageWorkflow.SavedWorkflows.Clear(); foreach (var i in img) ImageWorkflow.SavedWorkflows.Add(i);
+            }
+            catch { }
         }
 
         private void VmOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -81,6 +167,13 @@ namespace GSADUs.Revit.Addin.UI
         public void OnLoaded(UIDocument? uidoc, WorkflowManagerWindow win)
         {
             try { PdfWorkflow.ApplySettings(Settings); } catch { }
+
+            try
+            {
+                var doc = uidoc?.Document;
+                PdfWorkflow.IsPdfEnabled = !(doc == null || doc.IsFamilyDocument);
+            }
+            catch { }
         }
 
         private void UpdateImageWhitelistSummary()
@@ -340,6 +433,16 @@ namespace GSADUs.Revit.Addin.UI
 
             existing.Parameters = imageParams;
             EnsureActionId(existing, "export-image");
+        }
+
+        public void RefreshListsAfterSave()
+        {
+            try
+            {
+                _catalog.SaveAndRefresh();
+                PopulateSavedLists();
+            }
+            catch { }
         }
     }
 }
