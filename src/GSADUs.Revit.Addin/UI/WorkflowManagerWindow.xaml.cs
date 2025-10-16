@@ -75,5 +75,21 @@ namespace GSADUs.Revit.Addin.UI
             }
             catch { }
         }
+
+        private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+
+        }
+
+        private void WorkflowsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+
+        }
+
+        private void SaveCloseBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try { _presenter.SaveSettings(); } catch { }
+            try { this.Close(); } catch { }
+        }
     }
 }

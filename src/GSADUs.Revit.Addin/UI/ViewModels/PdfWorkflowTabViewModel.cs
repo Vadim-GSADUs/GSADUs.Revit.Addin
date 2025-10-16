@@ -10,6 +10,12 @@ namespace GSADUs.Revit.Addin.UI
             PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(IsBaseSaveEnabled)) RecomputeLocal();
+                if (e.PropertyName == nameof(Name) || e.PropertyName == nameof(WorkflowScope) || e.PropertyName == nameof(Description))
+                {
+                    HasUnsavedChanges = true;
+                    OnChanged(nameof(HasUnsavedChanges));
+                    RecomputeLocal();
+                }
             };
             NewCommand = new DelegateCommand(_ => Reset());
         }
@@ -42,13 +48,14 @@ namespace GSADUs.Revit.Addin.UI
             set { if (_selectedWorkflowId != value) { _selectedWorkflowId = value; OnChanged(nameof(SelectedWorkflowId)); } }
         }
 
-        private string _pattern = "";
+        private string _pattern = "{SetName}.pdf";
         private string? _selectedSetName;
         private string? _selectedPrintSet;
         private bool _isSaveEnabled;
         private bool _hasUnsavedChanges;
         private string _outputFolder = string.Empty;
         private string _overwritePolicyText = string.Empty;
+        private string _preview = string.Empty;
 
         public string Pattern
         {
@@ -147,6 +154,12 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
+        public string Preview
+        {
+            get => _preview;
+            private set { if (_preview != value) { _preview = value ?? string.Empty; OnChanged(nameof(Preview)); } }
+        }
+
         public void ApplySettings(AppSettings settings)
         {
             OutputFolder = settings?.DefaultOutputDir ?? string.Empty;
@@ -157,6 +170,7 @@ namespace GSADUs.Revit.Addin.UI
         {
             HasUnsavedChanges = dirty;
             OnChanged(nameof(HasUnsavedChanges));
+            RecomputeLocal();
         }
 
         public ObservableCollection<string> AvailableViewSets { get; set; } = new();
@@ -169,6 +183,16 @@ namespace GSADUs.Revit.Addin.UI
                      && !string.IsNullOrWhiteSpace(Pattern)
                      && Pattern.Contains("{SetName}");
             IsSaveEnabled = ok && IsBaseSaveEnabled;
+            RecomputePreview();
+        }
+
+        private void RecomputePreview()
+        {
+            var pat = (Pattern ?? "{SetName}.pdf").Trim();
+            if (string.IsNullOrWhiteSpace(pat)) pat = "{SetName}.pdf";
+            if (!pat.EndsWith(".pdf", System.StringComparison.OrdinalIgnoreCase)) pat += ".pdf";
+            try { pat = System.IO.Path.GetFileName(pat); } catch { }
+            Preview = $"Preview: {pat}";
         }
 
         private void Reset()
@@ -177,7 +201,7 @@ namespace GSADUs.Revit.Addin.UI
             Name = string.Empty;
             WorkflowScope = string.Empty;
             Description = string.Empty;
-            Pattern = string.Empty;
+            Pattern = "{SetName}.pdf";
             SelectedSetName = null;
             SelectedPrintSet = null;
             SetDirty(true);

@@ -298,14 +298,20 @@ namespace GSADUs.Revit.Addin.UI
             try
             {
                 var p = wf?.Parameters;
-                if (p == null) return;
+                if (p == null)
+                {
+                    // Ensure default prefill when no parameters saved
+                    if (string.IsNullOrWhiteSpace(PdfWorkflow.Pattern)) PdfWorkflow.Pattern = "{SetName}.pdf";
+                    return;
+                }
                 string Gs(string k) =>
                     (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
                         ? (v.GetString() ?? string.Empty)
                         : string.Empty;
                 PdfWorkflow.SelectedSetName  = Gs(PdfWorkflowKeys.PrintSetName);
                 PdfWorkflow.SelectedPrintSet = Gs(PdfWorkflowKeys.ExportSetupName);
-                PdfWorkflow.Pattern          = Gs(PdfWorkflowKeys.FileNamePattern);
+                var pattern = Gs(PdfWorkflowKeys.FileNamePattern);
+                PdfWorkflow.Pattern = string.IsNullOrWhiteSpace(pattern) ? "{SetName}.pdf" : pattern;
             }
             catch { }
         }
@@ -315,7 +321,11 @@ namespace GSADUs.Revit.Addin.UI
             try
             {
                 var p = wf?.Parameters;
-                if (p == null) return;
+                if (p == null)
+                {
+                    if (string.IsNullOrWhiteSpace(ImageWorkflow.Pattern)) ImageWorkflow.Pattern = "{SetName}";
+                    return;
+                }
                 string Gs(string k) =>
                     (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
                         ? (v.GetString() ?? string.Empty)
@@ -323,7 +333,8 @@ namespace GSADUs.Revit.Addin.UI
                 ImageWorkflow.ExportScope          = Gs(ImageWorkflowKeys.exportScope);
                 ImageWorkflow.SelectedPrintSet     = Gs(ImageWorkflowKeys.imagePrintSetName);
                 ImageWorkflow.SelectedSingleViewId = Gs(ImageWorkflowKeys.singleViewId);
-                ImageWorkflow.Pattern              = Gs(ImageWorkflowKeys.fileNamePattern);
+                var pattern = Gs(ImageWorkflowKeys.fileNamePattern);
+                ImageWorkflow.Pattern              = string.IsNullOrWhiteSpace(pattern) ? "{SetName}" : pattern;
                 ImageWorkflow.Prefix               = Gs(ImageWorkflowKeys.prefix);
                 ImageWorkflow.Suffix               = Gs(ImageWorkflowKeys.suffix);
                 ImageWorkflow.Format               = Gs(ImageWorkflowKeys.imageFormat);

@@ -13,6 +13,12 @@ namespace GSADUs.Revit.Addin.UI
             PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(IsBaseSaveEnabled)) Recompute();
+                if (e.PropertyName == nameof(Name) || e.PropertyName == nameof(WorkflowScope) || e.PropertyName == nameof(Description))
+                {
+                    HasUnsavedChanges = true;
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                    Recompute();
+                }
             };
             NewCommand = new DelegateCommand(_ => Reset());
         }
@@ -35,7 +41,7 @@ namespace GSADUs.Revit.Addin.UI
         public ObservableCollection<string> AvailablePrintSets { get; } = new();
         public ObservableCollection<SingleViewOption> AvailableSingleViews { get; } = new();
 
-        private string _pattern = string.Empty;
+        private string _pattern = "{SetName}";
         public string Pattern
         {
             get => _pattern;
@@ -46,7 +52,26 @@ namespace GSADUs.Revit.Addin.UI
         public string ExportScope
         {
             get => _exportScope;
-            set { if (_exportScope != value) { _exportScope = value ?? "PrintSet"; OnChanged(nameof(ExportScope)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
+            set
+            {
+                if (_exportScope != value)
+                {
+                    _exportScope = value ?? "PrintSet";
+                    OnChanged(nameof(ExportScope));
+                    HasUnsavedChanges = true;
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                    // Clear the unselected dropdown
+                    if (string.Equals(_exportScope, "SingleView", StringComparison.OrdinalIgnoreCase))
+                    {
+                        SelectedPrintSet = null;
+                    }
+                    else
+                    {
+                        SelectedSingleViewId = null;
+                    }
+                    Recompute();
+                }
+            }
         }
 
         private string? _selectedPrintSet;
@@ -130,6 +155,7 @@ namespace GSADUs.Revit.Addin.UI
         {
             HasUnsavedChanges = dirty;
             OnPropertyChanged(nameof(HasUnsavedChanges));
+            Recompute();
         }
 
         protected void OnPropertyChanged(string propertyName)
@@ -184,7 +210,7 @@ namespace GSADUs.Revit.Addin.UI
             Name = string.Empty;
             WorkflowScope = string.Empty;
             Description = string.Empty;
-            Pattern = string.Empty;
+            Pattern = "{SetName}";
             Prefix = string.Empty;
             Suffix = string.Empty;
             Format = "PNG";

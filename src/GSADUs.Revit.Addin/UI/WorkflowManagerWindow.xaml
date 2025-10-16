@@ -7,11 +7,15 @@
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
     <Window.Resources>
         <ui:EqualityToBooleanConverter x:Key="EqualityToBooleanConverter"/>
-        <CollectionViewSource x:Key="WorkflowsView" Source="{Binding Workflows}">
-            <CollectionViewSource.SortDescriptions>
-                <scm:SortDescription PropertyName="Name" Direction="Ascending"/>
-            </CollectionViewSource.SortDescriptions>
-        </CollectionViewSource>
+        <!-- Style to dim disabled ComboBoxes to 50% -->
+        <Style x:Key="DimWhenDisabledCombo" TargetType="ComboBox">
+            <Setter Property="Opacity" Value="1.0"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
@@ -19,7 +23,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TabControl x:Name="Tabs" Grid.Row="0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+        <TabControl x:Name="Tabs" Grid.Row="0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}" SelectionChanged="Tabs_SelectionChanged">
             <TabControl.ItemContainerStyle>
                 <Style TargetType="TabItem">
                     <Setter Property="MinWidth" Value="160"/>
@@ -29,9 +33,16 @@
 
             <TabItem Header="Main">
                 <Grid Margin="8">
+                    <Grid.Resources>
+                        <CollectionViewSource x:Key="WorkflowsView" Source="{Binding Workflows}">
+                            <CollectionViewSource.SortDescriptions>
+                                <scm:SortDescription PropertyName="Name" Direction="Ascending"/>
+                            </CollectionViewSource.SortDescriptions>
+                        </CollectionViewSource>
+                    </Grid.Resources>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="422*"/>
-                        <ColumnDefinition Width="57*"/>
+                        <ColumnDefinition/>
+                        <ColumnDefinition Width="0*"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -39,7 +50,7 @@
                     </Grid.RowDefinitions>
                     <ListView x:Name="WorkflowsList" SelectionMode="Single"
                               ItemsSource="{Binding Source={StaticResource WorkflowsView}}"
-                              SelectedItem="{Binding SelectedWorkflow, Mode=TwoWay}">
+                              SelectedItem="{Binding SelectedWorkflow, Mode=TwoWay}" SelectionChanged="WorkflowsList_SelectionChanged">
                         <ListView.InputBindings>
                             <MouseBinding Gesture="LeftDoubleClick" Command="{Binding DataContext.OpenWorkflowCommand, RelativeSource={RelativeSource AncestorType=TabItem}}" CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=ListView}}"/>
                         </ListView.InputBindings>
@@ -52,11 +63,11 @@
                             </GridView>
                         </ListView.View>
                     </ListView>
-                    <UniformGrid Grid.Row="1" Rows="1" Columns="5" Margin="0,8,0,0" Grid.ColumnSpan="2">
+                    <UniformGrid Grid.Row="1" Rows="1" Columns="5" Margin="0,8,0,0">
                         <Button x:Name="DupBtn"     MinWidth="110" Margin="4,0" Content="Duplicate" Command="{Binding DuplicateSelectedCommand}"/>
                         <Button x:Name="RenBtn"     MinWidth="110" Margin="4,0" Content="Rename Workflow" Command="{Binding RenameSelectedCommand}"/>
                         <Button x:Name="DelBtn"     MinWidth="110" Margin="4,0" Content="Delete Workflow" Command="{Binding DeleteSelectedCommand}"/>
-                        <Button x:Name="SaveCloseBtn" MinWidth="110" Margin="4,0" Content="Save &amp; Close"/>
+                        <Button x:Name="SaveCloseBtn" MinWidth="110" Margin="4,0" Content="Save &amp; Close" Click="SaveCloseBtn_Click" IsDefault="True"/>
                         <Button x:Name="CancelBtn"  MinWidth="110" Margin="4,0" Content="Cancel" IsCancel="True"/>
                     </UniformGrid>
                 </Grid>
@@ -80,10 +91,10 @@
                         </StackPanel>
 
                         <GroupBox Header="PDF Export Range" Margin="0,4,0,6" IsEnabled="{Binding IsPdfEnabled}">
-                          <StackPanel Margin="6" Orientation="Horizontal">
-                            <TextBlock Text="View/Sheet Set:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="ViewSetCombo" Width="320" ItemsSource="{Binding AvailableViewSets}" SelectedItem="{Binding SelectedSetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                          </StackPanel>
+                            <StackPanel Margin="6" Orientation="Horizontal">
+                                <TextBlock Text="View/Sheet Set:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox x:Name="ViewSetCombo" Width="320" ItemsSource="{Binding AvailableViewSets}" SelectedItem="{Binding SelectedSetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
                         </GroupBox>
 
                         <GroupBox Header="PDF Export Setup" Margin="0,4,0,6" IsEnabled="{Binding IsPdfEnabled}">
@@ -99,8 +110,8 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBox x:Name="FileNamePatternBox" Width="360" Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <Button x:Name="PdfPatternFieldsBtn" Content="Fields..." Margin="8,0,0,0" Width="70" IsEnabled="False" ToolTip="Future: Insert available tokens"/>
                                 </StackPanel>
+                                <TextBlock x:Name="PdfPreviewText" Foreground="Gray" Margin="0,0,0,6" Text="{Binding Preview}"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Output folder:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <Label x:Name="PdfOutFolderLabel" VerticalAlignment="Center" Content="{Binding OutputFolder}"/>
@@ -160,33 +171,37 @@
                         </StackPanel>
 
                         <GroupBox Header="Image Export Range" Margin="0,8,0,0">
-                          <StackPanel Orientation="Vertical" Margin="8,6,8,8">
+                            <StackPanel Orientation="Vertical" Margin="8,6,8,8">
 
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                              <RadioButton x:Name="ImageScopePrintSetRadio"
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <RadioButton x:Name="ImageScopePrintSetRadio"
                                            GroupName="ImageExportRange"
                                            Content=""
                                            Tag="PrintSet"
                                            IsChecked="{Binding Path=ExportScope, Mode=TwoWay, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=PrintSet}"
                                            Width="20"
                                            VerticalAlignment="Center"/>
-                              <TextBlock Text="Print set:" Width="110" VerticalAlignment="Center"/>
-                              <ComboBox x:Name="ImagePrintSetCombo" Width="300" ItemsSource="{Binding AvailablePrintSets}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                            </StackPanel>
+                                    <TextBlock Text="Print set:" Width="110" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="ImagePrintSetCombo" Width="300" ItemsSource="{Binding AvailablePrintSets}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              IsEnabled="{Binding Path=ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=PrintSet}"
+                                              Style="{StaticResource DimWhenDisabledCombo}"/>
+                                </StackPanel>
 
-                            <StackPanel Orientation="Horizontal">
-                              <RadioButton x:Name="ImageScopeSingleViewRadio"
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="ImageScopeSingleViewRadio"
                                            GroupName="ImageExportRange"
                                            Content=""
                                            Tag="SingleView"
                                            IsChecked="{Binding Path=ExportScope, Mode=TwoWay, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=SingleView}"
                                            Width="20"
                                            VerticalAlignment="Center"/>
-                              <TextBlock Text="Single view:" Width="110" VerticalAlignment="Center"/>
-                              <ComboBox x:Name="ImageSingleViewCombo" Width="300" ItemsSource="{Binding AvailableSingleViews}" DisplayMemberPath="Label" SelectedValuePath="Id" SelectedValue="{Binding SelectedSingleViewId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                            </StackPanel>
+                                    <TextBlock Text="Single view:" Width="110" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="ImageSingleViewCombo" Width="300" ItemsSource="{Binding AvailableSingleViews}" DisplayMemberPath="Label" SelectedValuePath="Id" SelectedValue="{Binding SelectedSingleViewId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              IsEnabled="{Binding Path=ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=SingleView}"
+                                              Style="{StaticResource DimWhenDisabledCombo}"/>
+                                </StackPanel>
 
-                          </StackPanel>
+                            </StackPanel>
                         </GroupBox>
 
                         <GroupBox Header="Image Export Setup" Margin="0,4,0,6">
@@ -215,12 +230,6 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBox x:Name="ImageFileNamePatternBox" Width="300" Text="{Binding Pattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="Prefix:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="ImagePrefixBox" Width="120" Text="{Binding Prefix, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBlock Text="  Suffix:" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                                    <TextBox x:Name="ImageSuffixBox" Width="120" Text="{Binding Suffix, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Format:" VerticalAlignment="Center" Margin="0,0,8,0"/>
