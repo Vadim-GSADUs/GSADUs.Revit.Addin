@@ -68,3 +68,6 @@ Tools/
 src/**/bin/
 src/**/obj/
 
+# allow add-in icons
+!/src/GSADUs.Revit.Addin/icons/
+!/src/GSADUs.Revit.Addin/icons/*.png

@@ -194,7 +194,7 @@
                                            GroupName="ImageExportRange"
                                            Content=""
                                            Tag="PrintSet"
-                                           IsChecked="{Binding Path=ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=PrintSet}"
+                                           IsChecked="{Binding Path=ExportScope, Mode=TwoWay, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=PrintSet}"
                                            Width="20"
                                            VerticalAlignment="Center"
                                            Checked="ImageScopeRadio_Checked"/>
@@ -208,7 +208,7 @@
                                            GroupName="ImageExportRange"
                                            Content=""
                                            Tag="SingleView"
-                                           IsChecked="{Binding Path=ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=SingleView}"
+                                           IsChecked="{Binding Path=ExportScope, Mode=TwoWay, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=SingleView}"
                                            Width="20"
                                            VerticalAlignment="Center"
                                            Checked="ImageScopeRadio_Checked"/>

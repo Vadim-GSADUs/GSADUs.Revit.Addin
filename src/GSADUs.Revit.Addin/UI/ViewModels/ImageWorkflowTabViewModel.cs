@@ -1,33 +1,161 @@
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 
 namespace GSADUs.Revit.Addin.UI
 {
     internal sealed class ImageWorkflowTabViewModel : WorkflowTabBaseViewModel
     {
-        private string _pattern = ""; // extensionless
-        private string? _selectedSetName;
-        private string? _selectedPrintSet;
-        private string _scope = "CurrentSet"; // or "AllViews"
-        private string _resolution = "High"; // Low/Medium/High/Ultra
-        private bool _isSaveEnabled;
+        public ImageWorkflowTabViewModel()
+        {
+            PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(IsBaseSaveEnabled)) Recompute();
+            };
+        }
 
-        public ObservableCollection<string> AvailableViewSets { get; } = new();
+        // Collections
         public ObservableCollection<string> AvailablePrintSets { get; } = new();
+        public ObservableCollection<SingleViewOption> AvailableSingleViews { get; } = new();
 
-        public string Pattern { get => _pattern; set { if (_pattern != value) { _pattern = value; OnChanged(nameof(Pattern)); Recompute(); } } }
-        public string? SelectedSetName { get => _selectedSetName; set { if (_selectedSetName != value) { _selectedSetName = value; OnChanged(nameof(SelectedSetName)); Recompute(); } } }
-        public string? SelectedPrintSet { get => _selectedPrintSet; set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); Recompute(); } } }
-        public string Scope { get => _scope; set { if (_scope != value) { _scope = value; OnChanged(nameof(Scope)); Recompute(); } } }
-        public string Resolution { get => _resolution; set { if (_resolution != value) { _resolution = value; OnChanged(nameof(Resolution)); Recompute(); } } }
-        public bool IsSaveEnabled { get => _isSaveEnabled; private set { if (_isSaveEnabled != value) { _isSaveEnabled = value; OnChanged(nameof(IsSaveEnabled)); } } }
+        // File name pattern (extensionless)
+        private string _pattern = string.Empty;
+        public string Pattern
+        {
+            get => _pattern;
+            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); Recompute(); } }
+        }
+
+        // Export scope: "PrintSet" or "SingleView"
+        private string _exportScope = "PrintSet";
+        public string ExportScope
+        {
+            get => _exportScope;
+            set { if (_exportScope != value) { _exportScope = value ?? "PrintSet"; OnChanged(nameof(ExportScope)); Recompute(); } }
+        }
+
+        // Print set selection
+        private string? _selectedPrintSet;
+        public string? SelectedPrintSet
+        {
+            get => _selectedPrintSet;
+            set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); Recompute(); } }
+        }
+
+        // Single view selection (id from Revit)
+        private string? _selectedSingleViewId;
+        public string? SelectedSingleViewId
+        {
+            get => _selectedSingleViewId;
+            set { if (_selectedSingleViewId != value) { _selectedSingleViewId = value; OnChanged(nameof(SelectedSingleViewId)); Recompute(); } }
+        }
+
+        // Export setup
+        private string _resolution = "Medium"; // Low/Medium/High/Ultra
+        public string Resolution
+        {
+            get => _resolution;
+            set { if (_resolution != value) { _resolution = value ?? "Medium"; OnChanged(nameof(Resolution)); Recompute(); } }
+        }
+
+        private string _cropMode = "Static"; // Static/Auto
+        public string CropMode
+        {
+            get => _cropMode;
+            set { if (_cropMode != value) { _cropMode = value ?? "Static"; OnChanged(nameof(CropMode)); Recompute(); } }
+        }
+
+        private string _cropOffset = string.Empty; // invariant string feet
+        public string CropOffset
+        {
+            get => _cropOffset;
+            set { if (_cropOffset != value) { _cropOffset = value ?? string.Empty; OnChanged(nameof(CropOffset)); Recompute(); } }
+        }
+
+        private string _format = "PNG"; // PNG/BMP/TIFF
+        public string Format
+        {
+            get => _format;
+            set { if (_format != value) { _format = value ?? "PNG"; OnChanged(nameof(Format)); Recompute(); } }
+        }
+
+        // File name adornments
+        private string _prefix = string.Empty;
+        public string Prefix
+        {
+            get => _prefix;
+            set { if (_prefix != value) { _prefix = value ?? string.Empty; OnChanged(nameof(Prefix)); RecomputePreview(); } }
+        }
+
+        private string _suffix = string.Empty;
+        public string Suffix
+        {
+            get => _suffix;
+            set { if (_suffix != value) { _suffix = value ?? string.Empty; OnChanged(nameof(Suffix)); RecomputePreview(); } }
+        }
+
+        // Derived preview and enablement
+        private bool _isSaveEnabled;
+        public bool IsSaveEnabled
+        {
+            get => _isSaveEnabled;
+            private set { if (_isSaveEnabled != value) { _isSaveEnabled = value; OnChanged(nameof(IsSaveEnabled)); } }
+        }
+
+        private string _preview = string.Empty;
+        public string Preview
+        {
+            get => _preview;
+            private set { if (_preview != value) { _preview = value; OnChanged(nameof(Preview)); } }
+        }
 
         private void Recompute()
         {
-            var hasSet = !string.IsNullOrWhiteSpace(SelectedSetName);
-            var hasPrintSet = !string.IsNullOrWhiteSpace(SelectedPrintSet);
-            var hasPattern = !string.IsNullOrWhiteSpace(Pattern) && Pattern.Contains("{SetName}"); // extensionless by design
-            IsSaveEnabled = hasSet && hasPrintSet && hasPattern && IsBaseSaveEnabled;
+            // Validate numeric crop offset if provided
+            var cropOk = true;
+            if (!string.IsNullOrWhiteSpace(CropOffset))
+                cropOk = double.TryParse(CropOffset.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+
+            // Scope gating
+            var scopeOk = ExportScope == "SingleView" ? !string.IsNullOrWhiteSpace(SelectedSingleViewId)
+                                                       : !string.IsNullOrWhiteSpace(SelectedPrintSet);
+
+            // Pattern must include {SetName}
+            var patOk = !string.IsNullOrWhiteSpace(Pattern) && Pattern.Contains("{SetName}");
+
+            // Format and resolution chosen
+            var fmtOk = !string.IsNullOrWhiteSpace(Format);
+            var resOk = !string.IsNullOrWhiteSpace(Resolution);
+
+            IsSaveEnabled = IsBaseSaveEnabled && patOk && fmtOk && resOk && cropOk && scopeOk;
+
+            RecomputePreview();
         }
+
+        private static string MapFormatToExt(string? fmt)
+        {
+            return (fmt ?? string.Empty).Trim().ToUpperInvariant() switch
+            {
+                "BMP" => ".bmp",
+                "TIFF" => ".tiff",
+                _ => ".png"
+            };
+        }
+
+        private void RecomputePreview()
+        {
+            var core = (Pattern ?? "{SetName}").Trim();
+            if (string.IsNullOrWhiteSpace(core)) core = "{SetName}";
+            try { core = System.IO.Path.GetFileNameWithoutExtension(core); } catch { }
+            var ext = MapFormatToExt(Format);
+            Preview = $"Preview: {Prefix}{core}{Suffix}{ext}";
+        }
+    }
+
+    internal sealed class SingleViewOption
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
     }
 }
