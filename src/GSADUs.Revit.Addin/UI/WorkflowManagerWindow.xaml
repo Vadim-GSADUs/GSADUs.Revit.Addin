@@ -161,7 +161,25 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Pdf" IsEnabled="{Binding IsSaveEnabled}" Opacity="0.5"/>
+                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Pdf"
+                                    IsEnabled="{Binding DataContext.IsSaveEnabled, RelativeSource={RelativeSource AncestorType=TabItem}}">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Opacity" Value="1.0"/>
+                                        <Setter Property="Content" Value="Save Workflow"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataContext.HasUnsavedChanges, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="False">
+                                                <Setter Property="Opacity" Value="0.5"/>
+                                                <Setter Property="Content" Value="Saved"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding DataContext.HasUnsavedChanges, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
+                                                <Setter Property="Opacity" Value="1.0"/>
+                                                <Setter Property="Content" Value="Save Workflow"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                         </DockPanel>
 
                     </StackPanel>
@@ -279,7 +297,22 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Image" IsEnabled="{Binding IsSaveEnabled}" Opacity="0.5"/>
+                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Image"
+                                    IsEnabled="{Binding DataContext.IsSaveEnabled, RelativeSource={RelativeSource AncestorType=TabItem}}">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Opacity" Value="1.0"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Opacity" Value="0.5"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Opacity" Value="1.0"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                         </DockPanel>
                     </StackPanel>
                 </ScrollViewer>

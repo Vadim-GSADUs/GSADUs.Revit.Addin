@@ -217,7 +217,6 @@ namespace GSADUs.Revit.Addin.UI
 
             // Phase 2: minimal load hook
             this.Loaded += WorkflowManagerWindow_Loaded;
-            UpdatePdfEnableState();
         }
 
         private void UpdateImageBlacklistSummary()
@@ -358,45 +357,11 @@ namespace GSADUs.Revit.Addin.UI
                     var overLbl = FindName("PdfOverwriteLabel") as Label; if (overLbl != null) overLbl.Content = _settings.DefaultOverwrite ? "True" : "False"; // show boolean directly
                 }
                 catch { }
-
-                UpdatePdfEnableState();
             }
             catch { }
             UpdateImageSaveState();
             UpdateCropOffsetEnable();
             UpdateImageBlacklistSummary();
-        }
-
-        private void UpdatePdfEnableState()
-        {
-            try
-            {
-                var btn = FindName("PdfSaveBtn") as Button;
-                var setSel = (FindName("ViewSetCombo") as ComboBox)?.SelectedItem as string;
-                var setupSel = (FindName("ExportSetupCombo") as ComboBox)?.SelectedItem as string;
-                var pattern = (FindName("FileNamePatternBox") as TextBox)?.Text ?? string.Empty;
-                bool ok = !string.IsNullOrWhiteSpace(setSel) && !string.IsNullOrWhiteSpace(setupSel) && pattern.Contains("{SetName}");
-                if (btn != null)
-                {
-                    btn.IsEnabled = ok;
-                    btn.Opacity = _isDirtyPdf && ok ? 1.0 : 0.5;
-                }
-            }
-            catch { }
-        }
-
-        private void PdfSelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            _presenter.OnMarkDirty("Pdf");
-            MarkDirty("Pdf");
-            UpdatePdfEnableState();
-        }
-
-        private void PdfPatternChanged(object sender, TextChangedEventArgs e)
-        {
-            _presenter.OnMarkDirty("Pdf");
-            MarkDirty("Pdf");
-            UpdatePdfEnableState();
         }
 
         private void TryDisablePdfControls()
@@ -428,7 +393,7 @@ namespace GSADUs.Revit.Addin.UI
             switch (tag)
             {
                 case "Rvt": _isDirtyRvt = dirty; SetSaveVisual("RvtSaveBtn", _isDirtyRvt); break;
-                case "Pdf": _isDirtyPdf = dirty; SetSaveVisual("PdfSaveBtn", _isDirtyPdf); break;
+                case "Pdf": _isDirtyPdf = dirty; _presenter.PdfWorkflow?.SetDirty(dirty); break;
                 case "Image": _isDirtyImage = dirty; SetSaveVisual("ImageSaveBtn", _isDirtyImage); break;
                 case "Csv": _isDirtyCsv = dirty; SetSaveVisual("CsvSaveBtn", _isDirtyCsv); break;
             }
@@ -440,8 +405,6 @@ namespace GSADUs.Revit.Addin.UI
             {
                 if (string.Equals(tag, "Pdf", StringComparison.OrdinalIgnoreCase))
                 {
-                    UpdatePdfEnableState();
-                    SetSaveVisual("PdfSaveBtn", _isDirtyPdf);
                     return;
                 }
                 var name = (FindName(tag + "NameBox") as TextBox)?.Text?.Trim();
@@ -466,14 +429,12 @@ namespace GSADUs.Revit.Addin.UI
         {
             _presenter.OnMarkDirty("Pdf");
             MarkDirty("Pdf");
-            UpdatePdfEnableState();
         }
 
         private void PdfConfigChanged(object sender, RoutedEventArgs e)
         {
             _presenter.OnMarkDirty("Pdf");
             MarkDirty("Pdf");
-            UpdatePdfEnableState();
         }
 
         private void RefreshSavedCombosAndMain()
@@ -605,13 +566,13 @@ namespace GSADUs.Revit.Addin.UI
                 var tag = (sender as FrameworkElement)?.Name?.StartsWith("Rvt") == true ? "Rvt"
                           : (sender as FrameworkElement)?.Name?.StartsWith("Pdf") == true ? "Pdf"
                           : (sender as FrameworkElement)?.Name?.StartsWith("Image") == true ? "Image" : "Csv";
-                var wf = GetSelectedFromTab(tag); if (wf == null) return;
+                var wf = GetSelectedFromTab(tag); if (wf == null)
+                return;
                 var cb = sender as ComboBox; if (cb == null) return;
                 var val = cb.SelectedItem as string;
                 if (!string.IsNullOrWhiteSpace(val)) wf.Scope = val;
                 _presenter.OnMarkDirty(tag);
                 MarkDirty(tag);
-                if (tag == "Pdf") UpdatePdfEnableState();
             }
             catch { }
             UpdateImageSaveState();
@@ -668,13 +629,49 @@ namespace GSADUs.Revit.Addin.UI
                     baseVm.Description = wf?.Description ?? string.Empty;
                 }
 
+                if (tag == "Pdf")
+                {
+                    var pdfVm = _presenter.PdfWorkflow;
+                    var p = wf?.Parameters;
+                    string Gs(string k) =>
+                        (p != null && p.TryGetValue(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String)
+                        ? (v.GetString() ?? string.Empty) : string.Empty;
+
+                    var savedSet   = Gs(PdfWorkflowKeys.PrintSetName);
+                    var savedSetup = Gs(PdfWorkflowKeys.ExportSetupName);
+                    var savedPat   = Gs(PdfWorkflowKeys.FileNamePattern);
+
+                    if (!string.IsNullOrWhiteSpace(savedSet))   pdfVm.SelectedSetName  = savedSet;
+                    if (!string.IsNullOrWhiteSpace(savedSetup)) pdfVm.SelectedPrintSet = savedSetup;
+                    if (!string.IsNullOrWhiteSpace(savedPat))   pdfVm.Pattern          = savedPat;
+                }
+
                 // Keep legacy UI sync to avoid regressions during migration
                 (FindName(tag + "ScopeCombo") as ComboBox)!.SelectedItem = wf?.Scope;
                 (FindName(tag + "DescBox") as TextBox)!.Text = wf?.Description ?? string.Empty;
                 (FindName(tag + "NameBox") as TextBox)!.Text = wf?.Name ?? string.Empty;
 
-                if (tag == "Pdf") WorkflowManagerWindow_Loaded(this, new RoutedEventArgs());
-                if (tag == "Image") HydrateImageWorkflow(wf);
+                if (tag == "Image")
+                {
+                    var vm = _presenter.ImageWorkflow;
+                    var p = wf?.Parameters;
+
+                    string Gs(string k) =>
+                        (p != null && p.TryGetValue(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String)
+                            ? (v.GetString() ?? string.Empty)
+                            : string.Empty;
+
+                    vm.ExportScope        = Gs(ImageWorkflowKeys.exportScope);         // "PrintSet" | "SingleView"
+                    vm.SelectedPrintSet   = Gs(ImageWorkflowKeys.imagePrintSetName);
+                    vm.SelectedSingleViewId = Gs(ImageWorkflowKeys.singleViewId);
+                    vm.Pattern            = Gs(ImageWorkflowKeys.fileNamePattern);
+                    vm.Prefix             = Gs(ImageWorkflowKeys.prefix);
+                    vm.Suffix             = Gs(ImageWorkflowKeys.suffix);
+                    vm.Format             = Gs(ImageWorkflowKeys.imageFormat);         // "PNG" | "BMP" | "TIFF"
+                    vm.Resolution         = Gs(ImageWorkflowKeys.resolutionPreset);    // e.g., "Medium"
+                    vm.CropMode           = Gs(ImageWorkflowKeys.cropMode);            // "Static" | "Auto"
+                    vm.CropOffset         = Gs(ImageWorkflowKeys.cropOffset);          // string, VM validates/uses
+                }
                 if (tag == "Rvt") { _isDirtyRvt = false; SetSaveVisual("RvtSaveBtn", false); }
                 if (tag == "Image") { _isDirtyImage = false; SetSaveVisual("ImageSaveBtn", false); }
                 if (tag == "Csv") { _isDirtyCsv = false; SetSaveVisual("CsvSaveBtn", false); }
@@ -1095,28 +1092,28 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
-        private void ImageResolutionPresetCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImageSaveState(); }
-        private void ImageCropOffsetBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImageSaveState(); }
-        private void ImageFileNamePatternBox_TextChanged(object s, TextChangedEventArgs e)
+        private void ImageResolutionPresetCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); }
+private void ImageCropOffsetBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); }
+private void ImageFileNamePatternBox_TextChanged(object s, TextChangedEventArgs e)
+{
+    try
+    {
+        if (s is TextBox tb && tb.Text.Contains("[SetName]"))
         {
-            try
-            {
-                if (s is TextBox tb && tb.Text.Contains("[SetName]"))
-                {
-                    var caret = tb.SelectionStart;
-                    tb.Text = tb.Text.Replace("[SetName]", "{SetName}");
-                    tb.SelectionStart = System.Math.Min(caret, tb.Text.Length);
-                }
-            }
-            catch { }
-            _presenter.OnMarkDirty("Image");
-            MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState();
+            var caret = tb.SelectionStart;
+            tb.Text = tb.Text.Replace("[SetName]", "{SetName}");
+            tb.SelectionStart = System.Math.Min(caret, tb.Text.Length);
         }
-        private void ImagePrefixBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
-        private void ImageSuffixBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
-        private void ImageCropModeCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { UpdateCropOffsetEnable(); _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImageSaveState(); }
-        private void ImageFormatCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); UpdateImageSaveState(); }
-        private void ImagePrintSetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImageSaveState(); }
+    }
+    catch { }
+    _presenter.OnMarkDirty("Image");
+    MarkDirty("Image"); UpdateImagePreview();
+}
+private void ImagePrefixBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); }
+private void ImageSuffixBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); }
+private void ImageCropModeCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { UpdateCropOffsetEnable(); _presenter.OnMarkDirty("Image"); MarkDirty("Image"); }
+private void ImageFormatCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); }
+private void ImagePrintSetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); }
 
         private void UpdateCropOffsetEnable()
         {
@@ -1197,18 +1194,25 @@ namespace GSADUs.Revit.Addin.UI
             {
                 case OutputType.Pdf:
                 {
-                    var p = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-                    void S(string k, string? v) { if (!string.IsNullOrWhiteSpace(v)) p[k] = ToJson(v); }
-
                     var pdfVm = _presenter.PdfWorkflow;
-                    var pdfSetName = pdfVm?.SelectedSetName ?? (FindName("ViewSetCombo") as ComboBox)?.SelectedItem as string;
-                    var pdfSetupName = pdfVm?.SelectedPrintSet ?? (FindName("ExportSetupCombo") as ComboBox)?.SelectedItem as string;
-                    var pdfPattern = pdfVm?.Pattern ?? (FindName("FileNamePatternBox") as TextBox)?.Text?.Trim();
+                    var pdfSetName = pdfVm?.SelectedSetName;
+                    var pdfSetupName = pdfVm?.SelectedPrintSet;
+                    var pdfPattern = pdfVm?.Pattern;
 
+                    // Guard clause for missing/invalid inputs
+                    if (string.IsNullOrWhiteSpace(pdfSetName) || string.IsNullOrWhiteSpace(pdfSetupName) || string.IsNullOrWhiteSpace(pdfPattern) || !pdfPattern.Contains("{SetName}"))
+                    {
+                        _dialogs.Info("Save", "Select view set, export setup, and include {SetName} in the file name pattern.");
+                        return;
+                    }
+
+                    // Pattern mutations (keep existing logic)
                     if (string.IsNullOrWhiteSpace(pdfPattern) || !pdfPattern.Contains("{SetName}")) pdfPattern = "{SetName}.pdf";
                     if (!pdfPattern.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) pdfPattern += ".pdf";
                     pdfPattern = SanitizeFileComponent(pdfPattern);
 
+                    var p = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+                    void S(string k, string? v) { if (!string.IsNullOrWhiteSpace(v)) p[k] = ToJson(v); }
                     S(PdfWorkflowKeys.PrintSetName, pdfSetName);
                     S(PdfWorkflowKeys.ExportSetupName, pdfSetupName);
                     S(PdfWorkflowKeys.FileNamePattern, pdfPattern);

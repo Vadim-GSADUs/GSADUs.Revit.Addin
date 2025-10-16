@@ -114,22 +114,24 @@ namespace GSADUs.Revit.Addin.UI
         {
             // Validate numeric crop offset if provided
             var cropOk = true;
-            if (!string.IsNullOrWhiteSpace(CropOffset))
-                cropOk = double.TryParse(CropOffset.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _);
-
+            if (string.Equals(CropMode, "Auto", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(CropOffset))
+                    cropOk = double.TryParse(CropOffset.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+                else
+                    cropOk = false;
+            }
             // Scope gating
             var scopeOk = ExportScope == "SingleView" ? !string.IsNullOrWhiteSpace(SelectedSingleViewId)
                                                        : !string.IsNullOrWhiteSpace(SelectedPrintSet);
-
             // Pattern must include {SetName}
             var patOk = !string.IsNullOrWhiteSpace(Pattern) && Pattern.Contains("{SetName}");
-
             // Format and resolution chosen
             var fmtOk = !string.IsNullOrWhiteSpace(Format);
             var resOk = !string.IsNullOrWhiteSpace(Resolution);
-
-            IsSaveEnabled = IsBaseSaveEnabled && patOk && fmtOk && resOk && cropOk && scopeOk;
-
+            // Name required
+            var nameOk = !string.IsNullOrWhiteSpace(Name);
+            IsSaveEnabled = IsBaseSaveEnabled && nameOk && patOk && fmtOk && resOk && cropOk && scopeOk;
             RecomputePreview();
         }
 
