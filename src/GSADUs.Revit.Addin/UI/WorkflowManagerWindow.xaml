@@ -1,8 +1,12 @@
 <Window x:Class="GSADUs.Revit.Addin.UI.WorkflowManagerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:GSADUs.Revit.Addin.UI"
         Title="Workflow Manager" Width="850" Height="750" MinWidth="820" MinHeight="480"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
+    <Window.Resources>
+        <ui:EqualityToBooleanConverter x:Key="EqualityToBooleanConverter"/>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>

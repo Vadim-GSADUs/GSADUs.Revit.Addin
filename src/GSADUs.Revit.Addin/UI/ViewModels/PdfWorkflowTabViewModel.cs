@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.ObjectModel;
 
 namespace GSADUs.Revit.Addin.UI
 {
@@ -13,6 +14,9 @@ namespace GSADUs.Revit.Addin.UI
         public string? SelectedSetName { get => _selectedSetName; set { if (_selectedSetName != value) { _selectedSetName = value; OnChanged(nameof(SelectedSetName)); RecomputeLocal(); } } }
         public string? SelectedPrintSet { get => _selectedPrintSet; set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); RecomputeLocal(); } } }
         public bool IsSaveEnabled { get => _isSaveEnabled; private set { if (_isSaveEnabled != value) { _isSaveEnabled = value; OnChanged(nameof(IsSaveEnabled)); } } }
+
+        public ObservableCollection<string> AvailableViewSets { get; set; } = new();
+        public ObservableCollection<string> AvailableExportSetups { get; set; } = new();
 
         private void RecomputeLocal()
         {
