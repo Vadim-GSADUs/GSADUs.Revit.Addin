@@ -5,7 +5,7 @@ using System.Globalization;
 
 namespace GSADUs.Revit.Addin.UI
 {
-    internal sealed class ImageWorkflowTabViewModel : WorkflowTabBaseViewModel
+    internal sealed class ImageWorkflowTabViewModel : WorkflowTabBaseViewModel, INotifyPropertyChanged
     {
         public ImageWorkflowTabViewModel()
         {
@@ -24,7 +24,7 @@ namespace GSADUs.Revit.Addin.UI
         public string Pattern
         {
             get => _pattern;
-            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); Recompute(); } }
+            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
         // Export scope: "PrintSet" or "SingleView"
@@ -32,7 +32,7 @@ namespace GSADUs.Revit.Addin.UI
         public string ExportScope
         {
             get => _exportScope;
-            set { if (_exportScope != value) { _exportScope = value ?? "PrintSet"; OnChanged(nameof(ExportScope)); Recompute(); } }
+            set { if (_exportScope != value) { _exportScope = value ?? "PrintSet"; OnChanged(nameof(ExportScope)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
         // Print set selection
@@ -40,7 +40,7 @@ namespace GSADUs.Revit.Addin.UI
         public string? SelectedPrintSet
         {
             get => _selectedPrintSet;
-            set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); Recompute(); } }
+            set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
         // Single view selection (id from Revit)
@@ -48,7 +48,7 @@ namespace GSADUs.Revit.Addin.UI
         public string? SelectedSingleViewId
         {
             get => _selectedSingleViewId;
-            set { if (_selectedSingleViewId != value) { _selectedSingleViewId = value; OnChanged(nameof(SelectedSingleViewId)); Recompute(); } }
+            set { if (_selectedSingleViewId != value) { _selectedSingleViewId = value; OnChanged(nameof(SelectedSingleViewId)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
         // Export setup
@@ -56,28 +56,28 @@ namespace GSADUs.Revit.Addin.UI
         public string Resolution
         {
             get => _resolution;
-            set { if (_resolution != value) { _resolution = value ?? "Medium"; OnChanged(nameof(Resolution)); Recompute(); } }
+            set { if (_resolution != value) { _resolution = value ?? "Medium"; OnChanged(nameof(Resolution)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
         private string _cropMode = "Static"; // Static/Auto
         public string CropMode
         {
             get => _cropMode;
-            set { if (_cropMode != value) { _cropMode = value ?? "Static"; OnChanged(nameof(CropMode)); Recompute(); } }
+            set { if (_cropMode != value) { _cropMode = value ?? "Static"; OnChanged(nameof(CropMode)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
         private string _cropOffset = string.Empty; // invariant string feet
         public string CropOffset
         {
             get => _cropOffset;
-            set { if (_cropOffset != value) { _cropOffset = value ?? string.Empty; OnChanged(nameof(CropOffset)); Recompute(); } }
+            set { if (_cropOffset != value) { _cropOffset = value ?? string.Empty; OnChanged(nameof(CropOffset)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
         private string _format = "PNG"; // PNG/BMP/TIFF
         public string Format
         {
             get => _format;
-            set { if (_format != value) { _format = value ?? "PNG"; OnChanged(nameof(Format)); Recompute(); } }
+            set { if (_format != value) { _format = value ?? "PNG"; OnChanged(nameof(Format)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
         // File name adornments
@@ -85,14 +85,14 @@ namespace GSADUs.Revit.Addin.UI
         public string Prefix
         {
             get => _prefix;
-            set { if (_prefix != value) { _prefix = value ?? string.Empty; OnChanged(nameof(Prefix)); RecomputePreview(); } }
+            set { if (_prefix != value) { _prefix = value ?? string.Empty; OnChanged(nameof(Prefix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); } }
         }
 
         private string _suffix = string.Empty;
         public string Suffix
         {
             get => _suffix;
-            set { if (_suffix != value) { _suffix = value ?? string.Empty; OnChanged(nameof(Suffix)); RecomputePreview(); } }
+            set { if (_suffix != value) { _suffix = value ?? string.Empty; OnChanged(nameof(Suffix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); } }
         }
 
         // Derived preview and enablement
@@ -109,6 +109,26 @@ namespace GSADUs.Revit.Addin.UI
             get => _preview;
             private set { if (_preview != value) { _preview = value; OnChanged(nameof(Preview)); } }
         }
+
+        private bool _hasUnsavedChanges;
+        public bool HasUnsavedChanges
+        {
+            get => _hasUnsavedChanges;
+            private set { if (_hasUnsavedChanges != value) { _hasUnsavedChanges = value; OnPropertyChanged(nameof(HasUnsavedChanges)); } }
+        }
+
+        public void SetDirty(bool dirty)
+        {
+            HasUnsavedChanges = dirty;
+            OnPropertyChanged(nameof(HasUnsavedChanges));
+        }
+
+        protected void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         private void Recompute()
         {

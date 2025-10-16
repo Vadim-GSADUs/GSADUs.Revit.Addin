@@ -10,8 +10,12 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Misc references", "Misc references", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 	ProjectSection(SolutionItems) = preProject
 		AI-Prompt.md = AI-Prompt.md
+		docs\CleanupRefactorPlan.md = docs\CleanupRefactorPlan.md
+		Powershell\Install-GSADUsAddin.ps1 = Powershell\Install-GSADUsAddin.ps1
 		README.md = README.md
+		RVT.md = RVT.md
 		docs\WorkflowManagerPhase2Analysis.md = docs\WorkflowManagerPhase2Analysis.md
+		docs\WorkflowManagerPhase2Reanalysis_V2.md = docs\WorkflowManagerPhase2Reanalysis_V2.md
 	EndProjectSection
 EndProject
 Global

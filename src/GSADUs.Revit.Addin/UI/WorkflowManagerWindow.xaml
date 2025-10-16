@@ -53,57 +53,6 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="RVT">
-                <Grid x:Name="RvtTabRoot" Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,6">
-                        <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox x:Name="RvtSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="SavedCombo_SelectionChanged"/>
-                        <Button x:Name="RvtNewBtn" Content="New" Width="90" Margin="8,0,0,0" Click="RvtNewBtn_Click"/>
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,6">
-                        <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBox x:Name="RvtNameBox" Width="340" TextChanged="NameBox_TextChanged" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,6">
-                        <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox x:Name="RvtScopeCombo" Width="260" SelectionChanged="ScopeCombo_SelectionChanged" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    </StackPanel>
-
-                    <GroupBox Grid.Row="3" Header="Options" Margin="0,4,0,6">
-                        <Grid Margin="6">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <!-- All controls removed for refactoring: RVT options group is now empty. -->
-                        </Grid>
-                    </GroupBox>
-
-                    <StackPanel Grid.Row="4">
-                        <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
-                        <TextBox x:Name="RvtDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    </StackPanel>
-
-                    <DockPanel Grid.Row="5" LastChildFill="False" Margin="0,8,0,0">
-                        <Button x:Name="RvtSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Rvt" IsEnabled="False" Opacity="0.5"/>
-                    </DockPanel>
-                </Grid>
-            </TabItem>
-
             <TabItem Header="PDF">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="PdfTabRoot" Margin="8" Orientation="Vertical" >
@@ -141,7 +90,6 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBox x:Name="FileNamePatternBox" Width="360" Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBlock Text="  (must include {SetName})" VerticalAlignment="Center" Foreground="Gray" Margin="8,0,0,0"/>
                                     <Button x:Name="PdfPatternFieldsBtn" Content="Fields..." Margin="8,0,0,0" Width="70" IsEnabled="False" ToolTip="Future: Insert available tokens"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -214,8 +162,7 @@
                                            Tag="PrintSet"
                                            IsChecked="{Binding Path=ExportScope, Mode=TwoWay, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=PrintSet}"
                                            Width="20"
-                                           VerticalAlignment="Center"
-                                           Checked="ImageScopeRadio_Checked"/>
+                                           VerticalAlignment="Center"/>
                               <TextBlock Text="Print set:" Width="110" VerticalAlignment="Center"/>
                               <ComboBox x:Name="ImagePrintSetCombo" Width="300" ItemsSource="{Binding AvailablePrintSets}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
@@ -228,8 +175,7 @@
                                            Tag="SingleView"
                                            IsChecked="{Binding Path=ExportScope, Mode=TwoWay, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=SingleView}"
                                            Width="20"
-                                           VerticalAlignment="Center"
-                                           Checked="ImageScopeRadio_Checked"/>
+                                           VerticalAlignment="Center"/>
                               <TextBlock Text="Single view:" Width="110" VerticalAlignment="Center"/>
                               <ComboBox x:Name="ImageSingleViewCombo" Width="300" ItemsSource="{Binding AvailableSingleViews}" DisplayMemberPath="Label" SelectedValuePath="Id" SelectedValue="{Binding SelectedSingleViewId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
@@ -263,7 +209,6 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBox x:Name="ImageFileNamePatternBox" Width="300" Text="{Binding Pattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBlock Text="  (must include {SetName})" VerticalAlignment="Center" Foreground="Gray" Margin="8,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Prefix:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -302,13 +247,16 @@
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Opacity" Value="1.0"/>
+                                        <Setter Property="Content" Value="Save Workflow"/>
                                         <Style.Triggers>
-                                            <Trigger Property="IsEnabled" Value="False">
+                                            <DataTrigger Binding="{Binding DataContext.HasUnsavedChanges, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="False">
                                                 <Setter Property="Opacity" Value="0.5"/>
-                                            </Trigger>
-                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Content" Value="Saved"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding DataContext.HasUnsavedChanges, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
                                                 <Setter Property="Opacity" Value="1.0"/>
-                                            </Trigger>
+                                                <Setter Property="Content" Value="Save Workflow"/>
+                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Button.Style>
@@ -318,42 +266,6 @@
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="CSV">
-                <Grid x:Name="CsvTabRoot" Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,6">
-                        <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox x:Name="CsvSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="SavedCombo_SelectionChanged"/>
-                        <Button x:Name="CsvNewBtn" Content="New" Width="90" Margin="8,0,0,0" Click="CsvNewBtn_Click"/>
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,6">
-                        <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBox x:Name="CsvNameBox" Width="340" TextChanged="NameBox_TextChanged" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Grid.Row="2" Margin="0,0,0,6">
-                        <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox x:Name="CsvScopeCombo" Width="260" SelectionChanged="ScopeCombo_SelectionChanged" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Row="3">
-                        <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
-                        <TextBox x:Name="CsvDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    </StackPanel>
-
-                    <DockPanel Grid.Row="4" LastChildFill="False" Margin="0,8,0,0">
-                        <Button x:Name="CsvSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Click="SaveWorkflow_Click" Tag="Csv" IsEnabled="False" Opacity="0.5"/>
-                    </DockPanel>
-                </Grid>
-            </TabItem>
         </TabControl>
     </Grid>
 </Window>

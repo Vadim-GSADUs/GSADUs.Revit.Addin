@@ -4,8 +4,6 @@ using GSADUs.Revit.Addin.Workflows.Pdf;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Windows;
@@ -40,151 +38,8 @@ namespace GSADUs.Revit.Addin.UI
         private static readonly string[] ScopeOptions = new[] { "Catalog Database", "CurrentSet", "Report Log" };
         private GridViewColumnHeader? _lastHeader;
         private ListSortDirection _lastDirection = ListSortDirection.Ascending;
-        private bool _isDirtyRvt, _isDirtyPdf, _isDirtyImage, _isDirtyCsv;
+        private bool _isDirtyPdf, _isDirtyImage;
         private List<int> _imageBlacklistIds = new();
-        private bool _hydratingImage; // Guard to suppress dirty state & event side-effects during Image tab hydration
-
-        // Helpers to build JsonElement safely from primitive values
-        private static JsonElement ToJson(string value)
-        {
-            var json = "\"" + (value ?? string.Empty).Replace("\"", "\\\"") + "\"";
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.Clone();
-        }
-        private static JsonElement ToJson(bool value)
-        {
-            using var doc = JsonDocument.Parse(value ? "true" : "false");
-            return doc.RootElement.Clone();
-        }
-
-        // NEW: basic filename component sanitation (keeps token braces and dots). Does NOT add extensions.
-        private static string SanitizeFileComponent(string? raw)
-        {
-            if (string.IsNullOrEmpty(raw)) return string.Empty;
-            var invalid = Path.GetInvalidFileNameChars();
-            var s = raw.Trim();
-            foreach (var c in invalid) s = s.Replace(c, '_');
-            // collapse accidental path pieces (just in case user pasted something with separators)
-            s = s.Replace('/', '_').Replace('\\', '_');
-            return s;
-        }
-
-        // NEW (Image tab scope): map selected format text to extension
-        private static string MapFormatToExt(string? fmt)
-        {
-            return (fmt ?? string.Empty).Trim().ToUpperInvariant() switch
-            {
-                "BMP" => ".bmp",
-                "TIFF" => ".tiff",
-                _ => ".png"
-            };
-        }
-
-        // --- Image Export Range helpers (added, not yet wired) ---
-        private string GetImageExportScope()
-        {
-            try { return (ImageScopeSingleViewRadio?.IsChecked == true) ? "SingleView" : "PrintSet"; } catch { return "PrintSet"; }
-        }
-
-        private void ApplyImageScopeUiState()
-        {
-            try
-            {
-                var scope = GetImageExportScope();
-                var singleViewAvailable = (ImageSingleViewCombo?.Items?.Count ?? 0) > 0;
-
-                if (ImagePrintSetCombo != null)
-                    ImagePrintSetCombo.IsEnabled = scope == "PrintSet";
-
-                if (ImageSingleViewCombo != null)
-                {
-                    ImageSingleViewCombo.IsEnabled = scope == "SingleView" && singleViewAvailable;
-                    if (!singleViewAvailable)
-                        ImageSingleViewCombo.ToolTip = "No eligible 2D views found.";
-                }
-            }
-            catch { }
-        }
-
-        private void PopulateImageSingleViewList()
-        {
-            if (_doc == null || ImageSingleViewCombo == null || ImageScopeSingleViewRadio == null) return;
-
-            try
-            {
-                ImageSingleViewCombo.Items.Clear();
-
-                var views = new FilteredElementCollector(_doc)
-                    .OfClass(typeof(View))
-                    .Cast<View>()
-                    .Where(v => !v.IsTemplate
-                        && v.ViewType != ViewType.ThreeD
-                        && v.ViewType != ViewType.DrawingSheet
-                        && (v is ViewPlan || v is ViewDrafting || v is ViewSection || v.ViewType == ViewType.AreaPlan))
-                    .OrderBy(v => v.ViewType.ToString())
-                    .ThenBy(v => v.Name)
-                    .ToList();
-
-                foreach (var v in views)
-                {
-                    var item = new ComboBoxItem
-                    {
-                        Content = $"{v.ViewType} - {v.Name}",
-                        Tag = v.Id.ToString()
-                    };
-                    ImageSingleViewCombo.Items.Add(item);
-                }
-
-                ImageScopeSingleViewRadio.IsEnabled = views.Count > 0;
-                if (!ImageScopeSingleViewRadio.IsEnabled && ImageScopeSingleViewRadio.IsChecked == true && ImageScopePrintSetRadio != null)
-                    ImageScopePrintSetRadio.IsChecked = true;
-            }
-            catch { }
-        }
-
-        private void ImageScopeRadio_Checked(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_hydratingImage) return;
-                ApplyImageScopeUiState();
-                // Clear the text/selection of the inactive picker to avoid ambiguity
-                if (ImageScopeSingleViewRadio?.IsChecked == true)
-                {
-                    if (ImagePrintSetCombo != null)
-                    {
-                        ImagePrintSetCombo.SelectedIndex = -1;
-                        if (ImagePrintSetCombo.IsEditable) ImagePrintSetCombo.Text = string.Empty;
-                    }
-                }
-                else // PrintSet
-                {
-                    if (ImageSingleViewCombo != null)
-                    {
-                        ImageSingleViewCombo.SelectedIndex = -1;
-                        ImageSingleViewCombo.Text = string.Empty;
-                    }
-                }
-
-                // Safe mark-dirty signaling
-                try { _presenter?.OnMarkDirty("Image"); } catch { }
-                MarkDirty("Image");
-                UpdateImageSaveState();
-            }
-            catch { }
-        }
-
-        private void ImageSingleViewCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e)
-        {
-            try
-            {
-                if (_hydratingImage) return;
-                try { _presenter?.OnMarkDirty("Image"); } catch { }
-                MarkDirty("Image");
-                UpdateImageSaveState();
-            }
-            catch { }
-        }
 
         public WorkflowManagerWindow(AppSettings? settings = null) : this(null, settings) { }
         public WorkflowManagerWindow(Document? doc, AppSettings? settings = null)
@@ -198,16 +53,14 @@ namespace GSADUs.Revit.Addin.UI
                        ?? new WorkflowCatalogService(new SettingsPersistence());
             _presenter = ServiceBootstrap.Provider.GetService(typeof(WorkflowManagerPresenter)) as WorkflowManagerPresenter
                          ?? new WorkflowManagerPresenter(_catalog, _dialogs);
-            _settings = _catalog.Settings; // central settings source
+            _settings = _catalog.Settings;
             _doc = doc;
 
             _presenter.OnWindowConstructed(this);
 
-            // NEW: set tab DataContexts to their respective VMs
+            // Set tab DataContexts to their respective VMs
             try { (FindName("PdfTabRoot") as FrameworkElement)!.DataContext = _presenter.PdfWorkflow; } catch { }
             try { (FindName("ImageTabRoot") as FrameworkElement)!.DataContext = _presenter.ImageWorkflow; } catch { }
-            try { (FindName("RvtTabRoot") as FrameworkElement)!.DataContext = _presenter.RvtBase; } catch { }
-            try { (FindName("CsvTabRoot") as FrameworkElement)!.DataContext = _presenter.CsvBase; } catch { }
 
             _imageBlacklistIds = new List<int>(_settings.ImageBlacklistCategoryIds ?? new List<int>());
             RefreshMainList();
@@ -215,7 +68,6 @@ namespace GSADUs.Revit.Addin.UI
             InitScopeCombos();
             UpdateImageBlacklistSummary();
 
-            // Phase 2: minimal load hook
             this.Loaded += WorkflowManagerWindow_Loaded;
         }
 
@@ -259,80 +111,22 @@ namespace GSADUs.Revit.Addin.UI
         {
             try
             {
-                // Determine active document (prefer ctor doc, else UI context)
                 var uiDoc = RevitUiContext.Current?.ActiveUIDocument;
                 var doc = _doc ?? uiDoc?.Document;
 
                 _presenter.OnLoaded(uiDoc, this);
 
-                // Guard: disable PDF tab if no valid project document
                 if (doc == null || doc.IsFamilyDocument)
                 {
                     TryDisablePdfControls();
                     return;
                 }
 
-                // Populate PDF controls deterministically
                 var wf = GetSelectedFromTab("Pdf");
 
-                // Populate Image print sets (same source as PDF view/sheet sets)
-                try
-                {
-                    var setNamesForImage = new FilteredElementCollector(doc)
-                        .OfClass(typeof(ViewSheetSet))
-                        .Cast<ViewSheetSet>()
-                        .Select(s => s.Name)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(n => n)
-                        .ToList();
-                    var imgPrintSetCombo = FindName("ImagePrintSetCombo") as ComboBox;
-                    if (imgPrintSetCombo != null)
-                    {
-                        imgPrintSetCombo.ItemsSource = setNamesForImage;
-                        // keep handler for now
-                        imgPrintSetCombo.SelectionChanged -= ImagePrintSetCombo_SelectionChanged;
-                        imgPrintSetCombo.SelectionChanged += ImagePrintSetCombo_SelectionChanged;
-                    }
-                }
-                catch { }
-
-                // Wire scope events (idempotent)
-                if (ImageScopePrintSetRadio != null) ImageScopePrintSetRadio.Checked -= ImageScopeRadio_Checked;
-                if (ImageScopeSingleViewRadio != null) ImageScopeSingleViewRadio.Checked -= ImageScopeRadio_Checked;
-                if (ImageSingleViewCombo != null) ImageSingleViewCombo.SelectionChanged -= ImageSingleViewCombo_SelectionChanged;
-                if (ImageScopePrintSetRadio != null) ImageScopePrintSetRadio.Checked += ImageScopeRadio_Checked;
-                if (ImageScopeSingleViewRadio != null) ImageScopeSingleViewRadio.Checked += ImageScopeRadio_Checked;
-                if (ImageSingleViewCombo != null) ImageSingleViewCombo.SelectionChanged += ImageSingleViewCombo_SelectionChanged;
-
-                // Initial state
-                PopulateImageSingleViewList();
-                ApplyImageScopeUiState();
-
-                // Hydrate PDF ItemsSource via VM (MVVM)
-                try
-                {
-                    var setNames = new FilteredElementCollector(doc)
-                        .OfClass(typeof(ViewSheetSet))
-                        .Cast<ViewSheetSet>()
-                        .Select(s => s.Name)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(n => n)
-                        .ToList();
-                    var pdfVm = _presenter.PdfWorkflow;
-                    pdfVm.AvailableViewSets.Clear();
-                    foreach (var n in setNames) pdfVm.AvailableViewSets.Add(n);
-
-                    var setupNames = new FilteredElementCollector(doc)
-                        .OfClass(typeof(ExportPDFSettings))
-                        .Cast<ExportPDFSettings>()
-                        .Select(s => s.Name)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(n => n)
-                        .ToList();
-                    pdfVm.AvailableExportSetups.Clear();
-                    foreach (var n in setupNames) pdfVm.AvailableExportSetups.Add(n);
-                }
-                catch { }
+                // Populate sources via presenter (VM collections)
+                try { _presenter.PopulateImageSources(doc); } catch { }
+                try { _presenter.PopulatePdfSources(doc); } catch { }
 
                 // Apply saved values if present (PDF)
                 var p = wf?.Parameters ?? new Dictionary<string, JsonElement>();
@@ -344,23 +138,20 @@ namespace GSADUs.Revit.Addin.UI
                 try
                 {
                     var pdfVm = _presenter.PdfWorkflow;
-                    if (!string.IsNullOrWhiteSpace(savedSet)) pdfVm.SelectedSetName = savedSet;
-                    if (!string.IsNullOrWhiteSpace(savedSetup)) pdfVm.SelectedPrintSet = savedSetup;
-                    if (!string.IsNullOrWhiteSpace(savedPattern)) pdfVm.Pattern = savedPattern;
+                    pdfVm.SelectedSetName = savedSet;
+                    pdfVm.SelectedPrintSet = savedSetup;
+                    pdfVm.Pattern = savedPattern;
                 }
                 catch { }
 
-                // Read-only labels from raw settings (no fallback logic per spec)
                 try
                 {
                     var outLbl = FindName("PdfOutFolderLabel") as Label; if (outLbl != null) outLbl.Content = _settings.DefaultOutputDir ?? string.Empty;
-                    var overLbl = FindName("PdfOverwriteLabel") as Label; if (overLbl != null) overLbl.Content = _settings.DefaultOverwrite ? "True" : "False"; // show boolean directly
+                    var overLbl = FindName("PdfOverwriteLabel") as Label; if (overLbl != null) overLbl.Content = _settings.DefaultOverwrite ? "True" : "False";
                 }
                 catch { }
             }
             catch { }
-            UpdateImageSaveState();
-            UpdateCropOffsetEnable();
             UpdateImageBlacklistSummary();
         }
 
@@ -392,10 +183,8 @@ namespace GSADUs.Revit.Addin.UI
         {
             switch (tag)
             {
-                case "Rvt": _isDirtyRvt = dirty; SetSaveVisual("RvtSaveBtn", _isDirtyRvt); break;
                 case "Pdf": _isDirtyPdf = dirty; _presenter.PdfWorkflow?.SetDirty(dirty); break;
-                case "Image": _isDirtyImage = dirty; SetSaveVisual("ImageSaveBtn", _isDirtyImage); break;
-                case "Csv": _isDirtyCsv = dirty; SetSaveVisual("CsvSaveBtn", _isDirtyCsv); break;
+                case "Image": _isDirtyImage = dirty; _presenter.ImageWorkflow?.SetDirty(dirty); SetSaveVisual("ImageSaveBtn", _isDirtyImage); break;
             }
         }
 
@@ -403,26 +192,22 @@ namespace GSADUs.Revit.Addin.UI
         {
             try
             {
-                if (string.Equals(tag, "Pdf", StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
+                if (string.Equals(tag, "Pdf", StringComparison.OrdinalIgnoreCase)) return;
                 var name = (FindName(tag + "NameBox") as TextBox)?.Text?.Trim();
                 var scope = (FindName(tag + "ScopeCombo") as ComboBox)?.SelectedItem as string;
                 bool can = !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(scope);
                 var btn = FindName(tag + "SaveBtn") as Button; if (btn != null) btn.IsEnabled = can;
-                SetSaveVisual(tag + "SaveBtn", tag switch { "Rvt" => _isDirtyRvt, "Image" => _isDirtyImage, _ => _isDirtyCsv });
+                SetSaveVisual(tag + "SaveBtn", tag switch { "Image" => _isDirtyImage, _ => false });
             }
             catch { }
         }
 
         private void NameBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            string tag = ((FrameworkElement)sender).Name.Contains("Rvt") ? "Rvt" : ((FrameworkElement)sender).Name.Contains("Image") ? "Image" : "Csv";
+            string tag = ((FrameworkElement)sender).Name.Contains("Image") ? "Image" : "Pdf";
             _presenter.OnMarkDirty(tag);
             MarkDirty(tag);
             UpdateCanSaveFor(tag);
-            UpdateImageSaveState();
         }
 
         private void PdfNameBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -474,7 +259,7 @@ namespace GSADUs.Revit.Addin.UI
         {
             try
             {
-                foreach (var name in new[] { "RvtScopeCombo", "PdfScopeCombo", "ImageScopeCombo", "CsvScopeCombo" })
+                foreach (var name in new[] { "PdfScopeCombo", "ImageScopeCombo" })
                 {
                     var cb = FindName(name) as ComboBox;
                     if (cb != null) cb.ItemsSource = ScopeOptions;
@@ -485,7 +270,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private WorkflowDefinition? GetSelectedFromTab(string kind)
         {
-            string comboName = kind switch { "Rvt" => "RvtSavedCombo", "Pdf" => "PdfSavedCombo", "Image" => "ImageSavedCombo", _ => "CsvSavedCombo" };
+            string comboName = kind switch { "Pdf" => "PdfSavedCombo", "Image" => "ImageSavedCombo", _ => string.Empty };
             var cb = FindName(comboName) as ComboBox;
             var sel = cb?.SelectedItem;
             if (sel == null) return null;
@@ -500,10 +285,8 @@ namespace GSADUs.Revit.Addin.UI
             {
                 var all = _catalog.Workflows?.ToList() ?? new List<WorkflowDefinition>();
                 var mk = static (WorkflowDefinition w) => new { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" };
-                (FindName("RvtSavedCombo") as ComboBox)!.ItemsSource = all.Where(w => w.Output == OutputType.Rvt).Select(mk).ToList();
                 (FindName("PdfSavedCombo") as ComboBox)!.ItemsSource = all.Where(w => w.Output == OutputType.Pdf).Select(mk).ToList();
                 (FindName("ImageSavedCombo") as ComboBox)!.ItemsSource = all.Where(w => w.Output == OutputType.Image).Select(mk).ToList();
-                (FindName("CsvSavedCombo") as ComboBox)!.ItemsSource = all.Where(w => w.Output == OutputType.Csv).Select(mk).ToList();
             }
             catch { }
         }
@@ -548,7 +331,6 @@ namespace GSADUs.Revit.Addin.UI
         {
             var lv = FindName("WorkflowsList") as ListView;
             var sel = lv?.SelectedItem; if (sel == null) { _dialogs.Info("Audit", "Select a workflow."); return; }
-            // Legacy PDF API surface audit removed in clean slate. Validation will be handled in runner/audit later.
             _dialogs.Info("Audit", "Audit will validate workflows in the new flow.");
         }
 
@@ -563,11 +345,8 @@ namespace GSADUs.Revit.Addin.UI
         {
             try
             {
-                var tag = (sender as FrameworkElement)?.Name?.StartsWith("Rvt") == true ? "Rvt"
-                          : (sender as FrameworkElement)?.Name?.StartsWith("Pdf") == true ? "Pdf"
-                          : (sender as FrameworkElement)?.Name?.StartsWith("Image") == true ? "Image" : "Csv";
-                var wf = GetSelectedFromTab(tag); if (wf == null)
-                return;
+                var tag = (sender as FrameworkElement)?.Name?.StartsWith("Pdf") == true ? "Pdf" : "Image";
+                var wf = GetSelectedFromTab(tag); if (wf == null) return;
                 var cb = sender as ComboBox; if (cb == null) return;
                 var val = cb.SelectedItem as string;
                 if (!string.IsNullOrWhiteSpace(val)) wf.Scope = val;
@@ -575,7 +354,6 @@ namespace GSADUs.Revit.Addin.UI
                 MarkDirty(tag);
             }
             catch { }
-            UpdateImageSaveState();
         }
 
         private void DescBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -583,18 +361,9 @@ namespace GSADUs.Revit.Addin.UI
             try
             {
                 var fe = sender as FrameworkElement;
-                var tag = fe?.Name?.StartsWith("Rvt") == true ? "Rvt"
-                          : fe?.Name?.StartsWith("Pdf") == true ? "Pdf"
-                          : fe?.Name?.StartsWith("Image") == true ? "Image" : "Csv";
+                var tag = fe?.Name?.StartsWith("Pdf") == true ? "Pdf" : "Image";
 
-                // Update VM only; defer model persistence to Save
-                WorkflowTabBaseViewModel? baseVm = tag switch
-                {
-                    "Pdf" => _presenter.PdfWorkflow,
-                    "Image" => _presenter.ImageWorkflow,
-                    "Rvt" => _presenter.RvtBase,
-                    _ => _presenter.CsvBase
-                };
+                WorkflowTabBaseViewModel? baseVm = tag == "Pdf" ? _presenter.PdfWorkflow : _presenter.ImageWorkflow;
                 if (baseVm != null)
                 {
                     baseVm.Description = (sender as TextBox)?.Text ?? string.Empty;
@@ -609,19 +378,12 @@ namespace GSADUs.Revit.Addin.UI
         private void SavedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             var combo = sender as ComboBox; if (combo == null) return;
-            string tag = combo.Name.StartsWith("Rvt") ? "Rvt" : combo.Name.StartsWith("Pdf") ? "Pdf" : combo.Name.StartsWith("Image") ? "Image" : "Csv";
+            string tag = combo.Name.StartsWith("Pdf") ? "Pdf" : "Image";
             var wf = GetSelectedFromTab(tag);
             _presenter.OnSavedComboChanged(tag, wf, this);
             try
             {
-                // Hydrate the tab's base VM first (Name, Scope, Description)
-                WorkflowTabBaseViewModel? baseVm = tag switch
-                {
-                    "Pdf" => _presenter.PdfWorkflow,
-                    "Image" => _presenter.ImageWorkflow,
-                    "Rvt" => _presenter.RvtBase,
-                    _ => _presenter.CsvBase
-                };
+                WorkflowTabBaseViewModel? baseVm = tag == "Pdf" ? _presenter.PdfWorkflow : _presenter.ImageWorkflow;
                 if (baseVm != null)
                 {
                     baseVm.Name = wf?.Name ?? string.Empty;
@@ -637,19 +399,14 @@ namespace GSADUs.Revit.Addin.UI
                         (p != null && p.TryGetValue(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String)
                         ? (v.GetString() ?? string.Empty) : string.Empty;
 
-                    var savedSet   = Gs(PdfWorkflowKeys.PrintSetName);
-                    var savedSetup = Gs(PdfWorkflowKeys.ExportSetupName);
-                    var savedPat   = Gs(PdfWorkflowKeys.FileNamePattern);
+                    pdfVm.SelectedSetName  = Gs(PdfWorkflowKeys.PrintSetName);
+                    pdfVm.SelectedPrintSet = Gs(PdfWorkflowKeys.ExportSetupName);
+                    pdfVm.Pattern          = Gs(PdfWorkflowKeys.FileNamePattern);
 
-                    if (!string.IsNullOrWhiteSpace(savedSet))   pdfVm.SelectedSetName  = savedSet;
-                    if (!string.IsNullOrWhiteSpace(savedSetup)) pdfVm.SelectedPrintSet = savedSetup;
-                    if (!string.IsNullOrWhiteSpace(savedPat))   pdfVm.Pattern          = savedPat;
+                    _isDirtyPdf = false;
+                    _presenter.PdfWorkflow?.SetDirty(false);
+                    SetSaveVisual("PdfSaveBtn", false);
                 }
-
-                // Keep legacy UI sync to avoid regressions during migration
-                (FindName(tag + "ScopeCombo") as ComboBox)!.SelectedItem = wf?.Scope;
-                (FindName(tag + "DescBox") as TextBox)!.Text = wf?.Description ?? string.Empty;
-                (FindName(tag + "NameBox") as TextBox)!.Text = wf?.Name ?? string.Empty;
 
                 if (tag == "Image")
                 {
@@ -661,24 +418,20 @@ namespace GSADUs.Revit.Addin.UI
                             ? (v.GetString() ?? string.Empty)
                             : string.Empty;
 
-                    vm.ExportScope        = Gs(ImageWorkflowKeys.exportScope);         // "PrintSet" | "SingleView"
-                    vm.SelectedPrintSet   = Gs(ImageWorkflowKeys.imagePrintSetName);
+                    vm.ExportScope          = Gs(ImageWorkflowKeys.exportScope);
+                    vm.SelectedPrintSet     = Gs(ImageWorkflowKeys.imagePrintSetName);
                     vm.SelectedSingleViewId = Gs(ImageWorkflowKeys.singleViewId);
-                    vm.Pattern            = Gs(ImageWorkflowKeys.fileNamePattern);
-                    vm.Prefix             = Gs(ImageWorkflowKeys.prefix);
-                    vm.Suffix             = Gs(ImageWorkflowKeys.suffix);
-                    vm.Format             = Gs(ImageWorkflowKeys.imageFormat);         // "PNG" | "BMP" | "TIFF"
-                    vm.Resolution         = Gs(ImageWorkflowKeys.resolutionPreset);    // e.g., "Medium"
-                    vm.CropMode           = Gs(ImageWorkflowKeys.cropMode);            // "Static" | "Auto"
-                    vm.CropOffset         = Gs(ImageWorkflowKeys.cropOffset);          // string, VM validates/uses
+                    vm.Pattern              = Gs(ImageWorkflowKeys.fileNamePattern);
+                    vm.Prefix               = Gs(ImageWorkflowKeys.prefix);
+                    vm.Suffix               = Gs(ImageWorkflowKeys.suffix);
+                    vm.Format               = Gs(ImageWorkflowKeys.imageFormat);
+                    vm.Resolution           = Gs(ImageWorkflowKeys.resolutionPreset);
+                    vm.CropMode             = Gs(ImageWorkflowKeys.cropMode);
+                    vm.CropOffset           = Gs(ImageWorkflowKeys.cropOffset);
                 }
-                if (tag == "Rvt") { _isDirtyRvt = false; SetSaveVisual("RvtSaveBtn", false); }
-                if (tag == "Image") { _isDirtyImage = false; SetSaveVisual("ImageSaveBtn", false); }
-                if (tag == "Csv") { _isDirtyCsv = false; SetSaveVisual("CsvSaveBtn", false); }
             }
             catch { }
             UpdateCanSaveFor(tag);
-            UpdateImageSaveState();
         }
 
         // ===== Event handlers wired in XAML =====
@@ -690,9 +443,9 @@ namespace GSADUs.Revit.Addin.UI
                 var id = lv.SelectedItem.GetType().GetProperty("Id")?.GetValue(lv.SelectedItem) as string;
                 var wf = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => w.Id == id);
                 if (wf == null) return;
-                var tabIndex = wf.Output switch { OutputType.Rvt => 1, OutputType.Pdf => 2, OutputType.Image => 3, OutputType.Csv => 4, _ => 0 };
+                var tabIndex = wf.Output switch { OutputType.Pdf => 1, OutputType.Image => 2, _ => 0 };
                 (Tabs as TabControl)!.SelectedIndex = tabIndex;
-                string comboName = wf.Output switch { OutputType.Rvt => "RvtSavedCombo", OutputType.Pdf => "PdfSavedCombo", OutputType.Image => "ImageSavedCombo", _ => "CsvSavedCombo" };
+                string comboName = wf.Output switch { OutputType.Pdf => "PdfSavedCombo", OutputType.Image => "ImageSavedCombo", _ => string.Empty };
                 var items = (FindName(comboName) as ComboBox)?.ItemsSource as System.Collections.IEnumerable;
                 if (items != null)
                 {
@@ -724,7 +477,7 @@ namespace GSADUs.Revit.Addin.UI
                 _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
                 _catalog.Settings.Workflows.Add(wf);
                 RefreshSavedCombosAndMain();
-                Tabs.SelectedIndex = 2;
+                Tabs.SelectedIndex = 1;
                 var pdfCombo = FindName("PdfSavedCombo") as ComboBox;
                 if (pdfCombo?.ItemsSource is System.Collections.IEnumerable items)
                 {
@@ -734,30 +487,6 @@ namespace GSADUs.Revit.Addin.UI
                         if (string.Equals(itId, wf.Id, StringComparison.OrdinalIgnoreCase)) { pdfCombo.SelectedItem = it; break; }
                     }
                 }
-            }
-            catch { }
-        }
-
-        private void RvtNewBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var wf = new WorkflowDefinition
-                {
-                    Id = Guid.NewGuid().ToString("N"),
-                    Name = "RVT Workflow",
-                    Output = OutputType.Rvt,
-                    Kind = WorkflowKind.External,
-                    Scope = "Model",
-                    Description = string.Empty,
-                    ActionIds = new List<string> { "export-rvt", "cleanup" },
-                    Parameters = new Dictionary<string, System.Text.Json.JsonElement>()
-                };
-                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
-                _catalog.Settings.Workflows.Add(wf);
-                RefreshSavedCombosAndMain();
-                Tabs.SelectedIndex = 1;
-                SelectInCombo("RvtSavedCombo", wf.Id);
             }
             catch { }
         }
@@ -780,32 +509,8 @@ namespace GSADUs.Revit.Addin.UI
                 _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
                 _catalog.Settings.Workflows.Add(wf);
                 RefreshSavedCombosAndMain();
-                Tabs.SelectedIndex = 3;
+                Tabs.SelectedIndex = 2;
                 SelectInCombo("ImageSavedCombo", wf.Id);
-            }
-            catch { }
-        }
-
-        private void CsvNewBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var wf = new WorkflowDefinition
-                {
-                    Id = Guid.NewGuid().ToString("N"),
-                    Name = "CSV Workflow",
-                    Output = OutputType.Csv,
-                    Kind = WorkflowKind.Internal,
-                    Scope = "CurrentSet",
-                    Description = string.Empty,
-                    ActionIds = new List<string> { "export-csv" },
-                    Parameters = new Dictionary<string, JsonElement>()
-                };
-                _catalog.Settings.Workflows ??= new List<WorkflowDefinition>();
-                _catalog.Settings.Workflows.Add(wf);
-                RefreshSavedCombosAndMain();
-                Tabs.SelectedIndex = 4;
-                SelectInCombo("CsvSavedCombo", wf.Id);
             }
             catch { }
         }
@@ -839,331 +544,13 @@ namespace GSADUs.Revit.Addin.UI
             // Legacy secondary resolution control removed; keep empty handler to satisfy XAML reference.
         }
 
-        private void HydrateImageWorkflow(WorkflowDefinition? wf)
-        {
-            _hydratingImage = true; // begin guard
-            try
-            {
-                // print set
-                string storedPrintSet = string.Empty;
-                if (wf?.Parameters != null && wf.Parameters.TryGetValue(ImageWorkflowKeys.imagePrintSetName, out var jps) && jps.ValueKind == JsonValueKind.String)
-                    storedPrintSet = jps.GetString() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(storedPrintSet) && FindName("ImagePrintSetCombo") is ComboBox ps && ps.ItemsSource is System.Collections.IEnumerable items)
-                {
-                    foreach (var it in items)
-                    {
-                        if (string.Equals(it?.ToString(), storedPrintSet, StringComparison.OrdinalIgnoreCase)) { ps.SelectedItem = it; break; }
-                    }
-                }
-
-                // file name pattern (persisted WITHOUT extension now)
-                if (FindName("ImageFileNamePatternBox") is TextBox patBox)
-                {
-                    string pattern = string.Empty;
-                    if (wf?.Parameters != null && wf.Parameters.TryGetValue(ImageWorkflowKeys.fileNamePattern, out var je) && je.ValueKind == JsonValueKind.String)
-                        pattern = je.GetString() ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(pattern)) pattern = "{SetName}"; // default now has no extension
-                    patBox.Text = pattern;
-                }
-
-                if (FindName("ImagePrefixBox") is TextBox preBox)
-                {
-                    string pre = string.Empty;
-                    if (wf?.Parameters != null && wf.Parameters.TryGetValue(ImageWorkflowKeys.prefix, out var jp) && jp.ValueKind == JsonValueKind.String)
-                        pre = jp.GetString() ?? string.Empty;
-                    preBox.Text = pre;
-                }
-                if (FindName("ImageSuffixBox") is TextBox sufBox)
-                {
-                    string suf = string.Empty;
-                    if (wf?.Parameters != null && wf.Parameters.TryGetValue(ImageWorkflowKeys.suffix, out var js) && js.ValueKind == JsonValueKind.String)
-                        suf = js.GetString() ?? string.Empty;
-                    sufBox.Text = suf;
-                }
-                // format
-                if (FindName("ImageFormatCombo") is ComboBox fmtCombo)
-                {
-                    string storedFormat = string.Empty;
-                    if (wf?.Parameters != null && wf.Parameters.TryGetValue(ImageWorkflowKeys.imageFormat, out var jf) && jf.ValueKind == JsonValueKind.String)
-                        storedFormat = (jf.GetString() ?? string.Empty).Trim().ToUpperInvariant();
-                    foreach (var o in fmtCombo.Items)
-                    {
-                        if (o is ComboBoxItem cbi && string.Equals(cbi.Content?.ToString(), storedFormat, StringComparison.OrdinalIgnoreCase)) { fmtCombo.SelectedItem = cbi; break; }
-                    }
-                }
-                // crop mode
-                if (FindName("ImageCropModeCombo") is ComboBox cmCombo)
-                {
-                    string cm = string.Empty;
-                    if (wf?.Parameters != null && wf.Parameters.TryGetValue(ImageWorkflowKeys.cropMode, out var jcm) && jcm.ValueKind == JsonValueKind.String)
-                        cm = jcm.GetString() ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(cm)) cm = "Static";
-                    foreach (var o in cmCombo.Items)
-                    {
-                        if (o is ComboBoxItem cbi && string.Equals(cbi.Content?.ToString(), cm, StringComparison.OrdinalIgnoreCase)) { cmCombo.SelectedItem = cbi; break; }
-                    }
-                }
-                // crop offset
-                if (FindName("ImageCropOffsetBox") is TextBox cropBox)
-                {
-                    string co = string.Empty;
-                    if (wf?.Parameters != null && wf.Parameters.TryGetValue(ImageWorkflowKeys.cropOffset, out var jc) && jc.ValueKind == JsonValueKind.String)
-                        co = jc.GetString() ?? string.Empty;
-                    cropBox.Text = co;
-                }
-                // resolution preset
-                if (FindName("ImageResolutionPresetCombo") is ComboBox resCombo)
-                {
-                    string res = string.Empty;
-                    if (wf?.Parameters != null && wf.Parameters.TryGetValue(ImageWorkflowKeys.resolutionPreset, out var jr) && jr.ValueKind == JsonValueKind.String)
-                        res = jr.GetString() ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(res)) res = "Medium";
-                    foreach (var o in resCombo.Items)
-                    {
-                        if (o is ComboBoxItem cbi && string.Equals(cbi.Content?.ToString(), res, StringComparison.OrdinalIgnoreCase)) { resCombo.SelectedItem = cbi; break; }
-                    }
-                }
-
-                // --- New: hydrate scope & single view without marking dirty ---
-                string scope = "PrintSet"; // default for legacy
-                try
-                {
-                    if (wf?.Parameters != null &&
-                        wf.Parameters.TryGetValue(ImageWorkflowKeys.exportScope, out var scopeEl) &&
-                        scopeEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                    {
-                        scope = scopeEl.GetString() ?? "PrintSet";
-                    }
-                }
-                catch { scope = "PrintSet"; }
-
-                if (string.Equals(scope, "SingleView", StringComparison.OrdinalIgnoreCase))
-                    ImageScopeSingleViewRadio.IsChecked = true;
-                else
-                    ImageScopePrintSetRadio.IsChecked = true;
-
-                PopulateImageSingleViewList();
-
-                try
-                {
-                    if (wf?.Parameters != null &&
-                        wf.Parameters.TryGetValue(ImageWorkflowKeys.singleViewId, out var idEl) &&
-                        idEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                    {
-                        var savedId = idEl.GetString();
-                        if (!string.IsNullOrWhiteSpace(savedId) && ImageSingleViewCombo?.Items?.Count > 0)
-                        {
-                            foreach (ComboBoxItem it in ImageSingleViewCombo.Items)
-                            {
-                                if (string.Equals(it.Tag as string, savedId, StringComparison.Ordinal))
-                                { ImageSingleViewCombo.SelectedItem = it; break; }
-                            }
-                        }
-                    }
-                }
-                catch { }
-
-                ApplyImageScopeUiState();
-                // --- End new scope hydration ---
-
-                UpdateCropOffsetEnable();
-                UpdateImagePreview();
-                UpdateImageSaveState();
-            }
-            catch { }
-            _hydratingImage = false; // end guard
-        }
-
-        private void PersistImageParameters(WorkflowDefinition existing)
-        {
-            var imageParams = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-            void SP(string k, string? v) { if (!string.IsNullOrWhiteSpace(v)) imageParams[k] = ToJson(v); }
-
-            var printSet = (FindName("ImagePrintSetCombo") as ComboBox)?.SelectedItem as string;
-            SP(ImageWorkflowKeys.imagePrintSetName, printSet);
-
-            // pattern: store WITHOUT extension now
-            var patternRaw = (FindName("ImageFileNamePatternBox") as TextBox)?.Text?.Trim();
-            if (string.IsNullOrWhiteSpace(patternRaw)) patternRaw = "{SetName}";
-            patternRaw = patternRaw.Replace("[SetName]", "{SetName}"); // normalize legacy brackets
-            if (patternRaw.Contains("{SetName}")) // only sanitize if it looks like a pattern
-            {
-                // remove any extension if user typed one
-                patternRaw = Path.GetFileNameWithoutExtension(patternRaw);
-                patternRaw = SanitizeFileComponent(patternRaw);
-            }
-            SP(ImageWorkflowKeys.fileNamePattern, patternRaw);
-
-            var prefixRaw = SanitizeFileComponent((FindName("ImagePrefixBox") as TextBox)?.Text?.Trim());
-            if (!string.IsNullOrWhiteSpace(prefixRaw)) SP(ImageWorkflowKeys.prefix, prefixRaw);
-            var suffixRaw = SanitizeFileComponent((FindName("ImageSuffixBox") as TextBox)?.Text?.Trim());
-            if (!string.IsNullOrWhiteSpace(suffixRaw)) SP(ImageWorkflowKeys.suffix, suffixRaw);
-
-            var cropModeCombo = FindName("ImageCropModeCombo") as ComboBox;
-            var cropModeSel = (cropModeCombo?.SelectedItem as ComboBoxItem)?.Content?.ToString();
-            if (!string.IsNullOrWhiteSpace(cropModeSel) && !string.Equals(cropModeSel, "Static", StringComparison.OrdinalIgnoreCase))
-                SP(ImageWorkflowKeys.cropMode, cropModeSel);
-            var cropBox = FindName("ImageCropOffsetBox") as TextBox;
-            if (cropBox != null && double.TryParse(cropBox.Text?.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var off))
-                SP(ImageWorkflowKeys.cropOffset, off.ToString(CultureInfo.InvariantCulture));
-
-            var resCombo = FindName("ImageResolutionPresetCombo") as ComboBox;
-            var resSel = (resCombo?.SelectedItem as ComboBoxItem)?.Content?.ToString();
-            if (!string.IsNullOrWhiteSpace(resSel)) SP(ImageWorkflowKeys.resolutionPreset, resSel);
-
-            var fmtCombo = FindName("ImageFormatCombo") as ComboBox;
-            var selFmt = (fmtCombo?.SelectedItem as ComboBoxItem)?.Content?.ToString();
-            if (!string.IsNullOrWhiteSpace(selFmt))
-            {
-                var up = selFmt.Trim().ToUpperInvariant();
-                if (up == "PNG" || up == "BMP" || up == "TIFF") SP(ImageWorkflowKeys.imageFormat, up);
-            }
-
-            // New: persist export scope + single view id (conditionally)
-            try
-            {
-                var scope = GetImageExportScope();
-                imageParams[ImageWorkflowKeys.exportScope] = System.Text.Json.JsonDocument.Parse($"\"{scope}\"").RootElement;
-                if (string.Equals(scope, "SingleView", StringComparison.OrdinalIgnoreCase))
-                {
-                    string? svId = null;
-                    if (ImageSingleViewCombo?.SelectedItem is ComboBoxItem it) svId = it.Tag as string;
-                    if (!string.IsNullOrWhiteSpace(svId))
-                        imageParams[ImageWorkflowKeys.singleViewId] = System.Text.Json.JsonDocument.Parse($"\"{svId}\"").RootElement;
-                    // Do not clear singleViewId when switching back to PrintSet; retain for round-trip.
-                }
-            }
-            catch { }
-
-            existing.Parameters = imageParams;
-            EnsureActionId(existing, "export-image");
-        }
-
-        private (bool CanSave, string Reason) ComputeImageSaveEligibility()
-        {
-            try
-            {
-                // name
-                var name = (FindName("ImageNameBox") as TextBox)?.Text?.Trim();
-                if (string.IsNullOrWhiteSpace(name)) return (false, "Name required");
-                // pattern
-                var pattern = (FindName("ImageFileNamePatternBox") as TextBox)?.Text ?? string.Empty;
-                pattern = pattern.Replace("[SetName]", "{SetName}"); // normalize legacy brackets
-                if (string.IsNullOrWhiteSpace(pattern)) return (false, "Pattern required");
-                if (!pattern.Contains("{SetName}")) return (false, "Pattern must include {SetName}");
-                // format
-                var fmt = (FindName("ImageFormatCombo") as ComboBox)?.SelectedItem as ComboBoxItem;
-                if (fmt == null || string.IsNullOrWhiteSpace(fmt.Content?.ToString())) return (false, "Select image format");
-                // resolution preset
-                var res = (FindName("ImageResolutionPresetCombo") as ComboBox)?.SelectedItem as ComboBoxItem;
-                if (res == null) return (false, "Select resolution preset");
-                // crop offset validation
-                var cropBox = FindName("ImageCropOffsetBox") as TextBox;
-                if (cropBox != null && !string.IsNullOrWhiteSpace(cropBox.Text))
-                {
-                    if (!double.TryParse(cropBox.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var off)) return (false, "Invalid crop offset");
-                }
-
-                // Scope-specific gating
-                var scope = GetImageExportScope();
-                if (string.Equals(scope, "SingleView", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!(ImageSingleViewCombo?.SelectedItem is ComboBoxItem)) return (false, "Select single view");
-                }
-                else
-                {
-                    var psSel = (FindName("ImagePrintSetCombo") as ComboBox)?.SelectedItem as string;
-                    if (string.IsNullOrWhiteSpace(psSel)) return (false, "Select print set");
-                }
-                return (true, string.Empty);
-            }
-            catch { return (false, "Eligibility error"); }
-        }
-
-        private void UpdateImageSaveState()
-        {
-            var saveBtn = FindName("ImageSaveBtn") as Button;
-            if (saveBtn != null)
-            {
-                var (canSave, reason) = ComputeImageSaveEligibility();
-                saveBtn.IsEnabled = canSave;
-                SetSaveVisual("ImageSaveBtn", _isDirtyImage && canSave);
-                saveBtn.ToolTip = canSave ? null : reason;
-            }
-        }
-
-        private void ImageResolutionPresetCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); }
-private void ImageCropOffsetBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); }
-private void ImageFileNamePatternBox_TextChanged(object s, TextChangedEventArgs e)
-{
-    try
-    {
-        if (s is TextBox tb && tb.Text.Contains("[SetName]"))
-        {
-            var caret = tb.SelectionStart;
-            tb.Text = tb.Text.Replace("[SetName]", "{SetName}");
-            tb.SelectionStart = System.Math.Min(caret, tb.Text.Length);
-        }
-    }
-    catch { }
-    _presenter.OnMarkDirty("Image");
-    MarkDirty("Image"); UpdateImagePreview();
-}
-private void ImagePrefixBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); }
-private void ImageSuffixBox_TextChanged(object s, TextChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); }
-private void ImageCropModeCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { UpdateCropOffsetEnable(); _presenter.OnMarkDirty("Image"); MarkDirty("Image"); }
-private void ImageFormatCombo_SelectionChanged(object s, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); UpdateImagePreview(); }
-private void ImagePrintSetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) { _presenter.OnMarkDirty("Image"); MarkDirty("Image"); }
-
-        private void UpdateCropOffsetEnable()
-        {
-            try
-            {
-                var modeCombo = FindName("ImageCropModeCombo") as ComboBox;
-                var box = FindName("ImageCropOffsetBox") as TextBox;
-                if (modeCombo == null || box == null) return;
-                var sel = (modeCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Static";
-                bool auto = string.Equals(sel, "Auto", StringComparison.OrdinalIgnoreCase);
-                box.IsEnabled = auto;
-                box.Opacity = auto ? 1.0 : 0.5;
-                if (!auto) box.Text = string.Empty;
-            }
-            catch { }
-        }
-
-        private void UpdateImagePreview()
-        {
-            try
-            {
-                var prefix = (FindName("ImagePrefixBox") as TextBox)?.Text ?? string.Empty;
-                var suffix = (FindName("ImageSuffixBox") as TextBox)?.Text ?? string.Empty;
-                var patternRaw = (FindName("ImageFileNamePatternBox") as TextBox)?.Text ?? "{SetName}";
-                string core = Path.GetFileNameWithoutExtension(patternRaw.Trim());
-                if (string.IsNullOrWhiteSpace(core)) core = "{SetName}";
-                var fmtCombo = FindName("ImageFormatCombo") as ComboBox;
-                var selFmt = (fmtCombo?.SelectedItem as ComboBoxItem)?.Content?.ToString();
-                var ext = MapFormatToExt(selFmt);
-                var finalName = prefix + core + suffix + ext;
-                var lbl = FindName("ImagePreviewText") as TextBlock;
-                if (lbl != null) lbl.Text = $"Preview: {finalName}";
-            }
-            catch { }
-        }
-
         private void SaveWorkflow_Click(object sender, RoutedEventArgs e)
         {
             var btn = sender as FrameworkElement; if (btn == null) return;
             var tag = (btn.Tag as string) ?? string.Empty;
-            if (tag == "Png") tag = "Image"; // backward tag mapping
+            if (tag == "Png") tag = "Image";
 
-            // Prefer VM values for base fields, with control fallback to preserve legacy behavior
-            WorkflowTabBaseViewModel? baseVm = tag switch
-            {
-                "Pdf" => _presenter.PdfWorkflow,
-                "Image" => _presenter.ImageWorkflow,
-                "Rvt" => _presenter.RvtBase,
-                _ => _presenter.CsvBase
-            };
+            WorkflowTabBaseViewModel? baseVm = tag == "Pdf" ? _presenter.PdfWorkflow : _presenter.ImageWorkflow;
 
             string nameVal = baseVm?.Name?.Trim();
             if (string.IsNullOrWhiteSpace(nameVal)) nameVal = (FindName(tag + "NameBox") as TextBox)?.Text?.Trim() ?? string.Empty;
@@ -1176,9 +563,8 @@ private void ImagePrintSetCombo_SelectionChanged(object sender, SelectionChanged
 
             if (string.IsNullOrWhiteSpace(nameVal) || string.IsNullOrWhiteSpace(scopeVal)) { _dialogs.Info("Save", "Name and Scope required."); return; }
 
-            var output = tag switch { "Rvt" => OutputType.Rvt, "Pdf" => OutputType.Pdf, "Image" => OutputType.Image, "Csv" => OutputType.Csv, _ => OutputType.Pdf };
+            var output = tag switch { "Pdf" => OutputType.Pdf, _ => OutputType.Image };
 
-            // Keep/identify current workflow (create if needed)
             var existing = GetSelectedFromTab(tag);
             if (existing == null)
             {
@@ -1187,78 +573,34 @@ private void ImagePrintSetCombo_SelectionChanged(object sender, SelectionChanged
                 _catalog.Settings.Workflows.Add(existing);
             }
 
-            // Persist base fields, including Description
             existing.Name = nameVal; existing.Scope = scopeVal; existing.Description = descVal;
 
             switch (output)
             {
                 case OutputType.Pdf:
                 {
-                    var pdfVm = _presenter.PdfWorkflow;
-                    var pdfSetName = pdfVm?.SelectedSetName;
-                    var pdfSetupName = pdfVm?.SelectedPrintSet;
-                    var pdfPattern = pdfVm?.Pattern;
-
-                    // Guard clause for missing/invalid inputs
-                    if (string.IsNullOrWhiteSpace(pdfSetName) || string.IsNullOrWhiteSpace(pdfSetupName) || string.IsNullOrWhiteSpace(pdfPattern) || !pdfPattern.Contains("{SetName}"))
-                    {
-                        _dialogs.Info("Save", "Select view set, export setup, and include {SetName} in the file name pattern.");
-                        return;
-                    }
-
-                    // Pattern mutations (keep existing logic)
-                    if (string.IsNullOrWhiteSpace(pdfPattern) || !pdfPattern.Contains("{SetName}")) pdfPattern = "{SetName}.pdf";
-                    if (!pdfPattern.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) pdfPattern += ".pdf";
-                    pdfPattern = SanitizeFileComponent(pdfPattern);
-
-                    var p = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-                    void S(string k, string? v) { if (!string.IsNullOrWhiteSpace(v)) p[k] = ToJson(v); }
-                    S(PdfWorkflowKeys.PrintSetName, pdfSetName);
-                    S(PdfWorkflowKeys.ExportSetupName, pdfSetupName);
-                    S(PdfWorkflowKeys.FileNamePattern, pdfPattern);
-                    existing.Parameters = p; EnsureActionId(existing, "export-pdf");
+                    if (!_presenter.SavePdfWorkflow(existing)) return;
                     break;
                 }
                 case OutputType.Image:
                 {
-                    PersistImageParameters(existing);
-                    break;
-                }
-                case OutputType.Rvt:
-                {
-                    EnsureActionId(existing, "export-rvt");
-                    break;
-                }
-                case OutputType.Csv:
-                {
-                    EnsureActionId(existing, "export-csv");
+                    _presenter.SaveImageWorkflow(existing);
                     break;
                 }
             }
 
-            // Persist to disk and refresh UI lists
             _catalog.SaveAndRefresh();
             RefreshMainList();
             RefreshSavedCombos();
 
-            // Restore selection so controls don't blank out
             try
             {
                 SelectInCombo(tag + "SavedCombo", existing.Id);
             }
             catch { }
 
-            // Mark as clean and recompute buttons/preview
             MarkDirty(tag, false);
             UpdateCanSaveFor(tag);
-            UpdateImageSaveState();
-        }
-
-        private void RvtOption_Checked(object sender, RoutedEventArgs e)
-        {
-            _presenter.OnMarkDirty("Rvt");
-            MarkDirty("Rvt");
-            UpdateCanSaveFor("Rvt");
         }
 
         private void PdfManageSetupBtn_Click(object sender, RoutedEventArgs e)
