@@ -17,7 +17,8 @@ param(
   [string]$OutputFormat = 'md',
   [switch]$IncludeSystemMessages,      # include tool/system messages if present
   [switch]$VerboseParsing,             # echo parsing decisions
-  [switch]$OpenAfter                   # open exported file after completion
+  [switch]$OpenAfter,                  # open exported file after completion
+  [switch]$DiscoverOnly                # list found candidates and exit
 )
 
 function Write-Info($msg){ Write-Host "[info] $msg" -ForegroundColor Cyan }
@@ -67,15 +68,73 @@ if (-not (Test-Path (Split-Path $OutputDir -Parent))) {
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
 # 2) Pick the most recent snapshot-like file
-$patterns = @('.json','.ndjson','.log','.txt')
+$patterns = @('.json','.ndjson','.log','.txt','.sqlite','.db')
 $files = Get-ChildItem -Path $SnapshotsDir -Recurse -File -ErrorAction SilentlyContinue |
          Where-Object { $_.Extension -in $patterns } |
          Sort-Object LastWriteTime -Descending
 
+if (-not $files -or $files.Count -eq 0) {
+  $attempted = @($SnapshotsDir)
+  if ($VerboseParsing) { Write-Info "No files in provided dir. Trying common locations..." }
+
+  $candidates = New-Object System.Collections.Generic.List[string]
+  # Solution .vs folder
+  if ($SolutionRoot -and (Test-Path $SolutionRoot) -and ($SolutionRoot -like '*.sln')) {
+    $solutionDir = Split-Path -Parent $SolutionRoot
+    $candidates.Add((Join-Path $solutionDir '.vs')) | Out-Null
+  }
+  # VS Code stable
+  if ($env:APPDATA) {
+    $candidates.Add((Join-Path $env:APPDATA 'Code\User\globalStorage\github.copilot-chat\conversations')) | Out-Null
+    # Older Copilot Chat storage path fallback
+    $candidates.Add((Join-Path $env:APPDATA 'Code\User\globalStorage\github.copilot-chat')) | Out-Null
+    # VS Code Insiders
+    $candidates.Add((Join-Path $env:APPDATA 'Code - Insiders\User\globalStorage\github.copilot-chat\conversations')) | Out-Null
+  }
+  # Visual Studio ServiceHub logs (heuristic)
+  if ($env:LOCALAPPDATA) {
+    $candidates.Add((Join-Path $env:LOCALAPPDATA 'Microsoft\VisualStudio')) | Out-Null
+    $candidates.Add((Join-Path $env:LOCALAPPDATA 'Microsoft\VisualStudio\**\ServiceHub\Logs')) | Out-Null
+    $candidates.Add((Join-Path $env:LOCALAPPDATA 'Microsoft\VSCommon\**\ServiceHub\Logs')) | Out-Null
+    $candidates.Add((Join-Path $env:LOCALAPPDATA 'Temp')) | Out-Null
+  }
+  if ($env:TEMP) { $candidates.Add($env:TEMP) | Out-Null }
+
+  $found = @()
+  foreach ($root in $candidates) {
+    if (-not (Test-Path $root)) { continue }
+    $attempted += $root
+  $hits = Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in $patterns -and ($_.FullName -match 'copilot|chat|conversation') } |
+            Sort-Object LastWriteTime -Descending
+    if ($hits) { $found += $hits }
+  }
+  if ($found) {
+    $files = $found | Sort-Object LastWriteTime -Descending
+    # Adjust SnapshotsDir to the directory of the latest file for future relative references
+    $SnapshotsDir = ($files | Select-Object -First 1).DirectoryName
+    if ($VerboseParsing) { Write-Info "Using detected snapshot directory: $SnapshotsDir" }
+  }
+  else {
+    $attempted += ($candidates | Sort-Object -Unique)
+    $attempted = $attempted | Sort-Object -Unique
+    $list = ($attempted | Where-Object { $_ } | ForEach-Object { " - $_" }) -join [Environment]::NewLine
+    throw "No snapshot files found. Paths attempted:${([Environment]::NewLine)}$list"
+  }
+}
+
 if (-not $files) { throw "No snapshot files found under $SnapshotsDir" }
 
-$latest = $files | Select-Object -First 1
+# Prefer non-database files for latest snapshot selection
+$latest = $files | Where-Object { $_.Extension -notin @('.db','.sqlite') } | Select-Object -First 1
+if (-not $latest) { $latest = $files | Select-Object -First 1 }
 Write-Info "Latest snapshot: $($latest.FullName)  (LastWriteTime=$($latest.LastWriteTime))"
+
+if ($DiscoverOnly) {
+  Write-Info "DiscoverOnly set. Showing top 10 candidates and exiting."
+  $files | Select-Object -First 10 FullName, LastWriteTime, Length | Format-Table | Out-Host
+  return
+}
 
 # 3) Define output paths
 $stamp = (Get-Date -Format "yyyyMMdd_HHmmss")
@@ -172,8 +231,9 @@ catch {
 }
 
 # 6) Emit formatted output
-if ($messages.Count -gt 0) {
-  $messages = $messages | Sort-Object timestamp, role
+$msgList = $script:messages
+if ($msgList.Count -gt 0) {
+  $messages = $msgList | Sort-Object timestamp, role
 
   switch ($OutputFormat) {
     'json' {
@@ -188,10 +248,10 @@ if ($messages.Count -gt 0) {
     }
     'md' {
       $sb = New-Object System.Text.StringBuilder
-      [void]$sb.AppendLine("# Copilot Chat (latest snapshot)")
+  [void]$sb.AppendLine("# Copilot Chat (latest snapshot)")
       [void]$sb.AppendLine()
-      [void]$sb.AppendLine("*Solution:* `$SolutionRoot`")
-      [void]$sb.AppendLine("*Snapshot:* `$($latest.FullName)`  ")
+  [void]$sb.AppendLine("*Solution:* ``$SolutionRoot``")
+  [void]$sb.AppendLine("*Snapshot:* ``$($latest.FullName)``  ")
       [void]$sb.AppendLine("*Exported:* $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n")
       foreach ($m in $messages) {
         $role = ($m.role -replace '^\s+|\s+$','')
@@ -217,7 +277,7 @@ $result = [pscustomobject]@{
   SnapshotFile = $latest.FullName
   RawCopy      = $rawOut
   Export       = $logOut
-  ParsedCount  = $messages.Count
+  ParsedCount  = $msgList.Count
 }
 
 if ($OpenAfter) {

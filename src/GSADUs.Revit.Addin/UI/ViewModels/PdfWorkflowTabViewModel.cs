@@ -1,15 +1,36 @@
 using System.ComponentModel;
 using System.Collections.ObjectModel;
+using System.Windows.Input;
 
 namespace GSADUs.Revit.Addin.UI
 {
     internal sealed class PdfWorkflowTabViewModel : WorkflowTabBaseViewModel, INotifyPropertyChanged
     {
+        public PdfWorkflowTabViewModel()
+        {
+            PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(IsBaseSaveEnabled)) RecomputeLocal();
+            };
+            NewCommand = new DelegateCommand(_ => Reset());
+        }
+
+        public ICommand NewCommand { get; }
+
+        private string? _selectedWorkflowId;
+        public string? SelectedWorkflowId
+        {
+            get => _selectedWorkflowId;
+            set { if (_selectedWorkflowId != value) { _selectedWorkflowId = value; OnChanged(nameof(SelectedWorkflowId)); } }
+        }
+
         private string _pattern = "";
         private string? _selectedSetName;
         private string? _selectedPrintSet;
         private bool _isSaveEnabled;
         private bool _hasUnsavedChanges;
+        private string _outputFolder = string.Empty;
+        private string _overwritePolicyText = string.Empty;
 
         public string Pattern
         {
@@ -82,6 +103,38 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
+        public string OutputFolder
+        {
+            get => _outputFolder;
+            private set
+            {
+                if (_outputFolder != value)
+                {
+                    _outputFolder = value ?? string.Empty;
+                    OnChanged(nameof(OutputFolder));
+                }
+            }
+        }
+
+        public string OverwritePolicyText
+        {
+            get => _overwritePolicyText;
+            private set
+            {
+                if (_overwritePolicyText != value)
+                {
+                    _overwritePolicyText = value ?? string.Empty;
+                    OnChanged(nameof(OverwritePolicyText));
+                }
+            }
+        }
+
+        public void ApplySettings(AppSettings settings)
+        {
+            OutputFolder = settings?.DefaultOutputDir ?? string.Empty;
+            OverwritePolicyText = (settings?.DefaultOverwrite ?? false) ? "True" : "False";
+        }
+
         public void SetDirty(bool dirty)
         {
             HasUnsavedChanges = dirty;
@@ -98,6 +151,19 @@ namespace GSADUs.Revit.Addin.UI
                      && !string.IsNullOrWhiteSpace(Pattern)
                      && Pattern.Contains("{SetName}");
             IsSaveEnabled = ok && IsBaseSaveEnabled;
+        }
+
+        private void Reset()
+        {
+            SelectedWorkflowId = null;
+            Name = string.Empty;
+            WorkflowScope = string.Empty;
+            Description = string.Empty;
+            Pattern = string.Empty;
+            SelectedSetName = null;
+            SelectedPrintSet = null;
+            SetDirty(true);
+            RecomputeLocal();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

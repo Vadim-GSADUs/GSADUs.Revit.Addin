@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.ObjectModel;
 
 namespace GSADUs.Revit.Addin.UI
 {
@@ -9,6 +10,8 @@ namespace GSADUs.Revit.Addin.UI
         private string _workflowScope = string.Empty;
         private string _description = string.Empty;
         private bool _isBaseSaveEnabled;
+
+        public ObservableCollection<string> Scopes { get; } = new();
 
         public string Name
         {

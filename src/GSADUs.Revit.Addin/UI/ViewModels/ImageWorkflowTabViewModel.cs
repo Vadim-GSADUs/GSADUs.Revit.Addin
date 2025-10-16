@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.Windows.Input;
 
 namespace GSADUs.Revit.Addin.UI
 {
@@ -13,13 +14,24 @@ namespace GSADUs.Revit.Addin.UI
             {
                 if (e.PropertyName == nameof(IsBaseSaveEnabled)) Recompute();
             };
+            NewCommand = new DelegateCommand(_ => Reset());
         }
 
-        // Collections
+        public ICommand? PickWhitelistCommand { get; set; }
+        public ICommand NewCommand { get; }
+
+        public string? SelectedWorkflowId { get; set; }
+
+        private string _whitelistSummary = string.Empty;
+        public string WhitelistSummary
+        {
+            get => _whitelistSummary;
+            set { if (_whitelistSummary != value) { _whitelistSummary = value ?? string.Empty; OnChanged(nameof(WhitelistSummary)); } }
+        }
+
         public ObservableCollection<string> AvailablePrintSets { get; } = new();
         public ObservableCollection<SingleViewOption> AvailableSingleViews { get; } = new();
 
-        // File name pattern (extensionless)
         private string _pattern = string.Empty;
         public string Pattern
         {
@@ -27,7 +39,6 @@ namespace GSADUs.Revit.Addin.UI
             set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
-        // Export scope: "PrintSet" or "SingleView"
         private string _exportScope = "PrintSet";
         public string ExportScope
         {
@@ -35,7 +46,6 @@ namespace GSADUs.Revit.Addin.UI
             set { if (_exportScope != value) { _exportScope = value ?? "PrintSet"; OnChanged(nameof(ExportScope)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
-        // Print set selection
         private string? _selectedPrintSet;
         public string? SelectedPrintSet
         {
@@ -43,7 +53,6 @@ namespace GSADUs.Revit.Addin.UI
             set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
-        // Single view selection (id from Revit)
         private string? _selectedSingleViewId;
         public string? SelectedSingleViewId
         {
@@ -51,36 +60,34 @@ namespace GSADUs.Revit.Addin.UI
             set { if (_selectedSingleViewId != value) { _selectedSingleViewId = value; OnChanged(nameof(SelectedSingleViewId)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
-        // Export setup
-        private string _resolution = "Medium"; // Low/Medium/High/Ultra
+        private string _resolution = "Medium";
         public string Resolution
         {
             get => _resolution;
             set { if (_resolution != value) { _resolution = value ?? "Medium"; OnChanged(nameof(Resolution)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
-        private string _cropMode = "Static"; // Static/Auto
+        private string _cropMode = "Static";
         public string CropMode
         {
             get => _cropMode;
             set { if (_cropMode != value) { _cropMode = value ?? "Static"; OnChanged(nameof(CropMode)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
-        private string _cropOffset = string.Empty; // invariant string feet
+        private string _cropOffset = string.Empty;
         public string CropOffset
         {
             get => _cropOffset;
             set { if (_cropOffset != value) { _cropOffset = value ?? string.Empty; OnChanged(nameof(CropOffset)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
-        private string _format = "PNG"; // PNG/BMP/TIFF
+        private string _format = "PNG";
         public string Format
         {
             get => _format;
             set { if (_format != value) { _format = value ?? "PNG"; OnChanged(nameof(Format)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
         }
 
-        // File name adornments
         private string _prefix = string.Empty;
         public string Prefix
         {
@@ -95,7 +102,6 @@ namespace GSADUs.Revit.Addin.UI
             set { if (_suffix != value) { _suffix = value ?? string.Empty; OnChanged(nameof(Suffix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); } }
         }
 
-        // Derived preview and enablement
         private bool _isSaveEnabled;
         public bool IsSaveEnabled
         {
@@ -132,7 +138,6 @@ namespace GSADUs.Revit.Addin.UI
 
         private void Recompute()
         {
-            // Validate numeric crop offset if provided
             var cropOk = true;
             if (string.Equals(CropMode, "Auto", StringComparison.OrdinalIgnoreCase))
             {
@@ -141,15 +146,11 @@ namespace GSADUs.Revit.Addin.UI
                 else
                     cropOk = false;
             }
-            // Scope gating
             var scopeOk = ExportScope == "SingleView" ? !string.IsNullOrWhiteSpace(SelectedSingleViewId)
                                                        : !string.IsNullOrWhiteSpace(SelectedPrintSet);
-            // Pattern must include {SetName}
             var patOk = !string.IsNullOrWhiteSpace(Pattern) && Pattern.Contains("{SetName}");
-            // Format and resolution chosen
             var fmtOk = !string.IsNullOrWhiteSpace(Format);
             var resOk = !string.IsNullOrWhiteSpace(Resolution);
-            // Name required
             var nameOk = !string.IsNullOrWhiteSpace(Name);
             IsSaveEnabled = IsBaseSaveEnabled && nameOk && patOk && fmtOk && resOk && cropOk && scopeOk;
             RecomputePreview();
@@ -172,6 +173,26 @@ namespace GSADUs.Revit.Addin.UI
             try { core = System.IO.Path.GetFileNameWithoutExtension(core); } catch { }
             var ext = MapFormatToExt(Format);
             Preview = $"Preview: {Prefix}{core}{Suffix}{ext}";
+        }
+
+        private void Reset()
+        {
+            SelectedWorkflowId = null;
+            Name = string.Empty;
+            WorkflowScope = string.Empty;
+            Description = string.Empty;
+            Pattern = string.Empty;
+            Prefix = string.Empty;
+            Suffix = string.Empty;
+            Format = "PNG";
+            Resolution = "Medium";
+            CropMode = "Static";
+            CropOffset = string.Empty;
+            ExportScope = "PrintSet";
+            SelectedPrintSet = null;
+            SelectedSingleViewId = null;
+            SetDirty(true);
+            Recompute();
         }
     }
 

@@ -2,10 +2,16 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:GSADUs.Revit.Addin.UI"
+        xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
         Title="Workflow Manager" Width="850" Height="750" MinWidth="820" MinHeight="480"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
     <Window.Resources>
         <ui:EqualityToBooleanConverter x:Key="EqualityToBooleanConverter"/>
+        <CollectionViewSource x:Key="WorkflowsView">
+            <CollectionViewSource.SortDescriptions>
+                <scm:SortDescription PropertyName="Name" Direction="Ascending"/>
+            </CollectionViewSource.SortDescriptions>
+        </CollectionViewSource>
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
@@ -31,23 +37,22 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <ListView x:Name="WorkflowsList" SelectionMode="Single" GridViewColumnHeader.Click="GridViewColumnHeader_Click" Grid.ColumnSpan="2" MouseDoubleClick="WorkflowsList_MouseDoubleClick">
+                    <ListView x:Name="WorkflowsList" SelectionMode="Single" Grid.ColumnSpan="2" MouseDoubleClick="WorkflowsList_MouseDoubleClick"
+                              ItemsSource="{Binding Source={StaticResource WorkflowsView}}">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Width="220" Header="Name" DisplayMemberBinding="{Binding Name}"/>
                                 <GridViewColumn Width="90" Header="Output" DisplayMemberBinding="{Binding Output}"/>
                                 <GridViewColumn Width="200" Header="Scope" DisplayMemberBinding="{Binding Scope}"/>
                                 <GridViewColumn Width="360" Header="Description" DisplayMemberBinding="{Binding Description}"/>
-                                <GridViewColumn Width="100" Header="Audit" DisplayMemberBinding="{Binding Audit}"/>
                             </GridView>
                         </ListView.View>
                     </ListView>
-                    <UniformGrid Grid.Row="1" Rows="1" Columns="6" Margin="0,8,0,0" Grid.ColumnSpan="2">
-                        <Button x:Name="AuditBtn"   MinWidth="110" Margin="4,0" Content="Audit" Click="AuditBtn_Click"/>
-                        <Button x:Name="DupBtn"     MinWidth="110" Margin="4,0" Content="Duplicate" Click="DupBtn_Click"/>
-                        <Button x:Name="RenBtn"     MinWidth="110" Margin="4,0" Content="Rename Workflow" Click="RenBtn_Click"/>
-                        <Button x:Name="DelBtn"     MinWidth="110" Margin="4,0" Content="Delete Workflow" Click="DelBtn_Click"/>
-                        <Button x:Name="SaveCloseBtn" MinWidth="110" Margin="4,0" Content="Save &amp; Close" Click="SaveCloseBtn_Click"/>
+                    <UniformGrid Grid.Row="1" Rows="1" Columns="5" Margin="0,8,0,0" Grid.ColumnSpan="2">
+                        <Button x:Name="DupBtn"     MinWidth="110" Margin="4,0" Content="Duplicate"/>
+                        <Button x:Name="RenBtn"     MinWidth="110" Margin="4,0" Content="Rename Workflow"/>
+                        <Button x:Name="DelBtn"     MinWidth="110" Margin="4,0" Content="Delete Workflow"/>
+                        <Button x:Name="SaveCloseBtn" MinWidth="110" Margin="4,0" Content="Save &amp; Close"/>
                         <Button x:Name="CancelBtn"  MinWidth="110" Margin="4,0" Content="Cancel" IsCancel="True"/>
                     </UniformGrid>
                 </Grid>
@@ -59,15 +64,15 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="PdfSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="SavedCombo_SelectionChanged"/>
-                            <Button x:Name="PdfNewBtn" Content="New" Width="90" Margin="8,0,0,0" Click="PdfNewBtn_Click"/>
+                            <ComboBox x:Name="PdfSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" SelectedValue="{Binding SelectedWorkflowId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button x:Name="PdfNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox x:Name="PdfNameBox" Width="240" TextChanged="PdfNameBox_TextChanged" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox x:Name="PdfNameBox" Width="240" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Text="  Scope:" VerticalAlignment="Center" Margin="12,0,8,0"/>
-                            <ComboBox x:Name="PdfScopeCombo" Width="200" SelectionChanged="ScopeCombo_SelectionChanged" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox x:Name="PdfScopeCombo" Width="200" ItemsSource="{Binding Scopes}" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <GroupBox Header="PDF Export Range" Margin="0,4,0,6">
@@ -94,18 +99,18 @@
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Output folder:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <Label x:Name="PdfOutFolderLabel" VerticalAlignment="Center"/>
+                                    <Label x:Name="PdfOutFolderLabel" VerticalAlignment="Center" Content="{Binding OutputFolder}"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Overwrite policy:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <Label x:Name="PdfOverwriteLabel" VerticalAlignment="Center"/>
+                                    <Label x:Name="PdfOverwriteLabel" VerticalAlignment="Center" Content="{Binding OverwritePolicyText}"/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
 
                         <StackPanel>
                             <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
-                            <TextBox x:Name="PdfDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" TextChanged="DescBox_TextChanged" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox x:Name="PdfDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
@@ -140,21 +145,20 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="ImageSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="SavedCombo_SelectionChanged"/>
-                            <Button x:Name="ImageNewBtn" Content="New" Width="90" Margin="8,0,0,0" Click="ImageNewBtn_Click"/>
+                            <ComboBox x:Name="ImageSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" SelectedValue="{Binding SelectedWorkflowId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button x:Name="ImageNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox x:Name="ImageNameBox" Width="240" TextChanged="NameBox_TextChanged" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox x:Name="ImageNameBox" Width="240" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Text="  Scope:" VerticalAlignment="Center" Margin="12,0,8,0"/>
-                            <ComboBox x:Name="ImageScopeCombo" Width="200" SelectionChanged="ScopeCombo_SelectionChanged" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox x:Name="ImageScopeCombo" Width="200" ItemsSource="{Binding Scopes}" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <GroupBox Header="Image Export Range" Margin="0,8,0,0">
                           <StackPanel Orientation="Vertical" Margin="8,6,8,8">
 
-                            <!-- Print Set row -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                               <RadioButton x:Name="ImageScopePrintSetRadio"
                                            GroupName="ImageExportRange"
@@ -167,7 +171,6 @@
                               <ComboBox x:Name="ImagePrintSetCombo" Width="300" ItemsSource="{Binding AvailablePrintSets}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
 
-                            <!-- Single View row -->
                             <StackPanel Orientation="Horizontal">
                               <RadioButton x:Name="ImageScopeSingleViewRadio"
                                            GroupName="ImageExportRange"
@@ -231,8 +234,8 @@
                         <GroupBox Header="AutoCrop Whitelist" Margin="0,4,0,6">
                             <StackPanel Orientation="Horizontal" Margin="6,2,6,2">
                                 <TextBlock Text="Whitelist Categories:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBlock x:Name="ImageBlacklistSummary" VerticalAlignment="Center" Foreground="Gray"/>
-                                <Button x:Name="ImageBlacklistPickBtn" Content="Pick..." Width="90" Margin="8,0,0,0" Click="ImageBlacklistPickBtn_Click"/>
+                                <TextBlock VerticalAlignment="Center" Foreground="Gray" Text="{Binding WhitelistSummary}"/>
+                                <Button Content="Pick..." Width="90" Margin="8,0,0,0" Command="{Binding PickWhitelistCommand}"/>
                             </StackPanel>
                         </GroupBox>
 

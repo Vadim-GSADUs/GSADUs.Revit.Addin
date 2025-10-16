@@ -6,13 +6,10 @@ using System.Collections.Generic;
 using System.Text.Json;
 using GSADUs.Revit.Addin.Workflows.Pdf;
 using GSADUs.Revit.Addin.Workflows.Image;
+using System.ComponentModel;
 
 namespace GSADUs.Revit.Addin.UI
 {
-    /// <summary>
-    /// Phase 2 presenter. Mediates window lifecycle and selection routing.
-    /// Currently thin to keep behavior unchanged; expanded in later PRs.
-    /// </summary>
     internal sealed class WorkflowManagerPresenter
     {
         private readonly WorkflowCatalogService _catalog;
@@ -25,34 +22,121 @@ namespace GSADUs.Revit.Addin.UI
         {
             _catalog = catalog;
             _dialogs = dialogs;
+
+            // Initialize scope options
+            var scopes = new[] { "CurrentSet", "SelectionSet", "EntireProject" };
+            PdfWorkflow.Scopes.Clear(); foreach (var s in scopes) PdfWorkflow.Scopes.Add(s);
+            ImageWorkflow.Scopes.Clear(); foreach (var s in scopes) ImageWorkflow.Scopes.Add(s);
+
+            // Wire image whitelist command
+            ImageWorkflow.PickWhitelistCommand = new DelegateCommand(_ => ExecutePickWhitelist());
+            UpdateImageWhitelistSummary();
+
+            // Observe SelectedWorkflowId changes
+            PdfWorkflow.PropertyChanged += VmOnPropertyChanged;
+            ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
+        }
+
+        private void VmOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (sender is PdfWorkflowTabViewModel p && e.PropertyName == nameof(PdfWorkflowTabViewModel.SelectedWorkflowId))
+            {
+                LoadWorkflowIntoPdfVm(p.SelectedWorkflowId);
+            }
+            else if (sender is ImageWorkflowTabViewModel i && e.PropertyName == nameof(ImageWorkflowTabViewModel.SelectedWorkflowId))
+            {
+                LoadWorkflowIntoImageVm(i.SelectedWorkflowId);
+            }
+        }
+
+        private void ApplyBaseFields(WorkflowDefinition? wf, WorkflowTabBaseViewModel vm)
+        {
+            vm.Name = wf?.Name ?? string.Empty;
+            vm.WorkflowScope = wf?.Scope ?? string.Empty;
+            vm.Description = wf?.Description ?? string.Empty;
+        }
+
+        private void LoadWorkflowIntoPdfVm(string? id)
+        {
+            var wf = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase));
+            ApplyBaseFields(wf, PdfWorkflow);
+            ApplySavedPdfParameters(wf);
+            PdfWorkflow.SetDirty(false);
+        }
+
+        private void LoadWorkflowIntoImageVm(string? id)
+        {
+            var wf = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>()).FirstOrDefault(w => string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase));
+            ApplyBaseFields(wf, ImageWorkflow);
+            ApplySavedImageParameters(wf);
+            ImageWorkflow.SetDirty(false);
         }
 
         public AppSettings Settings => _catalog.Settings;
 
         public void OnWindowConstructed(WorkflowManagerWindow win)
         {
-            // Placeholder: could set DataContexts in future.
         }
 
         public void OnLoaded(UIDocument? uidoc, WorkflowManagerWindow win)
         {
-            // Placeholder: hook for future hydration orchestration.
+            try { PdfWorkflow.ApplySettings(Settings); } catch { }
+        }
+
+        private void UpdateImageWhitelistSummary()
+        {
+            try
+            {
+                var ids = Settings.ImageBlacklistCategoryIds ?? new List<int>();
+                if (ids.Count == 0) { ImageWorkflow.WhitelistSummary = "(all categories)"; return; }
+                var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
+                string NameOrEnum(int id)
+                {
+                    try
+                    {
+                        if (doc != null)
+                        {
+                            var cat = Category.GetCategory(doc, (BuiltInCategory)id);
+                            if (cat != null && !string.IsNullOrWhiteSpace(cat.Name)) return cat.Name;
+                        }
+                    }
+                    catch { }
+                    var s = ((BuiltInCategory)id).ToString();
+                    return s.StartsWith("OST_") ? s.Substring(4) : s;
+                }
+                ImageWorkflow.WhitelistSummary = string.Join(", ", ids.Select(NameOrEnum));
+            }
+            catch { }
+        }
+
+        private void ExecutePickWhitelist()
+        {
+            try
+            {
+                var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
+                var preselected = Settings.ImageBlacklistCategoryIds ?? new List<int>();
+                var dlg = new CategoriesPickerWindow(preselected, doc, initialScope: 2);
+                if (dlg.ShowDialog() == true)
+                {
+                    Settings.ImageBlacklistCategoryIds = dlg.ResultIds?.Distinct().ToList() ?? new List<int>();
+                    try { _catalog.Save(); } catch { }
+                    UpdateImageWhitelistSummary();
+                }
+            }
+            catch { }
         }
 
         public void OnSavedComboChanged(string tag, WorkflowDefinition? wf, WorkflowManagerWindow win)
         {
-            // Placeholder: will coordinate tab routing later.
         }
 
         public void OnMarkDirty(string tag)
         {
-            // Placeholder: could surface dirty-state telemetry.
             try { PerfLogger.Write("WorkflowManager.MarkDirty", tag, TimeSpan.Zero); } catch { }
         }
 
         public void SaveSettings() => _catalog.Save();
 
-        // ---- Phase 1: move collectors from window into presenter ----
         public void PopulatePdfSources(Document doc)
         {
             if (doc == null) return;
@@ -116,7 +200,47 @@ namespace GSADUs.Revit.Addin.UI
             catch { }
         }
 
-        // ---- Phase 1: move JSON persistence into presenter ----
+        public void ApplySavedPdfParameters(WorkflowDefinition? wf)
+        {
+            try
+            {
+                var p = wf?.Parameters;
+                if (p == null) return;
+                string Gs(string k) =>
+                    (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
+                        ? (v.GetString() ?? string.Empty)
+                        : string.Empty;
+                PdfWorkflow.SelectedSetName  = Gs(PdfWorkflowKeys.PrintSetName);
+                PdfWorkflow.SelectedPrintSet = Gs(PdfWorkflowKeys.ExportSetupName);
+                PdfWorkflow.Pattern          = Gs(PdfWorkflowKeys.FileNamePattern);
+            }
+            catch { }
+        }
+
+        public void ApplySavedImageParameters(WorkflowDefinition? wf)
+        {
+            try
+            {
+                var p = wf?.Parameters;
+                if (p == null) return;
+                string Gs(string k) =>
+                    (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
+                        ? (v.GetString() ?? string.Empty)
+                        : string.Empty;
+                ImageWorkflow.ExportScope          = Gs(ImageWorkflowKeys.exportScope);
+                ImageWorkflow.SelectedPrintSet     = Gs(ImageWorkflowKeys.imagePrintSetName);
+                ImageWorkflow.SelectedSingleViewId = Gs(ImageWorkflowKeys.singleViewId);
+                ImageWorkflow.Pattern              = Gs(ImageWorkflowKeys.fileNamePattern);
+                ImageWorkflow.Prefix               = Gs(ImageWorkflowKeys.prefix);
+                ImageWorkflow.Suffix               = Gs(ImageWorkflowKeys.suffix);
+                ImageWorkflow.Format               = Gs(ImageWorkflowKeys.imageFormat);
+                ImageWorkflow.Resolution           = Gs(ImageWorkflowKeys.resolutionPreset);
+                ImageWorkflow.CropMode             = Gs(ImageWorkflowKeys.cropMode);
+                ImageWorkflow.CropOffset           = Gs(ImageWorkflowKeys.cropOffset);
+            }
+            catch { }
+        }
+
         private static void EnsureActionId(WorkflowDefinition wf, string id)
         {
             wf.ActionIds ??= new List<string>();

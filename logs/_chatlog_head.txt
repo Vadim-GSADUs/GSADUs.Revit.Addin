@@ -1,0 +1,120 @@
+[2025-10-16 15:58:32.556 Conversations E] Loading GitHub account information...
+[2025-10-16 15:58:32.557 CopilotSessionProvider V] CopilotSessionProvider.OnAuthenticationChanged Updating sessionLoad
+[2025-10-16 15:58:33.452 GitHubTokenManager V] Active account changed.
+[2025-10-16 15:58:33.452 Conversations V] Copilot identity is invalidated because GitHub authentication changed
+[2025-10-16 15:58:33.452 AuthManager V] Authentication Info is invalidated because OnCopilotIdentityChanged event was raised
+[2025-10-16 15:58:33.550 Conversations V] Now timestamp: 10/16/2025 3:58:33 PM, Refresh timestamp: 1/1/0001 12:00:00 AM, isGood: False
+[2025-10-16 15:58:33.550 Conversations I] Need to get an auth token.
+[2025-10-16 15:58:33.613 HttpClientFactoryProvider I] Environment variable COPILOT_USE_DEFAULTPROXY found: False
+[2025-10-16 15:58:34.055 Conversations I] Status Code: 200, Reason Phrase: OK
+[2025-10-16 15:58:34.078 Conversations I] Response Content: HasToken: True, ChatEnabled: True, ExpiresAt: 1760632113, RefreshIn: 1500, SKU: trial_30_monthly_subscriber_quota, CopilotExclusion: False, ChatQuota: '', CompletionsQuota: '', LimitedUserResetDate: '', CanSignupForLimited: ''
+[2025-10-16 15:58:34.078 Conversations V] Obtained a token which is valid for 00:25:00. Editor preview features enabled
+[2025-10-16 15:58:34.078 Conversations V] Returning new identity, next refresh due at: 10/16/2025 4:23:34 PM
+[2025-10-16 15:58:34.080 Conversations I] Copilot auth status: OK. Copilot badge status: Active
+[2025-10-16 15:58:34.080 CopilotSessionProvider V] CopilotSessionProvider.OnAuthenticationChanged Updating sessionLoad
+[2025-10-16 15:58:34.093 Conversations V] Now timestamp: 10/16/2025 3:58:34 PM, Refresh timestamp: 10/16/2025 4:23:34 PM, isGood: True
+[2025-10-16 15:58:34.093 Conversations V] Returning cached identity
+[2025-10-16 15:58:34.095 Conversations I] Copilot chat version 17.14.1290-rc+a43fa9a61a.RR (17.14.1290.42047). VS: VisualStudio.17.Release/17.14.17+36603.0. Session: 293c61ea-25fc-41db-b2df-28a8a09bab38. 
+[2025-10-16 15:58:34.140 ConversationsServiceManager V] GetServiceProxy for Microsoft.VisualStudio.Copilot.Service (0.3) (attempt 1/5) started request
+[2025-10-16 15:58:34.204 CopilotSessionProvider V] No solution is open, so there is no solution state persistence folder.
+[2025-10-16 15:58:34.215 Conversations I] Copilot auth status: OK. Copilot badge status: Active
+[2025-10-16 15:58:34.261 VsCurrentWorkspaceIndexService V] No current workspace path available
+[2025-10-16 15:58:34.322 ConversationsServiceManager V] GetServiceProxy for Microsoft.VisualStudio.Copilot.Service (0.3) (attempt 1/5) succeeded
+[2025-10-16 15:58:34.496 Conversations I] [Conversations] MCP sources changed
+[2025-10-16 15:58:34.533 Conversations I] [Conversations] Active solution path changed to 
+[2025-10-16 15:58:34.582 Conversations I] [Conversations] MCP sources changed
+[2025-10-16 15:58:34.606 Conversations I] [Conversations] Found 0 MCP server(s) defined in "C:\Users\Vadim\.mcp.json": 
+[2025-10-16 15:58:34.613 Conversations I] [Conversations] Found 1 MCP server(s) defined in "C:\PROGRAM FILES\MICROSOFT VISUAL STUDIO\2022\COMMUNITY\COMMON7\IDE\EXTENSIONS\MICROSOFT\COPILOT\Mcp\mcp.json": Microsoft Learn
+[2025-10-16 15:58:34.618 Conversations V] [Conversations] Merging server "Microsoft Learn" Tools update.
+[2025-10-16 15:58:34.619 Conversations V] [Conversations] Merging server "Microsoft Learn" Prompts update.
+[2025-10-16 15:58:34.619 Conversations V] [Conversations] Merging server "Microsoft Learn" ResourcesAndResourceTemplates update.
+[2025-10-16 15:58:34.619 Conversations V] [Conversations] Merging server "Microsoft Learn" Instructions update.
+[2025-10-16 15:58:34.629 Conversations I] [Conversations] Loaded cached state for MCP server 'Microsoft Learn' with 3 tools, 0 prompts, and 0 resources.
+[2025-10-16 15:58:34.630 Conversations V] [Conversations] Merging server "Microsoft Learn" ResourcesAndResourceTemplates update.
+[2025-10-16 15:58:34.630 Conversations V] [Conversations] Merging server "Microsoft Learn" Tools update.
+[2025-10-16 15:58:34.631 Conversations V] [Conversations] Merging server "Microsoft Learn" Instructions update.
+[2025-10-16 15:58:34.631 Conversations V] [Conversations] Merging server "Microsoft Learn" Prompts update.
+[2025-10-16 15:58:34.695 Conversations I] [Conversations] Out-of-process service (PID: 24464) finished initializing.
+[2025-10-16 15:58:34.704 Conversations V] # Settings report
+  EnableChatReferencesLinksNewUI=True
+  EnableGrayTextInWindowedChat=False
+  EnableSuggestedPrompts=False
+  EnableChatReferencesLinks=True
+  EnableGrayTextInInlineChat=False
+  EnableEmbeddedDiffMargin=False
+  EnableImageAttachments=True
+  EnableContextAttachments=True
+  EnableMentionDetector=True
+  EnableCopilotEdits=True
+  EnableFilteredRetry=True
+  UseSpeculativeEditsEndpoint=False
+  UseInstantApplyEndpoint=True
+  EnablePatchApplyMappingToolForGptFamily=False
+  EnableFindReplaceMappingToolForClaudeFamily=False
+  MaxGptCodeMapperPromptSize=10000
+  MaxInstantApplyPromptSize=128000
+  MaxSpeculativeEditsPromptSize=30000
+  ModelBasedMapperRequestTimeoutInMinutes=5
+  EnableRetryingLastRequest=True
+  EnableAutoReviewMode=True
+  EnableFunctionsInDefaultChat=True
+  DisabledFunctionsInDefaultChat=
+  EnableFunctionsInCopilotEdits=True
+  DisabledFunctionsInCopilotEdits=lookup_vs;get_debugging_info
+  EnableSKUIsolation=True
+  ExperimentalChat=True
+  SolutionInExperimentalChatEnabled=False
+  TeachReferencesInRespond=True
+  EnableOffTopicFilter=True
+  EnableAskVSAgent=True
+  EnableGenericCodeFileMapper=False
+  EnableCSharpMapperMixedNodeSupport=False
+  EnableAutomaticToolConfirmations=False
+  DefaultScopeAsInt=4
+  EnableSlashCommandExpansion=True
+  EnableFeedbackWindow=True
+  EnableNewWelcomeExperience=True
+  TokenLowWarningThresholdPercentage=120
+  WrapUpResponseOnLowTokensRemaining=False
+  EnableEditsTipping=False
+  EnableMemoriesDetection=False
+  EnabledTools=
+  EnableBringYourOwnKey=True
+  EnableBringYourOwnKeyInternalOnly=False
+  DisabledTools=
+  EnableAutomaticOnTheFlyDocs=False
+  EnableTypeScriptGuidedConversation=False
+  EnableCSharpCodeAnalysis=False
+  EnableCSharpRefineQuickActionSuggestion=False
+  EnableCSharpGenerateMethodImplementation=True
+  UseCombinedDebuggerConversationMode=False
+  EnableTestFailureAnalysis=True
+  EnableWorkspaceAgent=True
+  EnableGithubRemoteAgents=True
+  RemoteAgentsWithImplicitContextAllowed=github
+  EnabledFunctionsForPlatformAgent=
+  EnableErrorContext=True
+  EnableOutputWindowContext=True
+  EnableTraitProviders=True
+  DisabledTraitProviders=
+  EnableSemanticCodeContext=True
+  EnableSemanticContextInChat=True
+  EnableSemanticIndexing=True
+  EnableGithubSemanticSearch=True
+  EnableAzureDevOpsSemanticSearch=True
+  UseChunksAsSearchResultContent=False
+  RemoteSemanticSearchMaxResults=5
+  MaxSolutionSizeForLocalSearch=2500
+  MaxSearchResultChunksPerFile=2
+  EnableSmartDocumentReduction=False
+  RequestBuilderStrategy=legacy
+  AgentModeRequestBuilderStrategy=
+  UseFastTokenCounting=False
+  AdditionalAgentModeTools=
+  EnablePreferenceDetection=False
+  EnableFunctionAgent=False
+  EnableWebSearchFunction=False
+  EnableCopilotExclusion=True
+  EnableTextBasedContentExclusion=False
+  EnableNoExcludedIconInIntellisense=True
+  EnableUnifiedIndexing=True
