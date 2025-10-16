@@ -62,13 +62,9 @@ namespace GSADUs.Revit.Addin.UI
                     OnPropertyChanged(nameof(HasUnsavedChanges));
                     // Clear the unselected dropdown
                     if (string.Equals(_exportScope, "SingleView", StringComparison.OrdinalIgnoreCase))
-                    {
                         SelectedPrintSet = null;
-                    }
                     else
-                    {
                         SelectedSingleViewId = null;
-                    }
                     Recompute();
                 }
             }
@@ -175,6 +171,7 @@ namespace GSADUs.Revit.Addin.UI
                 else
                     cropOk = false;
             }
+
             var scopeOk = ExportScope == "SingleView" ? !string.IsNullOrWhiteSpace(SelectedSingleViewId)
                                                        : !string.IsNullOrWhiteSpace(SelectedPrintSet);
             var patOk = !string.IsNullOrWhiteSpace(Pattern) && Pattern.Contains("{SetName}");
