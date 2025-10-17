@@ -30,13 +30,6 @@ namespace GSADUs.Revit.Addin.UI
         public ICommand? SaveCommand { get; set; }
         public ICommand SaveCsvCommand => _saveCsvCommand;
 
-        private bool _csvEnabled = true;
-        public bool CsvEnabled
-        {
-            get => _csvEnabled;
-            set { if (_csvEnabled != value) { _csvEnabled = value; OnChanged(nameof(CsvEnabled)); _saveCsvCommand.RaiseCanExecuteChanged(); } }
-        }
-
         public ObservableCollection<string> CsvFiles { get; } = new();
 
         private string? _selectedCsv;
@@ -75,7 +68,7 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
-        private bool CanSaveCsv() => CsvEnabled && SelectedCsv != null && IsValidPattern(CsvPattern);
+        private bool CanSaveCsv() => SelectedCsv != null && IsValidPattern(CsvPattern);
 
         public bool IsValidPattern(string? pattern)
         {

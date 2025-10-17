@@ -14,6 +14,19 @@ namespace GSADUs.Revit.Addin.UI
         {
             PropertyChanged += (_, e) =>
             {
+                if (e.PropertyName == nameof(Name)
+                    || e.PropertyName == nameof(ExportScope)
+                    || e.PropertyName == nameof(SelectedPrintSet)
+                    || e.PropertyName == nameof(SelectedSingleViewId)
+                    || e.PropertyName == nameof(Resolution)
+                    || e.PropertyName == nameof(CropMode)
+                    || e.PropertyName == nameof(Format)
+                    || e.PropertyName == nameof(Pattern)
+                    || e.PropertyName == nameof(ImagePattern)
+                    || e.PropertyName == nameof(IsBaseSaveEnabled))
+                {
+                    _saveImageCommand.RaiseCanExecuteChanged();
+                }
                 if (e.PropertyName == nameof(IsBaseSaveEnabled)) Recompute();
                 if (e.PropertyName == nameof(Name) || e.PropertyName == nameof(WorkflowScope) || e.PropertyName == nameof(Description))
                 {
@@ -114,6 +127,7 @@ namespace GSADUs.Revit.Addin.UI
                     else
                         SelectedSingleViewId = null;
                     Recompute();
+                    _saveImageCommand.RaiseCanExecuteChanged();
                 }
             }
         }
@@ -122,42 +136,42 @@ namespace GSADUs.Revit.Addin.UI
         public string? SelectedPrintSet
         {
             get => _selectedPrintSet;
-            set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
+            set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string? _selectedSingleViewId;
         public string? SelectedSingleViewId
         {
             get => _selectedSingleViewId;
-            set { if (_selectedSingleViewId != value) { _selectedSingleViewId = value; OnChanged(nameof(SelectedSingleViewId)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
+            set { if (_selectedSingleViewId != value) { _selectedSingleViewId = value; OnChanged(nameof(SelectedSingleViewId)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string _resolution = "Medium";
         public string Resolution
         {
             get => _resolution;
-            set { if (_resolution != value) { _resolution = value ?? "Medium"; OnChanged(nameof(Resolution)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
+            set { if (_resolution != value) { _resolution = value ?? "Medium"; OnChanged(nameof(Resolution)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string _cropMode = "Static";
         public string CropMode
         {
             get => _cropMode;
-            set { if (_cropMode != value) { _cropMode = value ?? "Static"; OnChanged(nameof(CropMode)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
+            set { if (_cropMode != value) { _cropMode = value ?? "Static"; OnChanged(nameof(CropMode)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string _cropOffset = string.Empty;
         public string CropOffset
         {
             get => _cropOffset;
-            set { if (_cropOffset != value) { _cropOffset = value ?? string.Empty; OnChanged(nameof(CropOffset)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
+            set { if (_cropOffset != value) { _cropOffset = value ?? string.Empty; OnChanged(nameof(CropOffset)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); } }
         }
 
         private string _format = "PNG";
         public string Format
         {
             get => _format;
-            set { if (_format != value) { _format = value ?? "PNG"; OnChanged(nameof(Format)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
+            set { if (_format != value) { _format = value ?? "PNG"; OnChanged(nameof(Format)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string _prefix = string.Empty;
@@ -215,24 +229,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void Recompute()
         {
-            var cropOk = true;
-            if (string.Equals(CropMode, "Auto", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!string.IsNullOrWhiteSpace(CropOffset))
-                    cropOk = double.TryParse(CropOffset.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _);
-                else
-                    cropOk = false;
-            }
-
-            var scopeOk = ExportScope == "SingleView" ? !string.IsNullOrWhiteSpace(SelectedSingleViewId)
-                                                       : !string.IsNullOrWhiteSpace(SelectedPrintSet);
-            var patOk = !string.IsNullOrWhiteSpace(Pattern) && Pattern.Contains("{SetName}");
-            var fmtOk = !string.IsNullOrWhiteSpace(Format);
-            var resOk = !string.IsNullOrWhiteSpace(Resolution);
-            var nameOk = !string.IsNullOrWhiteSpace(Name);
-            IsSaveEnabled = IsBaseSaveEnabled && nameOk && patOk && fmtOk && resOk && cropOk && scopeOk;
             RecomputePreview();
-            _saveImageCommand.RaiseCanExecuteChanged();
         }
 
         private static string MapFormatToExt(string? fmt)
@@ -278,7 +275,22 @@ namespace GSADUs.Revit.Addin.UI
 
         private bool CanSaveImage()
         {
-            return ImageEnabled && SelectedImage != null && IsValidPattern(ImagePattern);
+            var nameOk = !string.IsNullOrWhiteSpace(Name);
+
+            var scopeIsPrintSet = string.Equals(ExportScope, "PrintSet");
+            var scopeIsSingleView = string.Equals(ExportScope, "SingleView");
+            var scopeOk = scopeIsPrintSet || scopeIsSingleView;
+
+            var rangeOk =
+                (scopeIsPrintSet && !string.IsNullOrWhiteSpace(SelectedPrintSet)) ||
+                (scopeIsSingleView && !string.IsNullOrWhiteSpace(SelectedSingleViewId));
+
+            var resOk = !string.IsNullOrWhiteSpace(Resolution);
+            var cropOk = !string.IsNullOrWhiteSpace(CropMode);
+            var fmtOk  = !string.IsNullOrWhiteSpace(Format);
+            var patOk  = IsValidPattern(ImagePattern);
+
+            return IsBaseSaveEnabled && nameOk && scopeOk && rangeOk && resOk && cropOk && fmtOk && patOk;
         }
 
         public bool IsValidPattern(string? pattern)
@@ -293,10 +305,30 @@ namespace GSADUs.Revit.Addin.UI
         {
             get
             {
-                if (columnName == nameof(ImagePattern))
-                {
+                if (columnName == nameof(ImagePattern) || columnName == nameof(Pattern))
                     return IsValidPattern(ImagePattern) ? string.Empty : "Pattern must include {SetName}";
-                }
+
+                if (columnName == nameof(Name))
+                    return string.IsNullOrWhiteSpace(Name) ? "Name is required" : string.Empty;
+
+                if (columnName == nameof(ExportScope))
+                    return (ExportScope == "PrintSet" || ExportScope == "SingleView") ? string.Empty : "Export scope must be PrintSet or SingleView";
+
+                if (columnName == nameof(SelectedPrintSet) && string.Equals(ExportScope, "PrintSet"))
+                    return string.IsNullOrWhiteSpace(SelectedPrintSet) ? "Select a Print Set" : string.Empty;
+
+                if (columnName == nameof(SelectedSingleViewId) && string.Equals(ExportScope, "SingleView"))
+                    return string.IsNullOrWhiteSpace(SelectedSingleViewId) ? "Select a Single View" : string.Empty;
+
+                if (columnName == nameof(Resolution))
+                    return string.IsNullOrWhiteSpace(Resolution) ? "Select a resolution" : string.Empty;
+
+                if (columnName == nameof(CropMode))
+                    return string.IsNullOrWhiteSpace(CropMode) ? "Select a crop mode" : string.Empty;
+
+                if (columnName == nameof(Format))
+                    return string.IsNullOrWhiteSpace(Format) ? "Select an image format" : string.Empty;
+
                 return string.Empty;
             }
         }
