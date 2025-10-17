@@ -516,6 +516,27 @@ namespace GSADUs.Revit.Addin.UI
         {
             _catalog.SaveAndRefresh();
             PopulateSavedLists();
+            // Restore selection for Image tab after save
+            if (!string.IsNullOrWhiteSpace(ImageWorkflow.SelectedWorkflowId))
+            {
+                var exists = ImageWorkflow.SavedWorkflows.Any(w => string.Equals(w.Id, ImageWorkflow.SelectedWorkflowId, StringComparison.OrdinalIgnoreCase));
+                if (exists)
+                {
+                    // Re-assign to trigger hydration if needed
+                    var id = ImageWorkflow.SelectedWorkflowId;
+                    ImageWorkflow.SelectedWorkflowId = null;
+                    ImageWorkflow.SelectedWorkflowId = id;
+                }
+                else if (ImageWorkflow.SavedWorkflows.Count > 0)
+                {
+                    // Fallback: select first available
+                    ImageWorkflow.SelectedWorkflowId = ImageWorkflow.SavedWorkflows[0].Id;
+                }
+            }
+            else if (ImageWorkflow.SavedWorkflows.Count > 0)
+            {
+                ImageWorkflow.SelectedWorkflowId = ImageWorkflow.SavedWorkflows[0].Id;
+            }
         }
 
         public void SaveSettings()

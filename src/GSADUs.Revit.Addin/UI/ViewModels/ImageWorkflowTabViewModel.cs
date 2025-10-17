@@ -56,9 +56,11 @@ namespace GSADUs.Revit.Addin.UI
             get => _selectedWorkflowId;
             set
             {
-                if (_selectedWorkflowId == value) return;
-                _selectedWorkflowId = value;
-                OnChanged(nameof(SelectedWorkflowId));
+                if (!string.Equals(_selectedWorkflowId, value, StringComparison.Ordinal))
+                {
+                    _selectedWorkflowId = value;
+                    OnChanged(nameof(SelectedWorkflowId));
+                }
             }
         }
 
