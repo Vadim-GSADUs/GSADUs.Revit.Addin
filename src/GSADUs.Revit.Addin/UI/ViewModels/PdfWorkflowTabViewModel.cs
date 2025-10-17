@@ -21,7 +21,7 @@ namespace GSADUs.Revit.Addin.UI
                     RecomputeLocal();
                 }
                 // Ensure SavePdfCommand reevaluates when any required field changes
-                if (e.PropertyName == nameof(Name) || e.PropertyName == nameof(SelectedPrintSet) || e.PropertyName == nameof(SelectedSetName) || e.PropertyName == nameof(PdfPattern))
+                if (e.PropertyName == nameof(Name) || e.PropertyName == nameof(SelectedPrintSet) || e.PropertyName == nameof(SelectedSetName) || e.PropertyName == nameof(PdfPattern) || e.PropertyName == nameof(Description))
                 {
                     _savePdfCommand.RaiseCanExecuteChanged();
                 }
@@ -37,13 +37,6 @@ namespace GSADUs.Revit.Addin.UI
         public ICommand SavePdfCommand => _savePdfCommand;
 
         public ObservableCollection<SavedWorkflowListItem> SavedWorkflows { get; } = new();
-        public ObservableCollection<string> PdfFiles { get; } = new();
-
-        [Obsolete("Deprecated: not used for gating or UI")]
-        public bool PdfEnabled { get; set; }
-
-        [Obsolete("Deprecated: not used for gating or UI")]
-        public string? SelectedPdf { get; set; }
 
         // Required for presenter and workflow selection
         private string? _selectedWorkflowId;
@@ -116,7 +109,7 @@ namespace GSADUs.Revit.Addin.UI
         public bool IsSaveEnabled
         {
             get => _isSaveEnabled;
-            private set
+            set
             {
                 if (_isSaveEnabled != value)
                 {
@@ -129,7 +122,7 @@ namespace GSADUs.Revit.Addin.UI
         public bool HasUnsavedChanges
         {
             get => _hasUnsavedChanges;
-            private set
+            set
             {
                 if (_hasUnsavedChanges != value)
                 {
@@ -142,7 +135,7 @@ namespace GSADUs.Revit.Addin.UI
         public string OutputFolder
         {
             get => _outputFolder;
-            private set
+            set
             {
                 if (_outputFolder != value)
                 {
@@ -155,7 +148,7 @@ namespace GSADUs.Revit.Addin.UI
         public string OverwritePolicyText
         {
             get => _overwritePolicyText;
-            private set
+            set
             {
                 if (_overwritePolicyText != value)
                 {
@@ -168,7 +161,7 @@ namespace GSADUs.Revit.Addin.UI
         public string Preview
         {
             get => _preview;
-            private set { if (_preview != value) { _preview = value ?? string.Empty; OnChanged(nameof(Preview)); } }
+            set { if (_preview != value) { _preview = value ?? string.Empty; OnChanged(nameof(Preview)); } }
         }
 
         public void ApplySettings(AppSettings settings)

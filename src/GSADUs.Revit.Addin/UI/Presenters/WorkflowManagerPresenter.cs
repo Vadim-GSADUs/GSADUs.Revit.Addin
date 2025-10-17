@@ -41,7 +41,9 @@ namespace GSADUs.Revit.Addin.UI
             PopulateSavedLists();
 
             // Wire ManagePdfSetup via presenter to UI API
-            PdfWorkflow.ManagePdfSetupCommand = new DelegateCommand(_ => ExecuteManagePdfSetup(), _ => PdfWorkflow.PdfEnabled);
+            PdfWorkflow.ManagePdfSetupCommand = new DelegateCommand(
+                _ => ExecuteManagePdfSetup(),
+                _ => !string.IsNullOrWhiteSpace(PdfWorkflow.SelectedPrintSet));
 
             // Save commands
             PdfWorkflow.SaveCommand = new DelegateCommand(_ => SaveCurrentPdf(), _ => PdfWorkflow.IsSaveEnabled);
@@ -198,8 +200,6 @@ namespace GSADUs.Revit.Addin.UI
             try
             {
                 var doc = uidoc?.Document;
-                PdfWorkflow.PdfEnabled = !(doc == null || doc.IsFamilyDocument);
-
                 // Hydrate collections on load, driven by VM-only bindings
                 PopulateSavedLists();
                 if (doc != null)
@@ -210,7 +210,7 @@ namespace GSADUs.Revit.Addin.UI
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(ex);
+                System.Diagnostics.Trace.WriteLine(ex);
                 throw;
             }
         }
@@ -254,7 +254,7 @@ namespace GSADUs.Revit.Addin.UI
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(ex);
+                System.Diagnostics.Trace.WriteLine(ex);
                 throw;
             }
         }

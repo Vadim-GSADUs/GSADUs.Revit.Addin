@@ -3,7 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:GSADUs.Revit.Addin.UI"
         xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
-        xmlns:diag="clr-namespace:System.Diagnostics;assembly=WindowsBase"
         Title="Workflow Manager" Width="850" Height="750" MinWidth="820" MinHeight="480"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
     <Window.Resources>
@@ -154,15 +153,6 @@
                             <Button x:Name="ImageNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
-                        <!-- Enable/disable Image workflow -->
-                        <CheckBox x:Name="ImageEnabledCheck" Content="Enable Image export" IsChecked="{Binding ImageEnabled}" Margin="0,0,0,6"/>
-
-                        <!-- Image items list -->
-                        <StackPanel Orientation="Vertical" Margin="0,0,0,6">
-                            <TextBlock Text="Images:" Margin="0,0,0,4"/>
-                            <ListBox x:Name="ImageFilesList" ItemsSource="{Binding ImageFiles}" SelectedItem="{Binding SelectedImage, Mode=TwoWay}" Height="120"/>
-                        </StackPanel>
-
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <TextBox x:Name="ImageNameBox" Width="240" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
@@ -170,9 +160,8 @@
                             <ComboBox x:Name="ImageScopeCombo" Width="200" ItemsSource="{Binding Scopes}" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
-                        <GroupBox Header="Image Export Range" Margin="0,8,0,0" IsEnabled="{Binding ImageEnabled}">
+                        <GroupBox Header="Image Export Range" Margin="0,8,0,0">
                             <StackPanel Orientation="Vertical" Margin="8,6,8,8">
-
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                     <RadioButton x:Name="ImageScopePrintSetRadio"
                                            GroupName="ImageExportRange"
@@ -183,7 +172,6 @@
                                            VerticalAlignment="Center"/>
                                     <TextBlock Text="Print set:" Width="110" VerticalAlignment="Center"/>
                                     <ComboBox x:Name="ImagePrintSetCombo" Width="300" ItemsSource="{Binding AvailablePrintSets}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              IsEnabled="{Binding Path=ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=PrintSet}"
                                               Style="{StaticResource DimWhenDisabledCombo}"/>
                                 </StackPanel>
 
@@ -197,14 +185,13 @@
                                            VerticalAlignment="Center"/>
                                     <TextBlock Text="Single view:" Width="110" VerticalAlignment="Center"/>
                                     <ComboBox x:Name="ImageSingleViewCombo" Width="300" ItemsSource="{Binding AvailableSingleViews}" DisplayMemberPath="Label" SelectedValuePath="Id" SelectedValue="{Binding SelectedSingleViewId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              IsEnabled="{Binding Path=ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=SingleView}"
                                               Style="{StaticResource DimWhenDisabledCombo}"/>
                                 </StackPanel>
 
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Image Export Setup" Margin="0,4,0,6" IsEnabled="{Binding ImageEnabled}">
+                        <GroupBox Header="Image Export Setup" Margin="0,4,0,6">
                             <StackPanel Orientation="Vertical" Margin="6">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Resolution:" VerticalAlignment="Center" Margin="0,0,8,0" Width="80"/>
@@ -225,7 +212,7 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Image File" Margin="0,4,0,6" IsEnabled="{Binding ImageEnabled}">
+                        <GroupBox Header="Image File" Margin="0,4,0,6">
                             <StackPanel Orientation="Vertical" Margin="6">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -247,7 +234,7 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="AutoCrop Whitelist" Margin="0,4,0,6" IsEnabled="{Binding ImageEnabled}">
+                        <GroupBox Header="AutoCrop Whitelist" Margin="0,4,0,6">
                             <StackPanel Orientation="Horizontal" Margin="6,2,6,2">
                                 <TextBlock Text="Whitelist Categories:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBlock VerticalAlignment="Center" Foreground="Gray" Text="{Binding WhitelistSummary}"/>
@@ -261,11 +248,8 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right">
-                                <Button.Command>
-                                    <Binding Path="SaveImageCommand" xmlns:diag="clr-namespace:System.Diagnostics;assembly=WindowsBase" diag:PresentationTraceSources.TraceLevel="High" />
-                                </Button.Command>
-                            </Button>
+                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right"
+                                    Command="{Binding SaveImageCommand}" />
                         </DockPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -283,11 +267,6 @@
 
                         <CheckBox x:Name="CsvEnabledCheck" Content="Enable CSV export" IsChecked="{Binding CsvEnabled}" Margin="0,0,0,6"/>
 
-                        <StackPanel Orientation="Vertical" Margin="0,0,0,6">
-                            <TextBlock Text="CSV sources:" Margin="0,0,0,4"/>
-                            <ListBox x:Name="CsvFilesList" ItemsSource="{Binding CsvFiles}" SelectedItem="{Binding SelectedCsv, Mode=TwoWay}" Height="120"/>
-                        </StackPanel>
-
                         <GroupBox Header="CSV File" Margin="0,4,0,6" IsEnabled="{Binding CsvEnabled}">
                             <StackPanel Margin="6" Orientation="Vertical">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -304,7 +283,7 @@
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
                             <Button x:Name="CsvSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right">
                                 <Button.Command>
-                                    <Binding Path="SaveCsvCommand" xmlns:diag="clr-namespace:System.Diagnostics;assembly=WindowsBase" diag:PresentationTraceSources.TraceLevel="High" />
+                                    <Binding Path="SaveCsvCommand" />
                                 </Button.Command>
                             </Button>
                         </DockPanel>
