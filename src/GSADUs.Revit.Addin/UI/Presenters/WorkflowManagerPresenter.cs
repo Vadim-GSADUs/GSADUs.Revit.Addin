@@ -41,7 +41,7 @@ namespace GSADUs.Revit.Addin.UI
             PopulateSavedLists();
 
             // Wire ManagePdfSetup via presenter to UI API
-            PdfWorkflow.ManagePdfSetupCommand = new DelegateCommand(_ => ExecuteManagePdfSetup(), _ => PdfWorkflow.IsPdfEnabled);
+            PdfWorkflow.ManagePdfSetupCommand = new DelegateCommand(_ => ExecuteManagePdfSetup(), _ => PdfWorkflow.PdfEnabled);
 
             // Save commands
             PdfWorkflow.SaveCommand = new DelegateCommand(_ => SaveCurrentPdf(), _ => PdfWorkflow.IsSaveEnabled);
@@ -51,41 +51,27 @@ namespace GSADUs.Revit.Addin.UI
         // Centralized deletion to cascade updates across tabs and main
         public void DeleteWorkflow(string id)
         {
-            if (string.IsNullOrWhiteSpace(id)) return;
+            // Service delete returns success/failure
+            bool deleted = _catalog.Delete(id);
+            if (!deleted) return;
 
-            // Remove from central settings store
-            var settingsList = _catalog.Settings.Workflows;
-            if (settingsList != null)
-            {
-                for (int i = settingsList.Count - 1; i >= 0; i--)
-                {
-                    if (string.Equals(settingsList[i].Id, id, StringComparison.OrdinalIgnoreCase))
-                        settingsList.RemoveAt(i);
-                }
-            }
+            // Refresh unified list from service
+            _catalog.RefreshCaches();
 
-            // Remove from observable main list (source for Main tab)
-            var mainList = _catalog.Workflows;
-            if (mainList != null)
-            {
-                for (int i = mainList.Count - 1; i >= 0; i--)
-                {
-                    if (string.Equals(mainList[i].Id, id, StringComparison.OrdinalIgnoreCase))
-                        mainList.RemoveAt(i);
-                }
-            }
-
-            // Clear selections in tab VMs if they point to deleted id
-            if (string.Equals(PdfWorkflow.SelectedWorkflowId, id, StringComparison.OrdinalIgnoreCase))
-                PdfWorkflow.SelectedWorkflowId = null;
-            if (string.Equals(ImageWorkflow.SelectedWorkflowId, id, StringComparison.OrdinalIgnoreCase))
-                ImageWorkflow.SelectedWorkflowId = null;
-
-            // Refresh SavedWorkflows collections for each tab VM
+            // Repopulate SavedWorkflows for each tab VM
             PopulateSavedLists();
 
-            // Persist and refresh underlying catalog
-            _catalog.SaveAndRefresh();
+            // Cascade clear and reset if deleted workflow was selected
+            if (string.Equals(PdfWorkflow.SelectedWorkflowId, id, StringComparison.OrdinalIgnoreCase))
+            {
+                PdfWorkflow.SelectedWorkflowId = null;
+                PdfWorkflow.Reset();
+            }
+            if (string.Equals(ImageWorkflow.SelectedWorkflowId, id, StringComparison.OrdinalIgnoreCase))
+            {
+                ImageWorkflow.SelectedWorkflowId = null;
+                ImageWorkflow.Reset();
+            }
         }
 
         private void SaveCurrentPdf()
@@ -212,23 +198,63 @@ namespace GSADUs.Revit.Addin.UI
             try
             {
                 var doc = uidoc?.Document;
-                PdfWorkflow.IsPdfEnabled = !(doc == null || doc.IsFamilyDocument);
+                PdfWorkflow.PdfEnabled = !(doc == null || doc.IsFamilyDocument);
 
                 // Hydrate collections on load, driven by VM-only bindings
                 PopulateSavedLists();
                 if (doc != null)
                 {
-                    PopulatePdfSources(doc);
+                    HydratePdfVmSources(doc);
                     PopulateImageSources(doc);
-
-                    // The PdfFiles/ImageFiles lists are example placeholders; clear for now
-                    PdfWorkflow.PdfFiles.Clear();
-                    ImageWorkflow.ImageFiles.Clear();
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(ex);
+                System.Diagnostics.Debug.WriteLine(ex);
+                throw;
+            }
+        }
+
+        public void HydratePdfVmSources(Document doc)
+        {
+            if (doc == null) return;
+            try
+            {
+                // Populate available view sets
+                var setNames = new FilteredElementCollector(doc)
+                    .OfClass(typeof(ViewSheetSet))
+                    .Cast<ViewSheetSet>()
+                    .Select(s => s.Name)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(n => n)
+                    .ToList();
+                var prevSet = PdfWorkflow.SelectedSetName;
+                PdfWorkflow.AvailableViewSets.Clear();
+                foreach (var n in setNames) PdfWorkflow.AvailableViewSets.Add(n);
+                if (!string.IsNullOrWhiteSpace(prevSet) && setNames.Contains(prevSet))
+                    PdfWorkflow.SelectedSetName = prevSet;
+                else
+                    PdfWorkflow.SelectedSetName = null;
+
+                // Populate available export setups
+                var setupNames = new FilteredElementCollector(doc)
+                    .OfClass(typeof(ExportPDFSettings))
+                    .Cast<ExportPDFSettings>()
+                    .Select(s => s.Name)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(n => n)
+                    .ToList();
+                var prevSetup = PdfWorkflow.SelectedPrintSet;
+                PdfWorkflow.AvailableExportSetups.Clear();
+                foreach (var n in setupNames) PdfWorkflow.AvailableExportSetups.Add(n);
+                if (!string.IsNullOrWhiteSpace(prevSetup) && setupNames.Contains(prevSetup))
+                    PdfWorkflow.SelectedPrintSet = prevSetup;
+                else
+                    PdfWorkflow.SelectedPrintSet = null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
                 throw;
             }
         }
@@ -290,38 +316,6 @@ namespace GSADUs.Revit.Addin.UI
         }
 
         public void SaveSettings() => _catalog.Save();
-
-        public void PopulatePdfSources(Document doc)
-        {
-            if (doc == null) return;
-            try
-            {
-                var setNames = new FilteredElementCollector(doc)
-                    .OfClass(typeof(ViewSheetSet))
-                    .Cast<ViewSheetSet>()
-                    .Select(s => s.Name)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(n => n)
-                    .ToList();
-                PdfWorkflow.AvailableViewSets.Clear();
-                foreach (var n in setNames) PdfWorkflow.AvailableViewSets.Add(n);
-
-                var setupNames = new FilteredElementCollector(doc)
-                    .OfClass(typeof(ExportPDFSettings))
-                    .Cast<ExportPDFSettings>()
-                    .Select(s => s.Name)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(n => n)
-                    .ToList();
-                PdfWorkflow.AvailableExportSetups.Clear();
-                foreach (var n in setupNames) PdfWorkflow.AvailableExportSetups.Add(n);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex);
-                throw;
-            }
-        }
 
         public void PopulateImageSources(Document doc)
         {

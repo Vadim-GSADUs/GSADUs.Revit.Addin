@@ -64,12 +64,14 @@ namespace GSADUs.Revit.Addin
             SaveAndRefresh();
         }
 
-        public void Delete(string id)
+        public bool Delete(string id)
         {
-            if (_settings.Workflows == null) return;
+            if (_settings.Workflows == null) return false;
+            int before = _settings.Workflows.Count;
             _settings.Workflows.RemoveAll(w => w.Id == id);
             _settings.SelectedWorkflowIds?.RemoveAll(x => _settings.Workflows.All(w => w.Id != x));
             SaveAndRefresh();
+            return _settings.Workflows.Count < before;
         }
 
         public WorkflowDefinition? Duplicate(string id, string? newName = null)

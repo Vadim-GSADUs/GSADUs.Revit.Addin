@@ -84,15 +84,7 @@
                             <Button x:Name="PdfNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
-                        <!-- Enable/disable PDF workflow -->
-                        <CheckBox x:Name="PdfEnabledCheck" Content="Enable PDF export" IsChecked="{Binding PdfEnabled}" Margin="0,0,0,6"/>
-
-                        <!-- Example list of PDFs to export -->
-                        <StackPanel Orientation="Vertical" Margin="0,0,0,6">
-                            <TextBlock Text="PDF files:" Margin="0,0,0,4"/>
-                            <ListBox x:Name="PdfFilesList" ItemsSource="{Binding PdfFiles}" SelectedItem="{Binding SelectedPdf, Mode=TwoWay}" Height="120"/>
-                        </StackPanel>
-
+                        <!-- Name and Scope -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <TextBox x:Name="PdfNameBox" Width="240" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
@@ -100,14 +92,16 @@
                             <ComboBox x:Name="PdfScopeCombo" Width="200" ItemsSource="{Binding Scopes}" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
-                        <GroupBox Header="PDF Export Range" Margin="0,4,0,6" IsEnabled="{Binding PdfEnabled}">
+                        <!-- View/Sheet Set -->
+                        <GroupBox Header="PDF Export Range" Margin="0,4,0,6">
                             <StackPanel Margin="6" Orientation="Horizontal">
                                 <TextBlock Text="View/Sheet Set:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <ComboBox x:Name="ViewSetCombo" Width="320" ItemsSource="{Binding AvailableViewSets}" SelectedItem="{Binding SelectedSetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="PDF Export Setup" Margin="0,4,0,6" IsEnabled="{Binding PdfEnabled}">
+                        <!-- Export Setup -->
+                        <GroupBox Header="PDF Export Setup" Margin="0,4,0,6">
                             <StackPanel Orientation="Horizontal" Margin="6">
                                 <TextBlock Text="Export Setup:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <ComboBox x:Name="ExportSetupCombo" Width="320" ItemsSource="{Binding AvailableExportSetups}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
@@ -115,15 +109,12 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="PDF File" Margin="0,4,0,6" IsEnabled="{Binding PdfEnabled}">
+                        <!-- File name pattern -->
+                        <GroupBox Header="PDF File" Margin="0,4,0,6">
                             <StackPanel Margin="6" Orientation="Vertical">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="FileNamePatternBox" Width="360">
-                                        <TextBox.Text>
-                                            <Binding Path="PdfPattern" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnDataErrors="True" NotifyOnValidationError="True"/>
-                                        </TextBox.Text>
-                                    </TextBox>
+                                    <TextBox x:Name="FileNamePatternBox" Width="360" Text="{Binding PdfPattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <TextBlock x:Name="PdfPreviewText" Foreground="Gray" Margin="0,0,0,6" Text="{Binding Preview}"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -137,14 +128,16 @@
                             </StackPanel>
                         </GroupBox>
 
+                        <!-- Description -->
                         <StackPanel>
                             <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
                             <TextBox x:Name="PdfDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
+                        <!-- Save Button -->
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
                             <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right"
-                                    Command="{Binding SavePdfCommand, diag:PresentationTraceSources.TraceLevel=High}" />
+                                    Command="{Binding SavePdfCommand}" />
                         </DockPanel>
 
                     </StackPanel>

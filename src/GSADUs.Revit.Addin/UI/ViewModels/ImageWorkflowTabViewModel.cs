@@ -254,7 +254,7 @@ namespace GSADUs.Revit.Addin.UI
             Preview = $"Preview: {Prefix}{core}{Suffix}{ext}";
         }
 
-        private void Reset()
+        public void Reset()
         {
             SelectedWorkflowId = null;
             Name = string.Empty;
