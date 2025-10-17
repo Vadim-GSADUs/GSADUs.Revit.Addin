@@ -7,6 +7,7 @@ using System.Text.Json;
 using GSADUs.Revit.Addin.Workflows.Pdf;
 using GSADUs.Revit.Addin.Workflows.Image;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace GSADUs.Revit.Addin.UI
 {
@@ -36,7 +37,7 @@ namespace GSADUs.Revit.Addin.UI
             PdfWorkflow.PropertyChanged += VmOnPropertyChanged;
             ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
 
-            // Seed saved lists and observe catalog changes via simple method
+            // Seed saved lists
             PopulateSavedLists();
 
             // Wire ManagePdfSetup via presenter to UI API
@@ -45,6 +46,46 @@ namespace GSADUs.Revit.Addin.UI
             // Save commands
             PdfWorkflow.SaveCommand = new DelegateCommand(_ => SaveCurrentPdf(), _ => PdfWorkflow.IsSaveEnabled);
             ImageWorkflow.SaveCommand = new DelegateCommand(_ => SaveCurrentImage(), _ => ImageWorkflow.IsSaveEnabled);
+        }
+
+        // Centralized deletion to cascade updates across tabs and main
+        public void DeleteWorkflow(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return;
+
+            // Remove from central settings store
+            var settingsList = _catalog.Settings.Workflows;
+            if (settingsList != null)
+            {
+                for (int i = settingsList.Count - 1; i >= 0; i--)
+                {
+                    if (string.Equals(settingsList[i].Id, id, StringComparison.OrdinalIgnoreCase))
+                        settingsList.RemoveAt(i);
+                }
+            }
+
+            // Remove from observable main list (source for Main tab)
+            var mainList = _catalog.Workflows;
+            if (mainList != null)
+            {
+                for (int i = mainList.Count - 1; i >= 0; i--)
+                {
+                    if (string.Equals(mainList[i].Id, id, StringComparison.OrdinalIgnoreCase))
+                        mainList.RemoveAt(i);
+                }
+            }
+
+            // Clear selections in tab VMs if they point to deleted id
+            if (string.Equals(PdfWorkflow.SelectedWorkflowId, id, StringComparison.OrdinalIgnoreCase))
+                PdfWorkflow.SelectedWorkflowId = null;
+            if (string.Equals(ImageWorkflow.SelectedWorkflowId, id, StringComparison.OrdinalIgnoreCase))
+                ImageWorkflow.SelectedWorkflowId = null;
+
+            // Refresh SavedWorkflows collections for each tab VM
+            PopulateSavedLists();
+
+            // Persist and refresh underlying catalog
+            _catalog.SaveAndRefresh();
         }
 
         private void SaveCurrentPdf()
@@ -103,24 +144,24 @@ namespace GSADUs.Revit.Addin.UI
                 var cmd = Autodesk.Revit.UI.RevitCommandId.LookupPostableCommandId(Autodesk.Revit.UI.PostableCommand.ExportPDF);
                 if (cmd != null && uiapp.CanPostCommand(cmd)) uiapp.PostCommand(cmd);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                throw;
+            }
         }
 
         private void PopulateSavedLists()
         {
-            try
-            {
-                var all = _catalog.Workflows?.ToList() ?? new List<WorkflowDefinition>();
-                var pdf = all.Where(w => w.Output == OutputType.Pdf)
-                             .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
-                             .ToList();
-                var img = all.Where(w => w.Output == OutputType.Image)
-                             .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
-                             .ToList();
-                PdfWorkflow.SavedWorkflows.Clear(); foreach (var i in pdf) PdfWorkflow.SavedWorkflows.Add(i);
-                ImageWorkflow.SavedWorkflows.Clear(); foreach (var i in img) ImageWorkflow.SavedWorkflows.Add(i);
-            }
-            catch { }
+            var all = _catalog.Workflows?.ToList() ?? new List<WorkflowDefinition>();
+            var pdf = all.Where(w => w.Output == OutputType.Pdf)
+                         .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
+                         .ToList();
+            var img = all.Where(w => w.Output == OutputType.Image)
+                         .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
+                         .ToList();
+            PdfWorkflow.SavedWorkflows.Clear(); foreach (var i in pdf) PdfWorkflow.SavedWorkflows.Add(i);
+            ImageWorkflow.SavedWorkflows.Clear(); foreach (var i in img) ImageWorkflow.SavedWorkflows.Add(i);
         }
 
         private void VmOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -166,40 +207,56 @@ namespace GSADUs.Revit.Addin.UI
 
         public void OnLoaded(UIDocument? uidoc, WorkflowManagerWindow win)
         {
-            try { PdfWorkflow.ApplySettings(Settings); } catch { }
+            PdfWorkflow.ApplySettings(Settings);
 
             try
             {
                 var doc = uidoc?.Document;
                 PdfWorkflow.IsPdfEnabled = !(doc == null || doc.IsFamilyDocument);
+
+                // Hydrate collections on load, driven by VM-only bindings
+                PopulateSavedLists();
+                if (doc != null)
+                {
+                    PopulatePdfSources(doc);
+                    PopulateImageSources(doc);
+
+                    // The PdfFiles/ImageFiles lists are example placeholders; clear for now
+                    PdfWorkflow.PdfFiles.Clear();
+                    ImageWorkflow.ImageFiles.Clear();
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                throw;
+            }
         }
 
         private void UpdateImageWhitelistSummary()
         {
-            try
+            var ids = Settings.ImageBlacklistCategoryIds ?? new List<int>();
+            if (ids.Count == 0) { ImageWorkflow.WhitelistSummary = "(all categories)"; return; }
+            var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
+            string NameOrEnum(int id)
             {
-                var ids = Settings.ImageBlacklistCategoryIds ?? new List<int>();
-                if (ids.Count == 0) { ImageWorkflow.WhitelistSummary = "(all categories)"; return; }
-                var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
-                string NameOrEnum(int id)
+                try
                 {
-                    try
+                    if (doc != null)
                     {
-                        if (doc != null)
-                        {
-                            var cat = Category.GetCategory(doc, (BuiltInCategory)id);
-                            if (cat != null && !string.IsNullOrWhiteSpace(cat.Name)) return cat.Name;
-                        }
+                        var cat = Category.GetCategory(doc, (BuiltInCategory)id);
+                        if (cat != null && !string.IsNullOrWhiteSpace(cat.Name)) return cat.Name;
                     }
-                    catch { }
-                    var s = ((BuiltInCategory)id).ToString();
-                    return s.StartsWith("OST_") ? s.Substring(4) : s;
                 }
-                ImageWorkflow.WhitelistSummary = string.Join(", ", ids.Select(NameOrEnum));
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(ex);
+                    throw;
+                }
+                var s = ((BuiltInCategory)id).ToString();
+                return s.StartsWith("OST_") ? s.Substring(4) : s;
             }
-            catch { }
+            ImageWorkflow.WhitelistSummary = string.Join(", ", ids.Select(NameOrEnum));
         }
 
         private void ExecutePickWhitelist()
@@ -212,11 +269,15 @@ namespace GSADUs.Revit.Addin.UI
                 if (dlg.ShowDialog() == true)
                 {
                     Settings.ImageBlacklistCategoryIds = dlg.ResultIds?.Distinct().ToList() ?? new List<int>();
-                    try { _catalog.Save(); } catch { }
+                    try { _catalog.Save(); } catch (Exception ex) { Debug.WriteLine(ex); throw; }
                     UpdateImageWhitelistSummary();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                throw;
+            }
         }
 
         public void OnSavedComboChanged(string tag, WorkflowDefinition? wf, WorkflowManagerWindow win)
@@ -225,7 +286,7 @@ namespace GSADUs.Revit.Addin.UI
 
         public void OnMarkDirty(string tag)
         {
-            try { PerfLogger.Write("WorkflowManager.MarkDirty", tag, TimeSpan.Zero); } catch { }
+            PerfLogger.Write("WorkflowManager.MarkDirty", tag, TimeSpan.Zero);
         }
 
         public void SaveSettings() => _catalog.Save();
@@ -255,7 +316,11 @@ namespace GSADUs.Revit.Addin.UI
                 PdfWorkflow.AvailableExportSetups.Clear();
                 foreach (var n in setupNames) PdfWorkflow.AvailableExportSetups.Add(n);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                throw;
+            }
         }
 
         public void PopulateImageSources(Document doc)
@@ -290,59 +355,55 @@ namespace GSADUs.Revit.Addin.UI
                 foreach (var o in views)
                     ImageWorkflow.AvailableSingleViews.Add(o);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                throw;
+            }
         }
 
         public void ApplySavedPdfParameters(WorkflowDefinition? wf)
         {
-            try
+            var p = wf?.Parameters;
+            if (p == null)
             {
-                var p = wf?.Parameters;
-                if (p == null)
-                {
-                    // Ensure default prefill when no parameters saved
-                    if (string.IsNullOrWhiteSpace(PdfWorkflow.Pattern)) PdfWorkflow.Pattern = "{SetName}.pdf";
-                    return;
-                }
-                string Gs(string k) =>
-                    (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
-                        ? (v.GetString() ?? string.Empty)
-                        : string.Empty;
-                PdfWorkflow.SelectedSetName  = Gs(PdfWorkflowKeys.PrintSetName);
-                PdfWorkflow.SelectedPrintSet = Gs(PdfWorkflowKeys.ExportSetupName);
-                var pattern = Gs(PdfWorkflowKeys.FileNamePattern);
-                PdfWorkflow.Pattern = string.IsNullOrWhiteSpace(pattern) ? "{SetName}.pdf" : pattern;
+                // Ensure default prefill when no parameters saved
+                if (string.IsNullOrWhiteSpace(PdfWorkflow.Pattern)) PdfWorkflow.Pattern = "{SetName}.pdf";
+                return;
             }
-            catch { }
+            string Gs(string k) =>
+                (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
+                    ? (v.GetString() ?? string.Empty)
+                    : string.Empty;
+            PdfWorkflow.SelectedSetName  = Gs(PdfWorkflowKeys.PrintSetName);
+            PdfWorkflow.SelectedPrintSet = Gs(PdfWorkflowKeys.ExportSetupName);
+            var pattern = Gs(PdfWorkflowKeys.FileNamePattern);
+            PdfWorkflow.Pattern = string.IsNullOrWhiteSpace(pattern) ? "{SetName}.pdf" : pattern;
         }
 
         public void ApplySavedImageParameters(WorkflowDefinition? wf)
         {
-            try
+            var p = wf?.Parameters;
+            if (p == null)
             {
-                var p = wf?.Parameters;
-                if (p == null)
-                {
-                    if (string.IsNullOrWhiteSpace(ImageWorkflow.Pattern)) ImageWorkflow.Pattern = "{SetName}";
-                    return;
-                }
-                string Gs(string k) =>
-                    (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
-                        ? (v.GetString() ?? string.Empty)
-                        : string.Empty;
-                ImageWorkflow.ExportScope          = Gs(ImageWorkflowKeys.exportScope);
-                ImageWorkflow.SelectedPrintSet     = Gs(ImageWorkflowKeys.imagePrintSetName);
-                ImageWorkflow.SelectedSingleViewId = Gs(ImageWorkflowKeys.singleViewId);
-                var pattern = Gs(ImageWorkflowKeys.fileNamePattern);
-                ImageWorkflow.Pattern              = string.IsNullOrWhiteSpace(pattern) ? "{SetName}" : pattern;
-                ImageWorkflow.Prefix               = Gs(ImageWorkflowKeys.prefix);
-                ImageWorkflow.Suffix               = Gs(ImageWorkflowKeys.suffix);
-                ImageWorkflow.Format               = Gs(ImageWorkflowKeys.imageFormat);
-                ImageWorkflow.Resolution           = Gs(ImageWorkflowKeys.resolutionPreset);
-                ImageWorkflow.CropMode             = Gs(ImageWorkflowKeys.cropMode);
-                ImageWorkflow.CropOffset           = Gs(ImageWorkflowKeys.cropOffset);
+                if (string.IsNullOrWhiteSpace(ImageWorkflow.Pattern)) ImageWorkflow.Pattern = "{SetName}";
+                return;
             }
-            catch { }
+            string Gs(string k) =>
+                (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
+                    ? (v.GetString() ?? string.Empty)
+                    : string.Empty;
+            ImageWorkflow.ExportScope          = Gs(ImageWorkflowKeys.exportScope);
+            ImageWorkflow.SelectedPrintSet     = Gs(ImageWorkflowKeys.imagePrintSetName);
+            ImageWorkflow.SelectedSingleViewId = Gs(ImageWorkflowKeys.singleViewId);
+            var pattern = Gs(ImageWorkflowKeys.fileNamePattern);
+            ImageWorkflow.Pattern              = string.IsNullOrWhiteSpace(pattern) ? "{SetName}" : pattern;
+            ImageWorkflow.Prefix               = Gs(ImageWorkflowKeys.prefix);
+            ImageWorkflow.Suffix               = Gs(ImageWorkflowKeys.suffix);
+            ImageWorkflow.Format               = Gs(ImageWorkflowKeys.imageFormat);
+            ImageWorkflow.Resolution           = Gs(ImageWorkflowKeys.resolutionPreset);
+            ImageWorkflow.CropMode             = Gs(ImageWorkflowKeys.cropMode);
+            ImageWorkflow.CropOffset           = Gs(ImageWorkflowKeys.cropOffset);
         }
 
         private static void EnsureActionId(WorkflowDefinition wf, string id)
@@ -385,7 +446,11 @@ namespace GSADUs.Revit.Addin.UI
                 s = s.Replace('/', '_').Replace('\\', '_');
                 pdfPattern = s;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                throw;
+            }
 
             var p = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)
             {
@@ -430,17 +495,13 @@ namespace GSADUs.Revit.Addin.UI
                 if (up == "PNG" || up == "BMP" || up == "TIFF") SP(ImageWorkflowKeys.imageFormat, up);
             }
 
-            try
+            var scope = vm?.ExportScope ?? "PrintSet";
+            imageParams[ImageWorkflowKeys.exportScope] = J(scope);
+            if (string.Equals(scope, "SingleView", StringComparison.OrdinalIgnoreCase))
             {
-                var scope = vm?.ExportScope ?? "PrintSet";
-                imageParams[ImageWorkflowKeys.exportScope] = J(scope);
-                if (string.Equals(scope, "SingleView", StringComparison.OrdinalIgnoreCase))
-                {
-                    var svId = vm?.SelectedSingleViewId;
-                    if (!string.IsNullOrWhiteSpace(svId)) imageParams[ImageWorkflowKeys.singleViewId] = J(svId);
-                }
+                var svId = vm?.SelectedSingleViewId;
+                if (!string.IsNullOrWhiteSpace(svId)) imageParams[ImageWorkflowKeys.singleViewId] = J(svId);
             }
-            catch { }
 
             existing.Parameters = imageParams;
             EnsureActionId(existing, "export-image");
@@ -448,12 +509,8 @@ namespace GSADUs.Revit.Addin.UI
 
         public void RefreshListsAfterSave()
         {
-            try
-            {
-                _catalog.SaveAndRefresh();
-                PopulateSavedLists();
-            }
-            catch { }
+            _catalog.SaveAndRefresh();
+            PopulateSavedLists();
         }
     }
 }

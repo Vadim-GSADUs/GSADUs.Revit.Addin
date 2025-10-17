@@ -95,7 +95,8 @@ namespace GSADUs.Revit.Addin.UI
         {
             if (SelectedWorkflow == null) return;
             var id = SelectedWorkflow.Id;
-            _catalog.Delete(id);
+            // Delegate deletion to presenter so it can cascade updates across tabs
+            _presenter.DeleteWorkflow(id);
             SelectedWorkflow = null;
         }
 

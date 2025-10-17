@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Diagnostics;
 
 namespace GSADUs.Revit.Addin.UI
 {
@@ -19,13 +20,13 @@ namespace GSADUs.Revit.Addin.UI
         {
             if (_activeInstance == null) return false;
             if (!_activeInstance.IsLoaded || !_activeInstance.IsVisible) return false;
-            try { _activeInstance.Topmost = true; _activeInstance.Activate(); _activeInstance.Topmost = false; } catch { }
+            _activeInstance.Topmost = true; _activeInstance.Activate(); _activeInstance.Topmost = false;
             return true;
         }
         private void RegisterInstance()
         {
             _activeInstance = this;
-            try { this.Closed += (_, __) => { if (ReferenceEquals(_activeInstance, this)) _activeInstance = null; }; } catch { }
+            this.Closed += (_, __) => { if (ReferenceEquals(_activeInstance, this)) _activeInstance = null; };
         }
 
         private readonly WorkflowCatalogService _catalog;
@@ -53,27 +54,39 @@ namespace GSADUs.Revit.Addin.UI
 
             DataContext = _vm;
 
+            // Log validation errors globally for faster diagnostics
+            this.AddHandler(Validation.ErrorEvent, new EventHandler<ValidationErrorEventArgs>((s, e) =>
+            {
+                try
+                {
+                    var be = e.Error?.BindingInError as BindingExpression;
+                    var path = be?.ParentBinding?.Path?.Path ?? string.Empty;
+                    Debug.WriteLine($"Validation error on '{path}': {e.Error?.ErrorContent}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(ex);
+                }
+            }));
+
             _presenter.OnWindowConstructed(this);
 
             this.Loaded += WorkflowManagerWindow_Loaded;
         }
 
+        // Helper to require named element lookups
+        private T GetRequired<T>(string name) where T : FrameworkElement
+        {
+            var el = this.FindName(name) as T;
+            if (el == null) throw new InvalidOperationException($"Missing required control: {name}");
+            return el;
+        }
+
         private void WorkflowManagerWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                var uiDoc = RevitUiContext.Current?.ActiveUIDocument;
-                var doc = _doc ?? uiDoc?.Document;
+            var uiDoc = RevitUiContext.Current?.ActiveUIDocument;
 
-                _presenter.OnLoaded(uiDoc, this);
-
-                if (doc != null)
-                {
-                    try { _presenter.PopulateImageSources(doc); } catch { }
-                    try { _presenter.PopulatePdfSources(doc); } catch { }
-                }
-            }
-            catch { }
+            _presenter.OnLoaded(uiDoc, this);
         }
 
         private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -88,8 +101,8 @@ namespace GSADUs.Revit.Addin.UI
 
         private void SaveCloseBtn_Click(object sender, RoutedEventArgs e)
         {
-            try { _presenter.SaveSettings(); } catch { }
-            try { this.Close(); } catch { }
+            _presenter.SaveSettings();
+            this.Close();
         }
     }
 }

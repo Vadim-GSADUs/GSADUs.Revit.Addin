@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:GSADUs.Revit.Addin.UI"
         xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
+        xmlns:diag="clr-namespace:System.Diagnostics;assembly=WindowsBase"
         Title="Workflow Manager" Width="850" Height="750" MinWidth="820" MinHeight="480"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
     <Window.Resources>
@@ -142,23 +143,10 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SavePdfCommand}">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Opacity" Value="1.0"/>
-                                        <Setter Property="Content" Value="Save Workflow"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="False">
-                                                <Setter Property="Opacity" Value="0.5"/>
-                                                <Setter Property="Content" Value="Saved"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
-                                                <Setter Property="Opacity" Value="1.0"/>
-                                                <Setter Property="Content" Value="Save Workflow"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
+                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right">
+                                <Button.Command>
+                                    <Binding Path="SavePdfCommand" diag:PresentationTraceSources.TraceLevel="High" />
+                                </Button.Command>
                             </Button>
                         </DockPanel>
 
@@ -283,23 +271,10 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SaveImageCommand}">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Opacity" Value="1.0"/>
-                                        <Setter Property="Content" Value="Save Workflow"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="False">
-                                                <Setter Property="Opacity" Value="0.5"/>
-                                                <Setter Property="Content" Value="Saved"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
-                                                <Setter Property="Opacity" Value="1.0"/>
-                                                <Setter Property="Content" Value="Save Workflow"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
+                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right">
+                                <Button.Command>
+                                    <Binding Path="SaveImageCommand" xmlns:diag="clr-namespace:System.Diagnostics;assembly=WindowsBase" diag:PresentationTraceSources.TraceLevel="High" />
+                                </Button.Command>
                             </Button>
                         </DockPanel>
                     </StackPanel>
@@ -337,7 +312,11 @@
                         </GroupBox>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="CsvSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SaveCsvCommand}"/>
+                            <Button x:Name="CsvSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right">
+                                <Button.Command>
+                                    <Binding Path="SaveCsvCommand" xmlns:diag="clr-namespace:System.Diagnostics;assembly=WindowsBase" diag:PresentationTraceSources.TraceLevel="High" />
+                                </Button.Command>
+                            </Button>
                         </DockPanel>
                     </StackPanel>
                 </ScrollViewer>
