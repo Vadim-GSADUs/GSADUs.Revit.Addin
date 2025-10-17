@@ -59,6 +59,7 @@ namespace GSADUs.Revit.Addin.UI
                 if (!string.Equals(_selectedWorkflowId, value, StringComparison.Ordinal))
                 {
                     _selectedWorkflowId = value;
+                    System.Diagnostics.Trace.WriteLine($"[ImageVM] SelectedWorkflowId set to '{_selectedWorkflowId ?? "<null>"}' on {GetHashCode()}");
                     OnChanged(nameof(SelectedWorkflowId));
                 }
             }

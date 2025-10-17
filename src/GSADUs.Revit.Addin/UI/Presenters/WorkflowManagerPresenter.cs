@@ -19,8 +19,29 @@ namespace GSADUs.Revit.Addin.UI
         public PdfWorkflowTabViewModel PdfWorkflow { get; } = new PdfWorkflowTabViewModel();
         public ImageWorkflowTabViewModel ImageWorkflow { get; } = new ImageWorkflowTabViewModel();
 
-        public WorkflowManagerPresenter(WorkflowCatalogService catalog, IDialogService dialogs)
+        public WorkflowManagerPresenter(
+            WorkflowCatalogService catalog,
+            IDialogService dialogs)
         {
+            // File-based Trace listener setup
+            try
+            {
+                var dir = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "GSADUs.AddinLogs");
+                System.IO.Directory.CreateDirectory(dir);
+                var logPath = System.IO.Path.Combine(dir, "workflow-manager.log");
+                if (!System.Diagnostics.Trace.Listeners.OfType<System.Diagnostics.TextWriterTraceListener>()
+                      .Any(l => string.Equals(l.Writer?.ToString(), logPath, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var tw = System.IO.File.CreateText(logPath); tw.AutoFlush = true;
+                    System.Diagnostics.Trace.Listeners.Add(new System.Diagnostics.TextWriterTraceListener(tw));
+                    System.Diagnostics.Trace.AutoFlush = true;
+                    System.Diagnostics.Trace.WriteLine($"[Init] Trace listener started at {DateTime.Now:u} -> {logPath}");
+                }
+            }
+            catch { /* ignore */ }
+
             _catalog = catalog;
             _dialogs = dialogs;
 
@@ -36,6 +57,9 @@ namespace GSADUs.Revit.Addin.UI
             // Observe SelectedWorkflowId changes
             PdfWorkflow.PropertyChanged += VmOnPropertyChanged;
             ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
+            System.Diagnostics.Debug.WriteLine($"[Presenter] Image VM instance at attach: {ImageWorkflow.GetHashCode()}");
+            ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
+            System.Diagnostics.Trace.WriteLine("[Presenter] Subscribed to Image VM PropertyChanged");
 
             // Seed saved lists
             PopulateSavedLists();
@@ -160,6 +184,7 @@ namespace GSADUs.Revit.Addin.UI
             }
             else if (sender is ImageWorkflowTabViewModel i && e.PropertyName == nameof(ImageWorkflowTabViewModel.SelectedWorkflowId))
             {
+                System.Diagnostics.Trace.WriteLine($"[Presenter] PropertyChanged(Image.SelectedWorkflowId) from sender {sender?.GetHashCode()} value={(i.SelectedWorkflowId ?? "<null>")}");
                 LoadWorkflowIntoImageVm(i.SelectedWorkflowId);
             }
         }
@@ -542,6 +567,15 @@ namespace GSADUs.Revit.Addin.UI
         public void SaveSettings()
         {
             _catalog.Save();
+        }
+
+        private void ImageWorkflow_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (sender is ImageWorkflowTabViewModel i && e.PropertyName == nameof(ImageWorkflowTabViewModel.SelectedWorkflowId))
+            {
+                System.Diagnostics.Debug.WriteLine($"[Presenter] PropertyChanged(Image.SelectedWorkflowId) from sender {sender?.GetHashCode()} value={(i.SelectedWorkflowId ?? "<null>")}");
+                LoadWorkflowIntoImageVm(i.SelectedWorkflowId);
+            }
         }
     }
 }
