@@ -1,0 +1,19 @@
+diff --git a/YourApp/ViewModels/ImageWorkflowTabViewModel.cs b/YourApp/ViewModels/ImageWorkflowTabViewModel.cs
+index 0000000..0000001 100644
+--- a/YourApp/ViewModels/ImageWorkflowTabViewModel.cs
++++ b/YourApp/ViewModels/ImageWorkflowTabViewModel.cs
+@@ -1,6 +1,23 @@
+-// before
+-public Guid SelectedWorkflowId { get; set; }
++// after
++private Guid _selectedWorkflowId;
++public Guid SelectedWorkflowId
++{
++    get => _selectedWorkflowId;
++    set
++    {
++        if (_selectedWorkflowId == value) return;
++        _selectedWorkflowId = value;
++        OnPropertyChanged(nameof(SelectedWorkflowId));
++    }
++}
