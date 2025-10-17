@@ -143,11 +143,8 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right">
-                                <Button.Command>
-                                    <Binding Path="SavePdfCommand" diag:PresentationTraceSources.TraceLevel="High" />
-                                </Button.Command>
-                            </Button>
+                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right"
+                                    Command="{Binding SavePdfCommand, diag:PresentationTraceSources.TraceLevel=High}" />
                         </DockPanel>
 
                     </StackPanel>

@@ -27,6 +27,7 @@ namespace GSADUs.Revit.Addin.UI
             };
             NewCommand = new DelegateCommand(_ => Reset());
 
+            // SavePdfCommand: CanExecute checks all required PDF fields and PdfEnabled
             _savePdfCommand = new DelegateCommand(
                 _ => SaveCommand?.Execute(null),
                 _ => CanSavePdf());
@@ -35,6 +36,9 @@ namespace GSADUs.Revit.Addin.UI
         public ICommand NewCommand { get; }
         public ICommand? ManagePdfSetupCommand { get; set; }
         public ICommand? SaveCommand { get; set; }
+        /// <summary>
+        /// SavePdfCommand is enabled only when all required PDF workflow fields are valid.
+        /// </summary>
         public ICommand SavePdfCommand => _savePdfCommand;
 
         public ObservableCollection<SavedWorkflowListItem> SavedWorkflows { get; } = new();
@@ -43,6 +47,9 @@ namespace GSADUs.Revit.Addin.UI
         public ObservableCollection<string> PdfFiles { get; } = new();
 
         private string? _selectedPdf;
+        /// <summary>
+        /// The currently selected PDF file. Changing this will update SavePdfCommand enablement.
+        /// </summary>
         public string? SelectedPdf
         {
             get => _selectedPdf;
@@ -52,12 +59,16 @@ namespace GSADUs.Revit.Addin.UI
                 {
                     _selectedPdf = value;
                     OnChanged(nameof(SelectedPdf));
-                    _savePdfCommand.RaiseCanExecuteChanged();
+                    // Update SavePdfCommand enablement when selection changes
+                    _savePdfCommand.RaiseCanExecuteChanged(); // [D] Inline: SavePdfCommand enablement update
                 }
             }
         }
 
         private bool _isPdfEnabled = true;
+        /// <summary>
+        /// Controls whether PDF export is enabled. Changing this will update SavePdfCommand enablement.
+        /// </summary>
         public bool IsPdfEnabled
         {
             get => _isPdfEnabled;
@@ -68,6 +79,7 @@ namespace GSADUs.Revit.Addin.UI
                     _isPdfEnabled = value;
                     OnChanged(nameof(IsPdfEnabled));
                     System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+                    // [D] Inline: SavePdfCommand enablement update
                     _savePdfCommand.RaiseCanExecuteChanged();
                     // Keep PdfEnabled alias in sync
                     OnChanged(nameof(PdfEnabled));
@@ -75,7 +87,9 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
-        // Alias for binding compatibility with updated XAML
+        /// <summary>
+        /// Alias for IsPdfEnabled for XAML binding compatibility.
+        /// </summary>
         public bool PdfEnabled
         {
             get => IsPdfEnabled;
@@ -98,6 +112,9 @@ namespace GSADUs.Revit.Addin.UI
         private string _overwritePolicyText = string.Empty;
         private string _preview = string.Empty;
 
+        /// <summary>
+        /// The file name pattern for PDF export. Changing this will update SavePdfCommand enablement.
+        /// </summary>
         public string Pattern
         {
             get => _pattern;
@@ -112,12 +129,15 @@ namespace GSADUs.Revit.Addin.UI
                     HasUnsavedChanges = true;
                     OnChanged(nameof(HasUnsavedChanges));
                     RecomputeLocal();
+                    // [D] Inline: SavePdfCommand enablement update
                     _savePdfCommand.RaiseCanExecuteChanged();
                 }
             }
         }
 
-        // Alias used by XAML for validation-friendly binding name
+        /// <summary>
+        /// Alias for Pattern for XAML binding compatibility.
+        /// </summary>
         public string PdfPattern
         {
             get => Pattern;
@@ -263,9 +283,16 @@ namespace GSADUs.Revit.Addin.UI
             _savePdfCommand.RaiseCanExecuteChanged();
         }
 
+        /// <summary>
+        /// Determines if SavePdfCommand can execute. [D] Inline: SavePdfCommand enablement logic
+        /// </summary>
         private bool CanSavePdf()
         {
-            return PdfEnabled && SelectedPdf != null && IsValidPattern(PdfPattern);
+            // [D] SavePdfCommand enablement logic per requirements
+            return PdfEnabled 
+                && SelectedPdf != null 
+                && !string.IsNullOrWhiteSpace(PdfPattern) 
+                && PdfPattern.Contains("{SetName}");
         }
 
         public bool IsValidPattern(string? pattern)
