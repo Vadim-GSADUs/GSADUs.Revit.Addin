@@ -1,13 +1,13 @@
 namespace GSADUs.Revit.Addin.Workflows.Image
 {
     /// <summary>
-    /// Image Export workflow parameter keys (simplified – view selection removed; print set now required for scoping).
+    /// Image Export workflow parameter keys (simplified â€“ view selection removed; print set now required for scoping).
     /// </summary>
     internal static class ImageWorkflowKeys
     {
-        // Core (print set only – specific view selection removed)
+        // Core (print set only â€“ specific view selection removed)
         public const string imagePrintSetName = "imagePrintSetName"; // View/Sheet set name
-        public const string appendViewName = "appendViewName";       // bool; default true (legacy – still honored if present)
+        public const string appendViewName = "appendViewName";       // bool; default true (legacy â€“ still honored if present)
 
         // New: Export Range scope
         public const string exportScope = "exportScope";             // "PrintSet" | "SingleView"
@@ -19,14 +19,12 @@ namespace GSADUs.Revit.Addin.Workflows.Image
 
         // File naming
         public const string fileNamePattern = "fileNamePattern";     // must contain {SetName}
-        public const string prefix = "prefix";                       // optional prefix
-        public const string suffix = "suffix";                       // optional suffix
 
         // Crop
         public const string cropOffset = "cropOffset";               // double feet, store only if > 0
         public const string cropMode = "cropMode";                   // Auto | Static (omit if Static)
 
-        // Visual overrides (reserved – still unused here)
+        // Visual overrides (reserved â€“ still unused here)
         public const string background = "background";               // FromView | White | Black | Transparent (omit if FromView)
         public const string visualStyle = "visualStyle";             // FromView | HiddenLine | Shaded | ConsistentColors | Realistic | Wireframe (omit if FromView)
 
@@ -38,8 +36,6 @@ namespace GSADUs.Revit.Addin.Workflows.Image
         public const string ImageFormat = imageFormat;
         public const string ResolutionPreset = resolutionPreset;
         public const string FileNamePattern = fileNamePattern;
-        public const string Prefix = prefix;
-        public const string Suffix = suffix;
         public const string CropOffset = cropOffset;
         public const string CropMode = cropMode;
         public const string Background = background;

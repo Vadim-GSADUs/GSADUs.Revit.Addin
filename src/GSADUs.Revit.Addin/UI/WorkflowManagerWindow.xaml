@@ -172,7 +172,9 @@
                                            VerticalAlignment="Center"/>
                                     <TextBlock Text="Print set:" Width="110" VerticalAlignment="Center"/>
                                     <ComboBox x:Name="ImagePrintSetCombo" Width="300" ItemsSource="{Binding AvailablePrintSets}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              Style="{StaticResource DimWhenDisabledCombo}"/>
+                                              IsEnabled="{Binding ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=PrintSet}"
+                                              Style="{StaticResource DimWhenDisabledCombo}"
+                                              VerticalAlignment="Center"/>
                                 </StackPanel>
 
                                 <StackPanel Orientation="Horizontal">
@@ -185,7 +187,9 @@
                                            VerticalAlignment="Center"/>
                                     <TextBlock Text="Single view:" Width="110" VerticalAlignment="Center"/>
                                     <ComboBox x:Name="ImageSingleViewCombo" Width="300" ItemsSource="{Binding AvailableSingleViews}" DisplayMemberPath="Label" SelectedValuePath="Id" SelectedValue="{Binding SelectedSingleViewId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              Style="{StaticResource DimWhenDisabledCombo}"/>
+                                              IsEnabled="{Binding ExportScope, Converter={StaticResource EqualityToBooleanConverter}, ConverterParameter=SingleView}"
+                                              Style="{StaticResource DimWhenDisabledCombo}"
+                                              VerticalAlignment="Center"/>
                                 </StackPanel>
 
                             </StackPanel>

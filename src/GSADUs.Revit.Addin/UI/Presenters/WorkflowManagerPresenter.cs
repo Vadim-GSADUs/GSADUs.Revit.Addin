@@ -259,6 +259,52 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
+        private void ExecutePickWhitelist()
+        {
+            try
+            {
+                var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
+                var preselected = Settings.ImageBlacklistCategoryIds ?? new List<int>();
+                var dlg = new CategoriesPickerWindow(preselected, doc, initialScope: 2);
+                if (dlg.ShowDialog() == true)
+                {
+                    Settings.ImageBlacklistCategoryIds = dlg.ResultIds?.Distinct().ToList() ?? new List<int>();
+                    try { _catalog.Save(); } catch (Exception ex) { Debug.WriteLine(ex); throw; }
+                    // Update summary immediately after selection
+                    var summary = ComputeImageWhitelistSummary();
+                    ImageWorkflow.WhitelistSummary = summary;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                throw;
+            }
+        }
+
+        // Helper for summary computation
+        private string ComputeImageWhitelistSummary()
+        {
+            var ids = Settings.ImageBlacklistCategoryIds ?? new List<int>();
+            if (ids.Count == 0) return "(all categories)";
+            var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
+            string NameOrEnum(int id)
+            {
+                try
+                {
+                    if (doc != null)
+                    {
+                        var cat = Category.GetCategory(doc, (BuiltInCategory)id);
+                        if (cat != null && !string.IsNullOrWhiteSpace(cat.Name)) return cat.Name;
+                    }
+                }
+                catch { }
+                var s = ((BuiltInCategory)id).ToString();
+                return s.StartsWith("OST_") ? s.Substring(4) : s;
+            }
+            return string.Join(", ", ids.Select(NameOrEnum));
+        }
+
         private void UpdateImageWhitelistSummary()
         {
             var ids = Settings.ImageBlacklistCategoryIds ?? new List<int>();
@@ -282,42 +328,11 @@ namespace GSADUs.Revit.Addin.UI
                 var s = ((BuiltInCategory)id).ToString();
                 return s.StartsWith("OST_") ? s.Substring(4) : s;
             }
-            ImageWorkflow.WhitelistSummary = string.Join(", ", ids.Select(NameOrEnum));
+            var computedSummary = string.Join(", ", ids.Select(NameOrEnum));
+            ImageWorkflow.WhitelistSummary = computedSummary;
         }
 
-        private void ExecutePickWhitelist()
-        {
-            try
-            {
-                var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
-                var preselected = Settings.ImageBlacklistCategoryIds ?? new List<int>();
-                var dlg = new CategoriesPickerWindow(preselected, doc, initialScope: 2);
-                if (dlg.ShowDialog() == true)
-                {
-                    Settings.ImageBlacklistCategoryIds = dlg.ResultIds?.Distinct().ToList() ?? new List<int>();
-                    try { _catalog.Save(); } catch (Exception ex) { Debug.WriteLine(ex); throw; }
-                    UpdateImageWhitelistSummary();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex);
-                throw;
-            }
-        }
-
-        public void OnSavedComboChanged(string tag, WorkflowDefinition? wf, WorkflowManagerWindow win)
-        {
-        }
-
-        public void OnMarkDirty(string tag)
-        {
-            PerfLogger.Write("WorkflowManager.MarkDirty", tag, TimeSpan.Zero);
-        }
-
-        public void SaveSettings() => _catalog.Save();
-
-        public void PopulateImageSources(Document doc)
+        private void PopulateImageSources(Document doc)
         {
             if (doc == null) return;
             try
@@ -392,8 +407,6 @@ namespace GSADUs.Revit.Addin.UI
             ImageWorkflow.SelectedSingleViewId = Gs(ImageWorkflowKeys.singleViewId);
             var pattern = Gs(ImageWorkflowKeys.fileNamePattern);
             ImageWorkflow.Pattern              = string.IsNullOrWhiteSpace(pattern) ? "{SetName}" : pattern;
-            ImageWorkflow.Prefix               = Gs(ImageWorkflowKeys.prefix);
-            ImageWorkflow.Suffix               = Gs(ImageWorkflowKeys.suffix);
             ImageWorkflow.Format               = Gs(ImageWorkflowKeys.imageFormat);
             ImageWorkflow.Resolution           = Gs(ImageWorkflowKeys.resolutionPreset);
             ImageWorkflow.CropMode             = Gs(ImageWorkflowKeys.cropMode);
@@ -470,8 +483,6 @@ namespace GSADUs.Revit.Addin.UI
 
             SP(ImageWorkflowKeys.imagePrintSetName, vm?.SelectedPrintSet);
             SP(ImageWorkflowKeys.fileNamePattern, pat);
-            SP(ImageWorkflowKeys.prefix, vm?.Prefix);
-            SP(ImageWorkflowKeys.suffix, vm?.Suffix);
 
             var cropMode = vm?.CropMode;
             if (!string.IsNullOrWhiteSpace(cropMode) && !string.Equals(cropMode, "Static", StringComparison.OrdinalIgnoreCase))
@@ -505,6 +516,11 @@ namespace GSADUs.Revit.Addin.UI
         {
             _catalog.SaveAndRefresh();
             PopulateSavedLists();
+        }
+
+        public void SaveSettings()
+        {
+            _catalog.Save();
         }
     }
 }

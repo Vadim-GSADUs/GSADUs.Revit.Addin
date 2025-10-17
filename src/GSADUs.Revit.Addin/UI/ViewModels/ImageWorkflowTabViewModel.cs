@@ -99,7 +99,7 @@ namespace GSADUs.Revit.Addin.UI
         public string Pattern
         {
             get => _pattern;
-            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); OnChanged(nameof(ImagePattern)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); OnChanged(nameof(ImagePattern)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         // Alias for binding
@@ -174,20 +174,6 @@ namespace GSADUs.Revit.Addin.UI
             set { if (_format != value) { _format = value ?? "PNG"; OnChanged(nameof(Format)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
-        private string _prefix = string.Empty;
-        public string Prefix
-        {
-            get => _prefix;
-            set { if (_prefix != value) { _prefix = value ?? string.Empty; OnChanged(nameof(Prefix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); OnChanged(nameof(ImagePreviewText)); } }
-        }
-
-        private string _suffix = string.Empty;
-        public string Suffix
-        {
-            get => _suffix;
-            set { if (_suffix != value) { _suffix = value ?? string.Empty; OnChanged(nameof(Suffix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); OnChanged(nameof(ImagePreviewText)); } }
-        }
-
         private bool _isSaveEnabled;
         public bool IsSaveEnabled
         {
@@ -199,7 +185,7 @@ namespace GSADUs.Revit.Addin.UI
         public string Preview
         {
             get => _preview;
-            private set { if (_preview != value) { _preview = value; OnChanged(nameof(Preview)); OnChanged(nameof(ImagePreviewText)); } }
+            private set { if (_preview != value) { _preview = value; OnChanged(nameof(Preview)); } }
         }
 
         // Computed property for the image tab preview text
@@ -248,7 +234,7 @@ namespace GSADUs.Revit.Addin.UI
             if (string.IsNullOrWhiteSpace(core)) core = "{SetName}";
             try { core = System.IO.Path.GetFileNameWithoutExtension(core); } catch { }
             var ext = MapFormatToExt(Format);
-            Preview = $"Preview: {Prefix}{core}{Suffix}{ext}";
+            Preview = $"Preview: {core}{ext}";
         }
 
         public void Reset()
@@ -258,8 +244,6 @@ namespace GSADUs.Revit.Addin.UI
             WorkflowScope = string.Empty;
             Description = string.Empty;
             Pattern = "{SetName}";
-            Prefix = string.Empty;
-            Suffix = string.Empty;
             Format = "PNG";
             Resolution = "Medium";
             CropMode = "Static";

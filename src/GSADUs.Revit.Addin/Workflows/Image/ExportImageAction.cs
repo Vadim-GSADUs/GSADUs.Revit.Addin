@@ -77,15 +77,12 @@ namespace GSADUs.Revit.Addin.Workflows.Image
         private (string baseNoExt, string ext, string fileName) BuildImageFileName(
             string pattern,
             string setName,
-            string? prefix,
-            string? suffix,
             ImageFileType type,
             string? viewNameOrNull)
         {
             // 1) Expand core tokens like UI
             var expanded = ExpandTokens(pattern ?? "{SetName}", setName);
-            var core = System.IO.Path.GetFileNameWithoutExtension(expanded);
-            core = SanitizeFileComponent(core);
+            var core = SanitizeFileComponent(System.IO.Path.GetFileNameWithoutExtension(expanded));
 
             // 2) Replace {ViewName} only if present; never auto-append
             if (core.Contains("{ViewName}", StringComparison.Ordinal))
@@ -94,14 +91,10 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 core = core.Replace("{ViewName}", vn);
             }
 
-            // 3) Prefix/Suffix exactly as UI (no separators)
-            if (!string.IsNullOrWhiteSpace(prefix)) core = SanitizeFileComponent(prefix) + core;
-            if (!string.IsNullOrWhiteSpace(suffix)) core = core + SanitizeFileComponent(suffix);
-
-            // 4) Fallback when empty after sanitation
+            // 3) Fallback when empty after sanitation
             var baseNoExt = string.IsNullOrWhiteSpace(core) ? "export" : core;
 
-            // 5) Extension consistent with UI
+            // 4) Extension consistent with UI
             var ext = MapImageTypeToExt(type);
             var fileName = baseNoExt + ext;
             return (baseNoExt, ext, fileName);
@@ -344,8 +337,6 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                     var (baseNoExt, ext, fileName) = BuildImageFileName(
                         patternSet,
                         setName,
-                        GetStr(ImageWorkflowKeys.prefix),
-                        GetStr(ImageWorkflowKeys.suffix),
                         type,
                         null);
 
@@ -519,8 +510,6 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                     var (baseNoExt, ext, fileName) = BuildImageFileName(
                         pattern,
                         setName,
-                        GetStr(ImageWorkflowKeys.prefix),
-                        GetStr(ImageWorkflowKeys.suffix),
                         type,
                         view.Name);
 
