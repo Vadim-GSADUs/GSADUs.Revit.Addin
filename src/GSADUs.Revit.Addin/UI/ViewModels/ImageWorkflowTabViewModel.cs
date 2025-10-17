@@ -50,7 +50,17 @@ namespace GSADUs.Revit.Addin.UI
         public ICommand? SaveCommand { get; set; }
         public ICommand SaveImageCommand => _saveImageCommand;
 
-        public string? SelectedWorkflowId { get; set; }
+        private string? _selectedWorkflowId;
+        public string? SelectedWorkflowId
+        {
+            get => _selectedWorkflowId;
+            set
+            {
+                if (_selectedWorkflowId == value) return;
+                _selectedWorkflowId = value;
+                OnChanged(nameof(SelectedWorkflowId));
+            }
+        }
 
         private string _whitelistSummary = string.Empty;
         public string WhitelistSummary
