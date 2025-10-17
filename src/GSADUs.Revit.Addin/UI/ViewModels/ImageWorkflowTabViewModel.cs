@@ -6,8 +6,10 @@ using System.Windows.Input;
 
 namespace GSADUs.Revit.Addin.UI
 {
-    internal sealed class ImageWorkflowTabViewModel : WorkflowTabBaseViewModel, INotifyPropertyChanged
+    internal sealed class ImageWorkflowTabViewModel : WorkflowTabBaseViewModel, INotifyPropertyChanged, IDataErrorInfo
     {
+        private readonly DelegateCommand _saveImageCommand;
+
         public ImageWorkflowTabViewModel()
         {
             PropertyChanged += (_, e) =>
@@ -18,9 +20,14 @@ namespace GSADUs.Revit.Addin.UI
                     HasUnsavedChanges = true;
                     OnPropertyChanged(nameof(HasUnsavedChanges));
                     Recompute();
+                    _saveImageCommand.RaiseCanExecuteChanged();
                 }
             };
             NewCommand = new DelegateCommand(_ => Reset());
+
+            _saveImageCommand = new DelegateCommand(
+                _ => SaveCommand?.Execute(null),
+                _ => CanSaveImage());
         }
 
         public ObservableCollection<SavedWorkflowListItem> SavedWorkflows { get; } = new();
@@ -28,6 +35,7 @@ namespace GSADUs.Revit.Addin.UI
         public ICommand? PickWhitelistCommand { get; set; }
         public ICommand NewCommand { get; }
         public ICommand? SaveCommand { get; set; }
+        public ICommand SaveImageCommand => _saveImageCommand;
 
         public string? SelectedWorkflowId { get; set; }
 
@@ -41,11 +49,51 @@ namespace GSADUs.Revit.Addin.UI
         public ObservableCollection<string> AvailablePrintSets { get; } = new();
         public ObservableCollection<SingleViewOption> AvailableSingleViews { get; } = new();
 
+        // New list of images and selection
+        public ObservableCollection<string> ImageFiles { get; } = new();
+
+        private string? _selectedImage;
+        public string? SelectedImage
+        {
+            get => _selectedImage;
+            set
+            {
+                if (_selectedImage != value)
+                {
+                    _selectedImage = value;
+                    OnChanged(nameof(SelectedImage));
+                    _saveImageCommand.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        private bool _imageEnabled = true;
+        public bool ImageEnabled
+        {
+            get => _imageEnabled;
+            set
+            {
+                if (_imageEnabled != value)
+                {
+                    _imageEnabled = value;
+                    OnChanged(nameof(ImageEnabled));
+                    _saveImageCommand.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
         private string _pattern = "{SetName}";
         public string Pattern
         {
             get => _pattern;
-            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); } }
+            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); OnChanged(nameof(ImagePattern)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+        }
+
+        // Alias for binding
+        public string ImagePattern
+        {
+            get => Pattern;
+            set => Pattern = value;
         }
 
         private string _exportScope = "PrintSet";
@@ -116,14 +164,14 @@ namespace GSADUs.Revit.Addin.UI
         public string Prefix
         {
             get => _prefix;
-            set { if (_prefix != value) { _prefix = value ?? string.Empty; OnChanged(nameof(Prefix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); } }
+            set { if (_prefix != value) { _prefix = value ?? string.Empty; OnChanged(nameof(Prefix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); OnChanged(nameof(ImagePreviewText)); } }
         }
 
         private string _suffix = string.Empty;
         public string Suffix
         {
             get => _suffix;
-            set { if (_suffix != value) { _suffix = value ?? string.Empty; OnChanged(nameof(Suffix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); } }
+            set { if (_suffix != value) { _suffix = value ?? string.Empty; OnChanged(nameof(Suffix)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); OnChanged(nameof(ImagePreviewText)); } }
         }
 
         private bool _isSaveEnabled;
@@ -137,8 +185,11 @@ namespace GSADUs.Revit.Addin.UI
         public string Preview
         {
             get => _preview;
-            private set { if (_preview != value) { _preview = value; OnChanged(nameof(Preview)); } }
+            private set { if (_preview != value) { _preview = value; OnChanged(nameof(Preview)); OnChanged(nameof(ImagePreviewText)); } }
         }
+
+        // Computed property for the image tab preview text
+        public string ImagePreviewText => Preview;
 
         private bool _hasUnsavedChanges;
         public bool HasUnsavedChanges
@@ -152,6 +203,7 @@ namespace GSADUs.Revit.Addin.UI
             HasUnsavedChanges = dirty;
             OnPropertyChanged(nameof(HasUnsavedChanges));
             Recompute();
+            _saveImageCommand.RaiseCanExecuteChanged();
         }
 
         protected void OnPropertyChanged(string propertyName)
@@ -180,6 +232,7 @@ namespace GSADUs.Revit.Addin.UI
             var nameOk = !string.IsNullOrWhiteSpace(Name);
             IsSaveEnabled = IsBaseSaveEnabled && nameOk && patOk && fmtOk && resOk && cropOk && scopeOk;
             RecomputePreview();
+            _saveImageCommand.RaiseCanExecuteChanged();
         }
 
         private static string MapFormatToExt(string? fmt)
@@ -217,8 +270,35 @@ namespace GSADUs.Revit.Addin.UI
             ExportScope = "PrintSet";
             SelectedPrintSet = null;
             SelectedSingleViewId = null;
+            SelectedImage = null;
             SetDirty(true);
             Recompute();
+            _saveImageCommand.RaiseCanExecuteChanged();
+        }
+
+        private bool CanSaveImage()
+        {
+            return ImageEnabled && SelectedImage != null && IsValidPattern(ImagePattern);
+        }
+
+        public bool IsValidPattern(string? pattern)
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) return false;
+            return pattern.Contains("{SetName}");
+        }
+
+        // IDataErrorInfo for pattern validation feedback
+        public string Error => string.Empty;
+        public string this[string columnName]
+        {
+            get
+            {
+                if (columnName == nameof(ImagePattern))
+                {
+                    return IsValidPattern(ImagePattern) ? string.Empty : "Pattern must include {SetName}";
+                }
+                return string.Empty;
+            }
         }
     }
 

@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows.Input;
 
 namespace GSADUs.Revit.Addin.UI
 {
-    internal sealed class PdfWorkflowTabViewModel : WorkflowTabBaseViewModel
+    internal sealed class PdfWorkflowTabViewModel : WorkflowTabBaseViewModel, IDataErrorInfo
     {
+        private readonly DelegateCommand _savePdfCommand;
+
         public PdfWorkflowTabViewModel()
         {
             PropertyChanged += (_, e) =>
@@ -16,15 +19,43 @@ namespace GSADUs.Revit.Addin.UI
                     OnChanged(nameof(HasUnsavedChanges));
                     RecomputeLocal();
                 }
+                // Ensure SavePdfCommand reevaluates when relevant base fields might affect preview or validation
+                if (e.PropertyName == nameof(Name) || e.PropertyName == nameof(WorkflowScope) || e.PropertyName == nameof(Description))
+                {
+                    _savePdfCommand.RaiseCanExecuteChanged();
+                }
             };
             NewCommand = new DelegateCommand(_ => Reset());
+
+            _savePdfCommand = new DelegateCommand(
+                _ => SaveCommand?.Execute(null),
+                _ => CanSavePdf());
         }
 
         public ICommand NewCommand { get; }
         public ICommand? ManagePdfSetupCommand { get; set; }
         public ICommand? SaveCommand { get; set; }
+        public ICommand SavePdfCommand => _savePdfCommand;
 
         public ObservableCollection<SavedWorkflowListItem> SavedWorkflows { get; } = new();
+
+        // New ListBox backing: items and selection
+        public ObservableCollection<string> PdfFiles { get; } = new();
+
+        private string? _selectedPdf;
+        public string? SelectedPdf
+        {
+            get => _selectedPdf;
+            set
+            {
+                if (_selectedPdf != value)
+                {
+                    _selectedPdf = value;
+                    OnChanged(nameof(SelectedPdf));
+                    _savePdfCommand.RaiseCanExecuteChanged();
+                }
+            }
+        }
 
         private bool _isPdfEnabled = true;
         public bool IsPdfEnabled
@@ -37,8 +68,18 @@ namespace GSADUs.Revit.Addin.UI
                     _isPdfEnabled = value;
                     OnChanged(nameof(IsPdfEnabled));
                     System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+                    _savePdfCommand.RaiseCanExecuteChanged();
+                    // Keep PdfEnabled alias in sync
+                    OnChanged(nameof(PdfEnabled));
                 }
             }
+        }
+
+        // Alias for binding compatibility with updated XAML
+        public bool PdfEnabled
+        {
+            get => IsPdfEnabled;
+            set => IsPdfEnabled = value;
         }
 
         private string? _selectedWorkflowId;
@@ -66,12 +107,23 @@ namespace GSADUs.Revit.Addin.UI
                 {
                     _pattern = value;
                     OnChanged(nameof(Pattern));
+                    // keep alias property in sync
+                    OnChanged(nameof(PdfPattern));
                     HasUnsavedChanges = true;
                     OnChanged(nameof(HasUnsavedChanges));
                     RecomputeLocal();
+                    _savePdfCommand.RaiseCanExecuteChanged();
                 }
             }
         }
+
+        // Alias used by XAML for validation-friendly binding name
+        public string PdfPattern
+        {
+            get => Pattern;
+            set => Pattern = value;
+        }
+
         public string? SelectedSetName
         {
             get => _selectedSetName;
@@ -171,6 +223,7 @@ namespace GSADUs.Revit.Addin.UI
             HasUnsavedChanges = dirty;
             OnChanged(nameof(HasUnsavedChanges));
             RecomputeLocal();
+            _savePdfCommand.RaiseCanExecuteChanged();
         }
 
         public ObservableCollection<string> AvailableViewSets { get; set; } = new();
@@ -204,8 +257,36 @@ namespace GSADUs.Revit.Addin.UI
             Pattern = "{SetName}.pdf";
             SelectedSetName = null;
             SelectedPrintSet = null;
+            SelectedPdf = null;
             SetDirty(true);
             RecomputeLocal();
+            _savePdfCommand.RaiseCanExecuteChanged();
+        }
+
+        private bool CanSavePdf()
+        {
+            return PdfEnabled && SelectedPdf != null && IsValidPattern(PdfPattern);
+        }
+
+        public bool IsValidPattern(string? pattern)
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) return false;
+            // Require SetName token for PDF export naming
+            return pattern.Contains("{SetName}");
+        }
+
+        // IDataErrorInfo implementation for inline validation feedback
+        public string Error => string.Empty;
+        public string this[string columnName]
+        {
+            get
+            {
+                if (columnName == nameof(PdfPattern))
+                {
+                    return IsValidPattern(PdfPattern) ? string.Empty : "Pattern must include {SetName}";
+                }
+                return string.Empty;
+            }
         }
     }
 }

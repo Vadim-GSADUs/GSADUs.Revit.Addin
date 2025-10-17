@@ -83,6 +83,15 @@
                             <Button x:Name="PdfNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
+                        <!-- Enable/disable PDF workflow -->
+                        <CheckBox x:Name="PdfEnabledCheck" Content="Enable PDF export" IsChecked="{Binding PdfEnabled}" Margin="0,0,0,6"/>
+
+                        <!-- Example list of PDFs to export -->
+                        <StackPanel Orientation="Vertical" Margin="0,0,0,6">
+                            <TextBlock Text="PDF files:" Margin="0,0,0,4"/>
+                            <ListBox x:Name="PdfFilesList" ItemsSource="{Binding PdfFiles}" SelectedItem="{Binding SelectedPdf, Mode=TwoWay}" Height="120"/>
+                        </StackPanel>
+
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <TextBox x:Name="PdfNameBox" Width="240" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
@@ -90,14 +99,14 @@
                             <ComboBox x:Name="PdfScopeCombo" Width="200" ItemsSource="{Binding Scopes}" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
-                        <GroupBox Header="PDF Export Range" Margin="0,4,0,6" IsEnabled="{Binding IsPdfEnabled}">
+                        <GroupBox Header="PDF Export Range" Margin="0,4,0,6" IsEnabled="{Binding PdfEnabled}">
                             <StackPanel Margin="6" Orientation="Horizontal">
                                 <TextBlock Text="View/Sheet Set:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <ComboBox x:Name="ViewSetCombo" Width="320" ItemsSource="{Binding AvailableViewSets}" SelectedItem="{Binding SelectedSetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="PDF Export Setup" Margin="0,4,0,6" IsEnabled="{Binding IsPdfEnabled}">
+                        <GroupBox Header="PDF Export Setup" Margin="0,4,0,6" IsEnabled="{Binding PdfEnabled}">
                             <StackPanel Orientation="Horizontal" Margin="6">
                                 <TextBlock Text="Export Setup:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <ComboBox x:Name="ExportSetupCombo" Width="320" ItemsSource="{Binding AvailableExportSetups}" SelectedItem="{Binding SelectedPrintSet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
@@ -105,11 +114,15 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="PDF File" Margin="0,4,0,6" IsEnabled="{Binding IsPdfEnabled}">
+                        <GroupBox Header="PDF File" Margin="0,4,0,6" IsEnabled="{Binding PdfEnabled}">
                             <StackPanel Margin="6" Orientation="Vertical">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="FileNamePatternBox" Width="360" Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBox x:Name="FileNamePatternBox" Width="360">
+                                        <TextBox.Text>
+                                            <Binding Path="PdfPattern" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnDataErrors="True" NotifyOnValidationError="True"/>
+                                        </TextBox.Text>
+                                    </TextBox>
                                 </StackPanel>
                                 <TextBlock x:Name="PdfPreviewText" Foreground="Gray" Margin="0,0,0,6" Text="{Binding Preview}"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -129,7 +142,7 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SaveCommand}" IsEnabled="{Binding IsSaveEnabled}">
+                            <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SavePdfCommand}">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Opacity" Value="1.0"/>
@@ -163,6 +176,15 @@
                             <Button x:Name="ImageNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
+                        <!-- Enable/disable Image workflow -->
+                        <CheckBox x:Name="ImageEnabledCheck" Content="Enable Image export" IsChecked="{Binding ImageEnabled}" Margin="0,0,0,6"/>
+
+                        <!-- Image items list -->
+                        <StackPanel Orientation="Vertical" Margin="0,0,0,6">
+                            <TextBlock Text="Images:" Margin="0,0,0,4"/>
+                            <ListBox x:Name="ImageFilesList" ItemsSource="{Binding ImageFiles}" SelectedItem="{Binding SelectedImage, Mode=TwoWay}" Height="120"/>
+                        </StackPanel>
+
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <TextBox x:Name="ImageNameBox" Width="240" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
@@ -170,7 +192,7 @@
                             <ComboBox x:Name="ImageScopeCombo" Width="200" ItemsSource="{Binding Scopes}" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
-                        <GroupBox Header="Image Export Range" Margin="0,8,0,0">
+                        <GroupBox Header="Image Export Range" Margin="0,8,0,0" IsEnabled="{Binding ImageEnabled}">
                             <StackPanel Orientation="Vertical" Margin="8,6,8,8">
 
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -204,7 +226,7 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Image Export Setup" Margin="0,4,0,6">
+                        <GroupBox Header="Image Export Setup" Margin="0,4,0,6" IsEnabled="{Binding ImageEnabled}">
                             <StackPanel Orientation="Vertical" Margin="6">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Resolution:" VerticalAlignment="Center" Margin="0,0,8,0" Width="80"/>
@@ -225,11 +247,15 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Image File" Margin="0,4,0,6">
+                        <GroupBox Header="Image File" Margin="0,4,0,6" IsEnabled="{Binding ImageEnabled}">
                             <StackPanel Orientation="Vertical" Margin="6">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="ImageFileNamePatternBox" Width="300" Text="{Binding Pattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBox x:Name="ImageFileNamePatternBox" Width="300">
+                                        <TextBox.Text>
+                                            <Binding Path="ImagePattern" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnDataErrors="True" NotifyOnValidationError="True"/>
+                                        </TextBox.Text>
+                                    </TextBox>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <TextBlock Text="Format:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -239,11 +265,11 @@
                                         <ComboBoxItem Content="TIFF"/>
                                     </ComboBox>
                                 </StackPanel>
-                                <TextBlock x:Name="ImagePreviewText" Foreground="Gray" Margin="0,4,0,0" Text="{Binding Preview}"/>
+                                <TextBlock x:Name="ImagePreviewText" Foreground="Gray" Margin="0,4,0,0" Text="{Binding ImagePreviewText}"/>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="AutoCrop Whitelist" Margin="0,4,0,6">
+                        <GroupBox Header="AutoCrop Whitelist" Margin="0,4,0,6" IsEnabled="{Binding ImageEnabled}">
                             <StackPanel Orientation="Horizontal" Margin="6,2,6,2">
                                 <TextBlock Text="Whitelist Categories:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBlock VerticalAlignment="Center" Foreground="Gray" Text="{Binding WhitelistSummary}"/>
@@ -257,7 +283,7 @@
                         </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
-                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SaveCommand}" IsEnabled="{Binding IsSaveEnabled}">
+                            <Button x:Name="ImageSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SaveImageCommand}">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Opacity" Value="1.0"/>
@@ -275,6 +301,43 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
+                        </DockPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- CSV Tab -->
+            <TabItem Header="CSV">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="CsvTabRoot" Margin="8" Orientation="Vertical" DataContext="{Binding Csv}">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Saved Workflows:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox x:Name="CsvSavedCombo" Width="420" DisplayMemberPath="Display" SelectedValuePath="Id" ItemsSource="{Binding SavedWorkflows}" SelectedValue="{Binding SelectedWorkflowId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button x:Name="CsvNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
+                        </StackPanel>
+
+                        <CheckBox x:Name="CsvEnabledCheck" Content="Enable CSV export" IsChecked="{Binding CsvEnabled}" Margin="0,0,0,6"/>
+
+                        <StackPanel Orientation="Vertical" Margin="0,0,0,6">
+                            <TextBlock Text="CSV sources:" Margin="0,0,0,4"/>
+                            <ListBox x:Name="CsvFilesList" ItemsSource="{Binding CsvFiles}" SelectedItem="{Binding SelectedCsv, Mode=TwoWay}" Height="120"/>
+                        </StackPanel>
+
+                        <GroupBox Header="CSV File" Margin="0,4,0,6" IsEnabled="{Binding CsvEnabled}">
+                            <StackPanel Margin="6" Orientation="Vertical">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="File name pattern:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBox x:Name="CsvFileNamePatternBox" Width="360">
+                                        <TextBox.Text>
+                                            <Binding Path="CsvPattern" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" ValidatesOnDataErrors="True" NotifyOnValidationError="True"/>
+                                        </TextBox.Text>
+                                    </TextBox>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <DockPanel LastChildFill="False" Margin="0,8,0,0">
+                            <Button x:Name="CsvSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right" Command="{Binding SaveCsvCommand}"/>
                         </DockPanel>
                     </StackPanel>
                 </ScrollViewer>
