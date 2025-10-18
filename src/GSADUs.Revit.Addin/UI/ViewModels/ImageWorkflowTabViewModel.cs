@@ -50,26 +50,13 @@ namespace GSADUs.Revit.Addin.UI
         public ICommand? SaveCommand { get; set; }
         public ICommand SaveImageCommand => _saveImageCommand;
 
-        private string? _selectedWorkflowId;
-        public string? SelectedWorkflowId
-        {
-            get => _selectedWorkflowId;
-            set
-            {
-                if (!string.Equals(_selectedWorkflowId, value, StringComparison.Ordinal))
-                {
-                    _selectedWorkflowId = value;
-                    System.Diagnostics.Trace.WriteLine($"[ImageVM] SelectedWorkflowId set to '{_selectedWorkflowId ?? "<null>"}' on {GetHashCode()}");
-                    OnPropertyChanged(nameof(SelectedWorkflowId));
-                }
-            }
-        }
+        public string? SelectedWorkflowId { get; set; }
 
         private string _whitelistSummary = string.Empty;
         public string WhitelistSummary
         {
             get => _whitelistSummary;
-            set { if (_whitelistSummary != value) { _whitelistSummary = value ?? string.Empty; OnPropertyChanged(nameof(WhitelistSummary)); } }
+            set { if (_whitelistSummary != value) { _whitelistSummary = value ?? string.Empty; OnChanged(nameof(WhitelistSummary)); } }
         }
 
         public ObservableCollection<string> AvailablePrintSets { get; } = new();
@@ -87,7 +74,7 @@ namespace GSADUs.Revit.Addin.UI
                 if (_selectedImage != value)
                 {
                     _selectedImage = value;
-                    OnPropertyChanged(nameof(SelectedImage));
+                    OnChanged(nameof(SelectedImage));
                     _saveImageCommand.RaiseCanExecuteChanged();
                 }
             }
@@ -102,7 +89,7 @@ namespace GSADUs.Revit.Addin.UI
                 if (_imageEnabled != value)
                 {
                     _imageEnabled = value;
-                    OnPropertyChanged(nameof(ImageEnabled));
+                    OnChanged(nameof(ImageEnabled));
                     _saveImageCommand.RaiseCanExecuteChanged();
                 }
             }
@@ -112,7 +99,7 @@ namespace GSADUs.Revit.Addin.UI
         public string Pattern
         {
             get => _pattern;
-            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnPropertyChanged(nameof(Pattern)); OnPropertyChanged(nameof(ImagePattern)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+            set { if (_pattern != value) { _pattern = value ?? string.Empty; OnChanged(nameof(Pattern)); OnChanged(nameof(ImagePattern)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         // Alias for binding
@@ -131,7 +118,7 @@ namespace GSADUs.Revit.Addin.UI
                 if (_exportScope != value)
                 {
                     _exportScope = value ?? "PrintSet";
-                    OnPropertyChanged(nameof(ExportScope));
+                    OnChanged(nameof(ExportScope));
                     HasUnsavedChanges = true;
                     OnPropertyChanged(nameof(HasUnsavedChanges));
                     // Clear the unselected dropdown
@@ -149,56 +136,56 @@ namespace GSADUs.Revit.Addin.UI
         public string? SelectedPrintSet
         {
             get => _selectedPrintSet;
-            set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnPropertyChanged(nameof(SelectedPrintSet)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+            set { if (_selectedPrintSet != value) { _selectedPrintSet = value; OnChanged(nameof(SelectedPrintSet)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string? _selectedSingleViewId;
         public string? SelectedSingleViewId
         {
             get => _selectedSingleViewId;
-            set { if (_selectedSingleViewId != value) { _selectedSingleViewId = value; OnPropertyChanged(nameof(SelectedSingleViewId)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+            set { if (_selectedSingleViewId != value) { _selectedSingleViewId = value; OnChanged(nameof(SelectedSingleViewId)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); Recompute(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string _resolution = "Medium";
         public string Resolution
         {
             get => _resolution;
-            set { if (_resolution != value) { _resolution = value ?? "Medium"; OnPropertyChanged(nameof(Resolution)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+            set { if (_resolution != value) { _resolution = value ?? "Medium"; OnChanged(nameof(Resolution)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string _cropMode = "Static";
         public string CropMode
         {
             get => _cropMode;
-            set { if (_cropMode != value) { _cropMode = value ?? "Static"; OnPropertyChanged(nameof(CropMode)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+            set { if (_cropMode != value) { _cropMode = value ?? "Static"; OnChanged(nameof(CropMode)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private string _cropOffset = string.Empty;
         public string CropOffset
         {
             get => _cropOffset;
-            set { if (_cropOffset != value) { _cropOffset = value ?? string.Empty; OnPropertyChanged(nameof(CropOffset)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); } }
+            set { if (_cropOffset != value) { _cropOffset = value ?? string.Empty; OnChanged(nameof(CropOffset)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); } }
         }
 
         private string _format = "PNG";
         public string Format
         {
             get => _format;
-            set { if (_format != value) { _format = value ?? "PNG"; OnPropertyChanged(nameof(Format)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+            set { if (_format != value) { _format = value ?? "PNG"; OnChanged(nameof(Format)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
         private bool _isSaveEnabled;
         public bool IsSaveEnabled
         {
             get => _isSaveEnabled;
-            private set { if (_isSaveEnabled != value) { _isSaveEnabled = value; OnPropertyChanged(nameof(IsSaveEnabled)); } }
+            private set { if (_isSaveEnabled != value) { _isSaveEnabled = value; OnChanged(nameof(IsSaveEnabled)); } }
         }
 
         private string _preview = string.Empty;
         public string Preview
         {
             get => _preview;
-            private set { if (_preview != value) { _preview = value; OnPropertyChanged(nameof(Preview)); } }
+            private set { if (_preview != value) { _preview = value; OnChanged(nameof(Preview)); } }
         }
 
         // Computed property for the image tab preview text
