@@ -433,9 +433,16 @@ namespace GSADUs.Revit.Addin.UI
             var pattern = Gs(ImageWorkflowKeys.fileNamePattern);
             ImageWorkflow.Pattern              = string.IsNullOrWhiteSpace(pattern) ? "{SetName}" : pattern;
             ImageWorkflow.Format               = Gs(ImageWorkflowKeys.imageFormat);
-            ImageWorkflow.Resolution           = Gs(ImageWorkflowKeys.resolutionPreset);
-            ImageWorkflow.CropMode             = Gs(ImageWorkflowKeys.cropMode);
-            ImageWorkflow.CropOffset           = Gs(ImageWorkflowKeys.cropOffset);
+            // ---- META (no params dict needed) ----
+            ImageWorkflow.Name          = wf?.Name  ?? string.Empty;
+            ImageWorkflow.WorkflowScope = wf?.Scope ?? string.Empty;
+            ImageWorkflow.Description   = wf?.Description ?? string.Empty;
+            // ---- PARAMS (guarded; do NOT touch Resolution) ----
+            var cm = Gs(ImageWorkflowKeys.cropMode);
+            if (!string.IsNullOrWhiteSpace(cm)) ImageWorkflow.CropMode = cm;
+            var co = Gs(ImageWorkflowKeys.cropOffset);
+            if (!string.IsNullOrWhiteSpace(co)) ImageWorkflow.CropOffset = co;
+            // Leave Resolution as-is. Do not set it here.
         }
 
         private static void EnsureActionId(WorkflowDefinition wf, string id)
@@ -542,23 +549,14 @@ namespace GSADUs.Revit.Addin.UI
             _catalog.SaveAndRefresh();
             PopulateSavedLists();
             // Restore selection for Image tab after save
-            if (!string.IsNullOrWhiteSpace(ImageWorkflow.SelectedWorkflowId))
+            var savedId = ImageWorkflow.SelectedWorkflowId;
+            if (!string.IsNullOrWhiteSpace(savedId) &&
+                ImageWorkflow.SavedWorkflows.Any(w => string.Equals(w.Id, savedId, StringComparison.OrdinalIgnoreCase)))
             {
-                var exists = ImageWorkflow.SavedWorkflows.Any(w => string.Equals(w.Id, ImageWorkflow.SelectedWorkflowId, StringComparison.OrdinalIgnoreCase));
-                if (exists)
-                {
-                    // Re-assign to trigger hydration if needed
-                    var id = ImageWorkflow.SelectedWorkflowId;
-                    ImageWorkflow.SelectedWorkflowId = null;
-                    ImageWorkflow.SelectedWorkflowId = id;
-                }
-                else if (ImageWorkflow.SavedWorkflows.Count > 0)
-                {
-                    // Fallback: select first available
-                    ImageWorkflow.SelectedWorkflowId = ImageWorkflow.SavedWorkflows[0].Id;
-                }
+                ImageWorkflow.SelectedWorkflowId = savedId;
             }
-            else if (ImageWorkflow.SavedWorkflows.Count > 0)
+            else if (string.IsNullOrWhiteSpace(ImageWorkflow.SelectedWorkflowId) &&
+                     ImageWorkflow.SavedWorkflows.Count > 0)
             {
                 ImageWorkflow.SelectedWorkflowId = ImageWorkflow.SavedWorkflows[0].Id;
             }
