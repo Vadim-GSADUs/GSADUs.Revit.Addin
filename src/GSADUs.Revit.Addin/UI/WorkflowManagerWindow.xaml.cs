@@ -54,9 +54,6 @@ namespace GSADUs.Revit.Addin.UI
 
             DataContext = _vm;
 
-            if (DataContext is WorkflowManagerViewModel vm)
-                System.Diagnostics.Trace.WriteLine($"[Window] DataContext.Image VM instance: {vm.Image.GetHashCode()}");
-
             // Log validation errors globally for faster diagnostics
             this.AddHandler(Validation.ErrorEvent, new EventHandler<ValidationErrorEventArgs>((s, e) =>
             {
