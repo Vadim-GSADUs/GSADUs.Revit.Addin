@@ -132,18 +132,8 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
         private string _outputFolder = string.Empty;
-        public string OutputFolder
-        {
-            get => _outputFolder;
-            set
-            {
-                if (_outputFolder != value)
-                {
-                    _outputFolder = value ?? string.Empty;
-                    OnChanged(nameof(OutputFolder));
-                }
-            }
-        }
+        public string OutputFolder => _outputFolder; // read-only for binding
+
         private string _overwritePolicyText = string.Empty;
         public string OverwritePolicyText
         {
@@ -154,9 +144,13 @@ namespace GSADUs.Revit.Addin.UI
                 {
                     _overwritePolicyText = value ?? string.Empty;
                     OnChanged(nameof(OverwritePolicyText));
+                    OnChanged(nameof(OverwritePolicy)); // keep alias in sync
                 }
             }
         }
+        // New read-only alias property for binding
+        public string OverwritePolicy => _overwritePolicyText;
+
         private string _preview = string.Empty;
         public string Preview
         {
@@ -166,8 +160,21 @@ namespace GSADUs.Revit.Addin.UI
 
         public void ApplySettings(AppSettings settings)
         {
-            OutputFolder = settings?.DefaultOutputDir ?? string.Empty;
-            OverwritePolicyText = (settings?.DefaultOverwrite ?? false) ? "True" : "False";
+            // Initialize from settings without exposing setters
+            var newOutput = settings?.DefaultOutputDir ?? string.Empty;
+            if (!string.Equals(_outputFolder, newOutput, StringComparison.Ordinal))
+            {
+                _outputFolder = newOutput;
+                OnChanged(nameof(OutputFolder));
+            }
+
+            var policy = (settings?.DefaultOverwrite ?? false) ? "True" : "False";
+            if (!string.Equals(_overwritePolicyText, policy, StringComparison.Ordinal))
+            {
+                _overwritePolicyText = policy;
+                OnChanged(nameof(OverwritePolicyText));
+                OnChanged(nameof(OverwritePolicy));
+            }
         }
 
         public void SetDirty(bool dirty)
@@ -225,7 +232,8 @@ namespace GSADUs.Revit.Addin.UI
                 && !string.IsNullOrWhiteSpace(SelectedPrintSet)
                 && !string.IsNullOrWhiteSpace(SelectedSetName)
                 && !string.IsNullOrWhiteSpace(PdfPattern)
-                && PdfPattern.Contains("{SetName}");
+                && PdfPattern.Contains("{SetName}")
+                && IsBaseSaveEnabled;
         }
 
         public bool IsValidPattern(string? pattern)
