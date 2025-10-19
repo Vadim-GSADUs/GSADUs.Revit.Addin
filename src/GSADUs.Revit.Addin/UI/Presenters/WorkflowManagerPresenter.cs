@@ -459,43 +459,29 @@ namespace GSADUs.Revit.Addin.UI
 
         public bool SavePdfWorkflow(WorkflowDefinition existing)
         {
-            var vm = PdfWorkflow;
-            var pdfSetName = vm?.SelectedSetName;
-            var pdfSetupName = vm?.SelectedPrintSet;
-            var pdfPattern = vm?.Pattern;
+            // Hard guard: require all three fields and valid pattern without showing dialogs
+            var pdf = PdfWorkflow;
+            var setName = pdf?.SelectedSetName;
+            var setupName = pdf?.SelectedPrintSet;
+            var pattern = pdf?.PdfPattern;
 
-            // Require set and setup; pattern will be normalized automatically
-            if (string.IsNullOrWhiteSpace(pdfSetName) || string.IsNullOrWhiteSpace(pdfSetupName))
+            // Trace diagnostics for first-save
+            try { System.Diagnostics.Trace.WriteLine($"[SavePdf] set='{setName ?? "<null>"}' setup='{setupName ?? "<null>"}' pattern='{pattern ?? "<null>"}'"); } catch { }
+
+            if (string.IsNullOrWhiteSpace(setName)
+                || string.IsNullOrWhiteSpace(setupName)
+                || string.IsNullOrWhiteSpace(pattern)
+                || !pattern.Contains("{SetName}"))
             {
-                _dialogs.Info("Save", "Select a view/sheet set and an export setup.");
-                return false;
+                return false; // fail fast, do not modify settings
             }
 
-            // Normalize pattern: ensure {SetName} present and .pdf extension
-            if (string.IsNullOrWhiteSpace(pdfPattern)) pdfPattern = "{SetName}.pdf";
-            if (!pdfPattern.Contains("{SetName}")) pdfPattern = "{SetName}" + pdfPattern;
-            if (!pdfPattern.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) pdfPattern += ".pdf";
-
-            // basic sanitize (mirror window helper without dependency)
-            try
-            {
-                var invalid = System.IO.Path.GetInvalidFileNameChars();
-                var s = pdfPattern.Trim();
-                foreach (var c in invalid) s = s.Replace(c, '_');
-                s = s.Replace('/', '_').Replace('\\', '_');
-                pdfPattern = s;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex);
-                throw;
-            }
-
+            // Build parameters as-is (no normalization/sanitization)
             var p = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)
             {
-                [PdfWorkflowKeys.PrintSetName] = J(pdfSetName!),
-                [PdfWorkflowKeys.ExportSetupName] = J(pdfSetupName!),
-                [PdfWorkflowKeys.FileNamePattern] = J(pdfPattern!)
+                [PdfWorkflowKeys.PrintSetName] = J(setName!),
+                [PdfWorkflowKeys.ExportSetupName] = J(setupName!),
+                [PdfWorkflowKeys.FileNamePattern] = J(pattern!)
             };
             existing.Parameters = p;
             EnsureActionId(existing, "export-pdf");

@@ -9,11 +9,18 @@ namespace GSADUs.Revit.Addin.UI
     {
         private readonly DelegateCommand _savePdfCommand;
 
+        // Event consumers (e.g., presenter) can subscribe to be notified when Save is requested
+        public event EventHandler? SaveRequested;
+
         public PdfWorkflowTabViewModel()
         {
             PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(IsBaseSaveEnabled)) RecomputeLocal();
+                if (e.PropertyName == nameof(IsBaseSaveEnabled))
+                {
+                    RecomputeLocal();
+                    _savePdfCommand.RaiseCanExecuteChanged();
+                }
                 if (e.PropertyName == nameof(Name) || e.PropertyName == nameof(WorkflowScope) || e.PropertyName == nameof(Description))
                 {
                     HasUnsavedChanges = true;
@@ -21,13 +28,19 @@ namespace GSADUs.Revit.Addin.UI
                     RecomputeLocal();
                 }
                 // Ensure SavePdfCommand reevaluates when any required field changes
-                if (e.PropertyName == nameof(Name) || e.PropertyName == nameof(SelectedPrintSet) || e.PropertyName == nameof(SelectedSetName) || e.PropertyName == nameof(PdfPattern) || e.PropertyName == nameof(Description))
+                if (e.PropertyName == nameof(Name)
+                    || e.PropertyName == nameof(WorkflowScope)
+                    || e.PropertyName == nameof(SelectedPrintSet)
+                    || e.PropertyName == nameof(SelectedSetName)
+                    || e.PropertyName == nameof(PdfPattern)
+                    || e.PropertyName == nameof(Description))
                 {
                     _savePdfCommand.RaiseCanExecuteChanged();
                 }
             };
             NewCommand = new DelegateCommand(_ => Reset());
 
+            // Ensure command exists and reflects CanSavePdf()
             _savePdfCommand = new DelegateCommand(_ => SavePdf(), _ => CanSavePdf());
         }
 
@@ -52,9 +65,10 @@ namespace GSADUs.Revit.Addin.UI
             get => _selectedSetName;
             set
             {
-                if (_selectedSetName != value)
+                var trimmed = value?.Trim();
+                if (_selectedSetName != trimmed)
                 {
-                    _selectedSetName = value;
+                    _selectedSetName = trimmed;
                     OnChanged(nameof(SelectedSetName));
                     _savePdfCommand.RaiseCanExecuteChanged();
                     HasUnsavedChanges = true;
@@ -69,9 +83,10 @@ namespace GSADUs.Revit.Addin.UI
             get => _selectedPrintSet;
             set
             {
-                if (_selectedPrintSet != value)
+                var trimmed = value?.Trim();
+                if (_selectedPrintSet != trimmed)
                 {
-                    _selectedPrintSet = value;
+                    _selectedPrintSet = trimmed;
                     OnChanged(nameof(SelectedPrintSet));
                     _savePdfCommand.RaiseCanExecuteChanged();
                     HasUnsavedChanges = true;
@@ -86,14 +101,18 @@ namespace GSADUs.Revit.Addin.UI
             get => _pattern;
             set
             {
-                if (_pattern != value)
+                var v = (value ?? string.Empty).Trim();
+                if (_pattern != v)
                 {
-                    _pattern = value;
+                    _pattern = v;
                     OnChanged(nameof(Pattern));
                     OnChanged(nameof(PdfPattern));
-                    _savePdfCommand.RaiseCanExecuteChanged();
+                    // Update preview immediately and re-evaluate save
+                    RecomputePreview();
+                    OnChanged(nameof(Preview));
                     HasUnsavedChanges = true;
                     OnChanged(nameof(HasUnsavedChanges));
+                    _savePdfCommand.RaiseCanExecuteChanged();
                     RecomputeLocal();
                 }
             }
@@ -223,17 +242,20 @@ namespace GSADUs.Revit.Addin.UI
 
         private void SavePdf()
         {
+            // Maintain existing route via SaveCommand for backcompat
             SaveCommand?.Execute(null);
+            // Also raise event for optional presenter subscription
+            SaveRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private bool CanSavePdf()
         {
-            return !string.IsNullOrWhiteSpace(Name)
-                && !string.IsNullOrWhiteSpace(SelectedPrintSet)
+            return IsBaseSaveEnabled
+                && !string.IsNullOrWhiteSpace(Name)
                 && !string.IsNullOrWhiteSpace(SelectedSetName)
+                && !string.IsNullOrWhiteSpace(SelectedPrintSet)
                 && !string.IsNullOrWhiteSpace(PdfPattern)
-                && PdfPattern.Contains("{SetName}")
-                && IsBaseSaveEnabled;
+                && PdfPattern.Contains("{SetName}");
         }
 
         public bool IsValidPattern(string? pattern)

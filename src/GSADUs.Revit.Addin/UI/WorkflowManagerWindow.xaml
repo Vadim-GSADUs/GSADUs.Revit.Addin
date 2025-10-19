@@ -136,7 +136,8 @@
                         <!-- Save Button -->
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
                             <Button x:Name="PdfSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right"
-                                    Command="{Binding SavePdfCommand}" />
+                                    Command="{Binding SavePdfCommand}"
+                                    IsEnabled="{Binding IsSaveEnabled}" />
                         </DockPanel>
 
                     </StackPanel>
