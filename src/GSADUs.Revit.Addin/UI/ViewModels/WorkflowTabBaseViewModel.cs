@@ -38,7 +38,7 @@ namespace GSADUs.Revit.Addin.UI
             private set { if (_isBaseSaveEnabled != value) { _isBaseSaveEnabled = value; OnChanged(nameof(IsBaseSaveEnabled)); } }
         }
 
-        protected void OnChanged(string propertyName)
+        protected virtual void OnChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
