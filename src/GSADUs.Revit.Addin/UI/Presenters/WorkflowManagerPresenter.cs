@@ -172,8 +172,24 @@ namespace GSADUs.Revit.Addin.UI
             var img = all.Where(w => w.Output == OutputType.Image)
                          .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
                          .ToList();
-            PdfWorkflow.SavedWorkflows.Clear(); foreach (var i in pdf) PdfWorkflow.SavedWorkflows.Add(i);
-            ImageWorkflow.SavedWorkflows.Clear(); foreach (var i in img) ImageWorkflow.SavedWorkflows.Add(i);
+
+            // Temporarily detach handlers to avoid transient reloads during list mutations
+            try
+            {
+                PdfWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
+
+                PdfWorkflow.SavedWorkflows.Clear(); foreach (var i in pdf) PdfWorkflow.SavedWorkflows.Add(i);
+                ImageWorkflow.SavedWorkflows.Clear(); foreach (var i in img) ImageWorkflow.SavedWorkflows.Add(i);
+            }
+            finally
+            {
+                // Reattach deterministically (ensure single subscription)
+                PdfWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                PdfWorkflow.PropertyChanged += VmOnPropertyChanged;
+                ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
+            }
         }
 
         private void VmOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -532,19 +548,50 @@ namespace GSADUs.Revit.Addin.UI
 
         public void RefreshListsAfterSave()
         {
-            _catalog.SaveAndRefresh();
-            PopulateSavedLists();
-            // Restore selection for Image tab after save
-            var savedId = ImageWorkflow.SelectedWorkflowId;
-            if (!string.IsNullOrWhiteSpace(savedId) &&
-                ImageWorkflow.SavedWorkflows.Any(w => string.Equals(w.Id, savedId, StringComparison.OrdinalIgnoreCase)))
+            // Cache current selections to restore after refresh
+            var pdfId = PdfWorkflow.SelectedWorkflowId;
+            var imgId = ImageWorkflow.SelectedWorkflowId;
+
+            // Temporarily detach handlers to avoid transient reloads during refresh + selection restore
+            try
             {
-                ImageWorkflow.SelectedWorkflowId = savedId;
+                PdfWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
+
+                _catalog.SaveAndRefresh();
+                PopulateSavedLists();
+
+                // Restore selection for PDF tab after save
+                if (!string.IsNullOrWhiteSpace(pdfId) &&
+                    PdfWorkflow.SavedWorkflows.Any(w => string.Equals(w.Id, pdfId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    PdfWorkflow.SelectedWorkflowId = pdfId;
+                }
+                else if (string.IsNullOrWhiteSpace(PdfWorkflow.SelectedWorkflowId) &&
+                         PdfWorkflow.SavedWorkflows.Count > 0)
+                {
+                    PdfWorkflow.SelectedWorkflowId = PdfWorkflow.SavedWorkflows[0].Id;
+                }
+
+                // Restore selection for Image tab after save (use cached id)
+                if (!string.IsNullOrWhiteSpace(imgId) &&
+                    ImageWorkflow.SavedWorkflows.Any(w => string.Equals(w.Id, imgId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ImageWorkflow.SelectedWorkflowId = imgId;
+                }
+                else if (string.IsNullOrWhiteSpace(ImageWorkflow.SelectedWorkflowId) &&
+                         ImageWorkflow.SavedWorkflows.Count > 0)
+                {
+                    ImageWorkflow.SelectedWorkflowId = ImageWorkflow.SavedWorkflows[0].Id;
+                }
             }
-            else if (string.IsNullOrWhiteSpace(ImageWorkflow.SelectedWorkflowId) &&
-                     ImageWorkflow.SavedWorkflows.Count > 0)
+            finally
             {
-                ImageWorkflow.SelectedWorkflowId = ImageWorkflow.SavedWorkflows[0].Id;
+                // Reattach deterministically (ensure single subscription)
+                PdfWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                PdfWorkflow.PropertyChanged += VmOnPropertyChanged;
+                ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
             }
         }
 
