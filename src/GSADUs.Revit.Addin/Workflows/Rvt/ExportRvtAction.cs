@@ -62,9 +62,10 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                 catch { }
             }
 
-            // Partition: model (doc-level) vs view-specific (grouped by OwnerViewId)
-            var modelIds = new List<ElementId>();
+            // Partition: doc-level (non-work-plane-based), view-specific, and work-plane-based (handled later per-element)
+            var docLevelIds = new List<ElementId>();
             var viewGroups = new Dictionary<ElementId, List<ElementId>>();
+            var workPlaneBasedIds = new List<ElementId>();
             foreach (var id in memberIdsRaw)
             {
                 try
@@ -78,9 +79,25 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                     bool isViewSpecific = false;
                     try { isViewSpecific = e.ViewSpecific; } catch { isViewSpecific = false; }
 
+                    // Work plane detection via flag or presence of valid SKETCH_PLANE_PARAM
+                    bool hasSketchPlaneParam = false;
+                    try
+                    {
+                        var spParam = e.get_Parameter(BuiltInParameter.SKETCH_PLANE_PARAM);
+                        hasSketchPlaneParam = spParam != null && spParam.StorageType == StorageType.ElementId && spParam.AsElementId() != ElementId.InvalidElementId;
+                    }
+                    catch { hasSketchPlaneParam = false; }
+
+                    bool isWorkPlaneBased = IsWorkPlaneBased(e) || hasSketchPlaneParam;
+                    if (isWorkPlaneBased)
+                    {
+                        workPlaneBasedIds.Add(id);
+                        continue;
+                    }
+
                     if (!isViewSpecific)
                     {
-                        modelIds.Add(id);
+                        docLevelIds.Add(id);
                         continue;
                     }
 
@@ -117,11 +134,11 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                     // NEW: avoid modal duplicate-type prompts
                     opts.SetDuplicateTypeNamesHandler(new DuplicateTypeHandler_UseDestination());
 
-                    // Preflight: ensure required work planes (ReferencePlanes and SketchPlanes) exist in destination
-                    EnsureWorkPlanesForElements(sourceDoc, newDoc, modelIds);
+                    // Preflight: ensure required work planes (ReferencePlanes and SketchPlanes) exist in destination for doc-level elements
+                    EnsureWorkPlanesForElements(sourceDoc, newDoc, docLevelIds);
 
-                    // 1) Copy model (doc-level) — best effort bulk then per-element
-                    if (modelIds.Count > 0)
+                    // 1) Copy doc-level (non-work-plane-based) — best effort bulk then per-element fallback
+                    if (docLevelIds.Count > 0)
                     {
                         bool bulkSucceeded = false;
                         using (var tx = new Transaction(newDoc, "Copy Model Elements"))
@@ -129,7 +146,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                             tx.Start();
                             try
                             {
-                                ElementTransformUtils.CopyElements(sourceDoc, modelIds, newDoc, Transform.Identity, opts);
+                                ElementTransformUtils.CopyElements(sourceDoc, docLevelIds, newDoc, Transform.Identity, opts);
                                 tx.Commit();
                                 bulkSucceeded = true;
                             }
@@ -144,7 +161,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                             using (var tx = new Transaction(newDoc, "Copy Model Elements (fallback)"))
                             {
                                 tx.Start();
-                                foreach (var id in modelIds)
+                                foreach (var id in docLevelIds)
                                 {
                                     try { ElementTransformUtils.CopyElements(sourceDoc, new List<ElementId> { id }, newDoc, Transform.Identity, opts); } catch { }
                                 }
@@ -193,6 +210,107 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                                         }
                                         try { tx2.Commit(); } catch { try { tx2.RollBack(); } catch { } }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // 3) Per-element work-plane-based pass — view-to-view with explicit SketchPlane
+                    if (workPlaneBasedIds.Count > 0)
+                    {
+                        foreach (var id in workPlaneBasedIds)
+                        {
+                            Element? e = null; Plane? plane = null; View? srcView = null; View? dstView = null; SketchPlane? sp = null;
+                            try { e = sourceDoc.GetElement(id); } catch { e = null; }
+                            if (e == null) continue;
+
+                            try { plane = TryGetElementPlane(sourceDoc, e); } catch { plane = null; }
+                            if (plane == null)
+                            {
+                                try { dialogs.Info("Export RVT", $"WorkPlane copy: missing plane for element {id} ({e.Category?.Name ?? "?"})."); } catch { }
+                                continue;
+                            }
+
+                            // level hint from element level param if present
+                            string levelNameHint = string.Empty;
+                            try
+                            {
+                                var lvlId = e.get_Parameter(BuiltInParameter.LEVEL_PARAM)?.AsElementId() ?? ElementId.InvalidElementId;
+                                if (lvlId != ElementId.InvalidElementId)
+                                {
+                                    var lvl = sourceDoc.GetElement(lvlId) as Level; if (lvl != null) levelNameHint = lvl.Name ?? string.Empty;
+                                }
+                            }
+                            catch { levelNameHint = string.Empty; }
+
+                            try { dstView = EnsureDestViewForPlane(newDoc, plane!, levelNameHint); } catch { dstView = null; }
+                            if (dstView == null) { try { dialogs.Info("Export RVT", $"WorkPlane copy: failed to get/create destination view for element {id}."); } catch { } continue; }
+
+                            // choose a source view: owner for view-specific else any non-template view
+                            try
+                            {
+                                bool eViewSpecific = false; try { eViewSpecific = e.ViewSpecific; } catch { eViewSpecific = false; }
+                                if (eViewSpecific)
+                                {
+                                    srcView = sourceDoc.GetElement(e.OwnerViewId) as View;
+                                }
+                                if (srcView == null)
+                                {
+                                    // Prefer a plan view if plane is horizontal; else any non-template view
+                                    var n = plane!.XVec.CrossProduct(plane!.YVec);
+                                    bool isHorizontal = Math.Abs(n.Z) > 0.9;
+                                    if (isHorizontal)
+                                    {
+                                        // Try matching level name
+                                        if (!string.IsNullOrWhiteSpace(levelNameHint))
+                                        {
+                                            srcView = new FilteredElementCollector(sourceDoc)
+                                                .OfClass(typeof(ViewPlan))
+                                                .Cast<ViewPlan>()
+                                                .FirstOrDefault(v => !v.IsTemplate && string.Equals((v.GenLevel?.Name) ?? string.Empty, levelNameHint, StringComparison.OrdinalIgnoreCase));
+                                        }
+                                        if (srcView == null)
+                                        {
+                                            srcView = new FilteredElementCollector(sourceDoc)
+                                                .OfClass(typeof(ViewPlan))
+                                                .Cast<ViewPlan>()
+                                                .FirstOrDefault(v => !v.IsTemplate);
+                                        }
+                                    }
+                                    if (srcView == null)
+                                    {
+                                        srcView = new FilteredElementCollector(sourceDoc)
+                                            .OfClass(typeof(View))
+                                            .Cast<View>()
+                                            .FirstOrDefault(v => v != null && !v.IsTemplate);
+                                    }
+                                }
+                            }
+                            catch { srcView = null; }
+
+                            if (srcView == null)
+                            {
+                                try { dialogs.Info("Export RVT", $"WorkPlane copy: no source view available for element {id}."); } catch { }
+                                continue;
+                            }
+
+                            using (var tx = new Transaction(newDoc, $"Copy WP-based -> {dstView.Name}"))
+                            {
+                                tx.Start();
+                                try
+                                {
+                                    try { sp = EnsureSketchPlane(newDoc, plane!); } catch { sp = null; }
+                                    if (sp != null)
+                                    {
+                                        try { dstView.SketchPlane = sp; } catch { }
+                                    }
+                                    ElementTransformUtils.CopyElements(srcView, new List<ElementId> { id }, dstView, Transform.Identity, opts);
+                                    tx.Commit();
+                                }
+                                catch (Exception ex)
+                                {
+                                    try { tx.RollBack(); } catch { }
+                                    try { dialogs.Info("Export RVT", $"WorkPlane copy failed for element {id} ({e.Category?.Name ?? "?"}):\n{ex.Message}"); } catch { }
                                 }
                             }
                         }
@@ -354,6 +472,155 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
             foreach (var c in System.IO.Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
             name = name.Replace('/', '_').Replace('\\', '_');
             return name.Trim();
+        }
+
+        // ---- New helpers for Work Plane handling ----
+        private static bool IsWorkPlaneBased(Element e)
+        {
+            try
+            {
+                if (e is FamilyInstance fi)
+                {
+                    try { return fi.Symbol?.Family?.FamilyPlacementType == FamilyPlacementType.WorkPlaneBased; } catch { }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static Plane? TryGetElementPlane(Document doc, Element e)
+        {
+            try
+            {
+                var p = e.get_Parameter(BuiltInParameter.SKETCH_PLANE_PARAM);
+                if (p != null && p.StorageType == StorageType.ElementId)
+                {
+                    var spId = p.AsElementId();
+                    if (spId != ElementId.InvalidElementId)
+                    {
+                        var sp = doc.GetElement(spId) as SketchPlane;
+                        if (sp != null)
+                        {
+                            var pl = TryGetPlane(sp);
+                            if (pl != null) return pl;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static View EnsureDestViewForPlane(Document dest, Plane p, string levelNameHint)
+        {
+            // Determine horizontal vs vertical using plane normal
+            var n = p.XVec.CrossProduct(p.YVec);
+            bool isHorizontal = Math.Abs(n.Z) > 0.9; // tolerant
+
+            if (isHorizontal)
+            {
+                // Pick level by name or closest elevation to plane origin Z
+                Level? level = null;
+                try
+                {
+                    var levels = new FilteredElementCollector(dest).OfClass(typeof(Level)).Cast<Level>().ToList();
+                    if (!string.IsNullOrWhiteSpace(levelNameHint))
+                    {
+                        level = levels.FirstOrDefault(l => string.Equals(l.Name ?? string.Empty, levelNameHint, StringComparison.OrdinalIgnoreCase));
+                    }
+                    if (level == null)
+                    {
+                        level = levels.OrderBy(l => Math.Abs((l.Elevation) - p.Origin.Z)).FirstOrDefault();
+                    }
+                }
+                catch { level = null; }
+
+                // Find existing floor plan for that level
+                if (level != null)
+                {
+                    try
+                    {
+                        var existingPlan = new FilteredElementCollector(dest)
+                            .OfClass(typeof(ViewPlan))
+                            .Cast<ViewPlan>()
+                            .FirstOrDefault(v => !v.IsTemplate && v.ViewType == ViewType.FloorPlan && (v.GenLevel?.Id == level.Id));
+                        if (existingPlan != null) return existingPlan;
+                    }
+                    catch { }
+
+                    // Create a new floor plan
+                    try
+                    {
+                        using (var tx = new Transaction(dest, "Create Floor Plan for WP"))
+                        {
+                            tx.Start();
+                            var vft = new FilteredElementCollector(dest)
+                                .OfClass(typeof(ViewFamilyType))
+                                .Cast<ViewFamilyType>()
+                                .FirstOrDefault(t => t.ViewFamily == ViewFamily.FloorPlan);
+                            if (vft != null)
+                            {
+                                var vp = ViewPlan.Create(dest, vft.Id, level.Id);
+                                tx.Commit();
+                                return vp;
+                            }
+                            tx.RollBack();
+                        }
+                    }
+                    catch { }
+                }
+
+                // Fallback: any non-template view
+                try { return new FilteredElementCollector(dest).OfClass(typeof(ViewPlan)).Cast<ViewPlan>().First(v => !v.IsTemplate); } catch { }
+                try { return new FilteredElementCollector(dest).OfClass(typeof(View)).Cast<View>().First(v => !v.IsTemplate); } catch { }
+            }
+            else
+            {
+                // Create a section aligned to the plane using a bounding box with transform aligned to plane axes
+                try
+                {
+                    using (var tx = new Transaction(dest, "Create Section for WP"))
+                    {
+                        tx.Start();
+                        var vft = new FilteredElementCollector(dest)
+                            .OfClass(typeof(ViewFamilyType))
+                            .Cast<ViewFamilyType>()
+                            .FirstOrDefault(t => t.ViewFamily == ViewFamily.Section);
+                        if (vft != null)
+                        {
+                            var box = new BoundingBoxXYZ();
+                            var tr = Transform.Identity;
+                            tr.BasisX = p.XVec;
+                            tr.BasisY = p.YVec;
+                            tr.BasisZ = p.XVec.CrossProduct(p.YVec);
+                            tr.Origin = p.Origin;
+                            box.Transform = tr;
+                            double w = 100.0, h = 100.0, d = 10.0;
+                            box.Min = new XYZ(-w / 2, -h / 2, -d / 2);
+                            box.Max = new XYZ(w / 2, h / 2, d / 2);
+                            var vs = ViewSection.CreateSection(dest, vft.Id, box);
+                            tx.Commit();
+                            return vs;
+                        }
+                        tx.RollBack();
+                    }
+                }
+                catch { }
+
+                // Fallback: any non-template view
+                try { return new FilteredElementCollector(dest).OfClass(typeof(ViewSection)).Cast<ViewSection>().First(v => !v.IsTemplate); } catch { }
+                try { return new FilteredElementCollector(dest).OfClass(typeof(View)).Cast<View>().First(v => !v.IsTemplate); } catch { }
+            }
+
+            throw new InvalidOperationException("Unable to ensure destination view for plane.");
+        }
+
+        private static SketchPlane EnsureSketchPlane(Document dest, Plane p)
+        {
+            // Minimal: create a new SketchPlane on demand
+            try { return SketchPlane.Create(dest, p); } catch { }
+            // Last resort: attempt with a slightly nudged plane
+            return SketchPlane.Create(dest, Plane.CreateByOriginAndBasis(p.Origin, p.XVec, p.YVec));
         }
     }
 }
