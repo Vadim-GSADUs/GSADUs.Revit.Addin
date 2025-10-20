@@ -2,7 +2,6 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 namespace GSADUs.Revit.Addin.Workflows.Rvt
@@ -21,7 +20,16 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
             try { return request.ActionIds?.Any(a => string.Equals(a, Id, StringComparison.OrdinalIgnoreCase)) == true; } catch { return false; }
         }
 
-        public void Execute(UIApplication uiapp, Document sourceDoc, Document? outDoc, string setName, IList<string> preserveUids, bool isDryRun)
+        // Duplicate type handler: always use destination types, avoid UI prompts
+        private sealed class DuplicateTypeHandler_UseDestination : IDuplicateTypeNamesHandler
+        {
+            public DuplicateTypeAction OnDuplicateTypeNamesFound(DuplicateTypeNamesHandlerArgs args)
+            {
+                try { return DuplicateTypeAction.UseDestinationTypes; } catch { return DuplicateTypeAction.UseDestinationTypes; }
+            }
+        }
+
+        public void Execute(UIApplication uiapp, Document sourceDoc, Document? outDoc, string setName, System.Collections.Generic.IList<string> preserveUids, bool isDryRun)
         {
             if (uiapp == null || sourceDoc == null) return;
             var dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
@@ -90,7 +98,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
 
             // Proceed even if no copyable elements; we'll still create and save an empty deliverable
             var templatePath = HardcodedTemplatePath;
-            if (string.IsNullOrWhiteSpace(templatePath) || !File.Exists(templatePath))
+            if (string.IsNullOrWhiteSpace(templatePath) || !System.IO.File.Exists(templatePath))
             {
                 dialogs.Info("Export RVT", "Template path missing or invalid. Update the hardcoded path or ensure the file exists.");
                 return;
@@ -106,6 +114,8 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                     if (newDoc == null) { dialogs.Info("Export RVT", "Failed to create document from template."); continue; }
 
                     var opts = new CopyPasteOptions();
+                    // NEW: avoid modal duplicate-type prompts
+                    opts.SetDuplicateTypeNamesHandler(new DuplicateTypeHandler_UseDestination());
 
                     // Preflight: ensure required work planes (ReferencePlanes and SketchPlanes) exist in destination
                     EnsureWorkPlanesForElements(sourceDoc, newDoc, modelIds);
@@ -162,7 +172,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                             }
 
                             var ids = kv.Value;
-                            using (var tx = new Transaction(newDoc, $"Copy View Items → {dstView.Name}"))
+                            using (var tx = new Transaction(newDoc, $"Copy View Items -> {dstView.Name}"))
                             {
                                 tx.Start();
                                 try
@@ -174,7 +184,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                                 {
                                     try { tx.RollBack(); } catch { }
                                     // Fallback per-element within views
-                                    using (var tx2 = new Transaction(newDoc, $"Copy View Items (fallback) → {dstView.Name}"))
+                                    using (var tx2 = new Transaction(newDoc, $"Copy View Items (fallback) -> {dstView.Name}"))
                                     {
                                         tx2.Start();
                                         foreach (var id in ids)
@@ -193,8 +203,8 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                     if (string.IsNullOrWhiteSpace(fileSafe)) fileSafe = "export";
 
                     var outDir = AppSettingsStore.GetEffectiveOutputDir(settings);
-                    try { Directory.CreateDirectory(outDir); } catch { }
-                    var fullPath = Path.Combine(outDir, fileSafe + ".rvt");
+                    try { System.IO.Directory.CreateDirectory(outDir); } catch { }
+                    var fullPath = System.IO.Path.Combine(outDir, fileSafe + ".rvt");
 
                     // Overwrite policy
                     bool overwrite = settings.DefaultOverwrite;
@@ -206,16 +216,16 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
 
                     try { newDoc.Close(false); } catch { }
 
-                    // Always delete backups *.000*.rvt
+                    // Always delete backups *.000*.rvt (policy retained)
                     try
                     {
-                        var nameNoExt = Path.GetFileNameWithoutExtension(fullPath);
-                        var dir = Path.GetDirectoryName(fullPath) ?? string.Empty;
-                        if (Directory.Exists(dir))
+                        var nameNoExt = System.IO.Path.GetFileNameWithoutExtension(fullPath);
+                        var dir = System.IO.Path.GetDirectoryName(fullPath) ?? string.Empty;
+                        if (System.IO.Directory.Exists(dir))
                         {
-                            foreach (var f in Directory.GetFiles(dir, nameNoExt + ".000*.rvt", SearchOption.TopDirectoryOnly))
+                            foreach (var f in System.IO.Directory.GetFiles(dir, nameNoExt + ".000*.rvt", System.IO.SearchOption.TopDirectoryOnly))
                             {
-                                try { File.Delete(f); } catch { }
+                                try { System.IO.File.Delete(f); } catch { }
                             }
                         }
                     }
@@ -294,7 +304,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                                 var anyView = new FilteredElementCollector(dest).OfClass(typeof(ViewPlan)).Cast<ViewPlan>().FirstOrDefault(v => v != null && !v.IsTemplate);
                                 if (anyView != null)
                                 {
-                                    var rp = Autodesk.Revit.DB.ReferencePlane.Create(dest, bubbleEnd, freeEnd, cutVec, anyView);
+                                    var rp = dest.Create.NewReferencePlane(bubbleEnd, freeEnd, cutVec, anyView);
                                     try { rp.Name = name; } catch { }
                                 }
                             }
@@ -341,7 +351,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
         private static string San(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-            foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
+            foreach (var c in System.IO.Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
             name = name.Replace('/', '_').Replace('\\', '_');
             return name.Trim();
         }
