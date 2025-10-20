@@ -98,33 +98,18 @@
                     <TextBlock x:Name="ProxySummary" Grid.Row="1" Grid.Column="1" Text="(none - Defaults to Scope: Selection Set Categories)" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
                     <Button Grid.Row="1" Grid.Column="2" Content="Pick..." Width="90" Click="PickProxy_Click"/>
 
-                    <!-- Proxy Distance -->
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Proxy Distance:" VerticalAlignment="Center" Margin="0,0,8,8"/>
-                    <TextBox x:Name="ProxyDistanceBox" Grid.Row="2" Grid.Column="2" Margin="0,1,0,7" Width="80"/>
-                    <TextBlock Grid.Row="2" Grid.Column="1" Text="(model units)" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <!-- Blacklist by Category (moved to row 2, formatted like SeedSummary) -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Blacklist by Category:" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="CleanupBlacklistSummary" Grid.Row="2" Grid.Column="1" Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <Button Grid.Row="2" Grid.Column="2" Content="Pick..." Width="90" Click="PickCleanupBlacklist_Click"/>
 
-                    <!-- Ambiguous Rectangles Diagnostic -->
-                    <CheckBox x:Name="ChkDrawAmbiguousRectangles" Grid.Row="3" Grid.Column="0" Content="Ambiguous Rectangles" Margin="4,6,4,0"/>
+                    <!-- Proxy Distance (now row 3) -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Proxy Distance:" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                    <TextBox x:Name="ProxyDistanceBox" Grid.Row="3" Grid.Column="2" Margin="0,1,0,7" Width="80"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="(model units)" VerticalAlignment="Center" Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                    <!-- Blacklist by Category -->
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Blacklist by Category:" Margin="0,8,8,0" />
-                    <TextBlock x:Name="CleanupBlacklistSummary" Grid.Row="4" Grid.Column="1" Margin="0,8,8,0" />
-                    <Button   Grid.Row="4" Grid.Column="2" Content="Pick..." Click="PickCleanupBlacklist_Click" Margin="0,8,0,0" />
-                </Grid>
-            </TabItem>
-
-            <TabItem Header="Cleanup">
-                <Grid Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="170"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                    <!-- Ambiguous Rectangles Diagnostic (now row 4) -->
+                    <CheckBox x:Name="ChkDrawAmbiguousRectangles" Grid.Row="4" Grid.Column="0" Content="Ambiguous Rectangles" Margin="4,6,4,0"/>
                 </Grid>
             </TabItem>
 
@@ -159,12 +144,9 @@
                     <TextBlock Grid.Row="3" Grid.Column="0" Text="Staging Buffer:" VerticalAlignment="Center" Margin="0,0,8,8"/>
                     <TextBox x:Name="StageBufferBox" Grid.Row="3" Grid.Column="1" Margin="0,0,8,8"/>
 
-                    <!-- Stage Move Mode row: Combo + checkbox inline in second column -->
+                    <!-- Stage Move Mode row: Combo only, removed UseStageExternalBox -->
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Stage Move Mode:" VerticalAlignment="Center" Margin="0,0,8,8"/>
-                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,0,8,8">
-                        <ComboBox x:Name="StageMoveModeCombo" Width="180"/>
-                        <CheckBox x:Name="UseStageExternalBox" Content="Use Stage Move For External Clone" Margin="16,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
+                    <ComboBox x:Name="StageMoveModeCombo" Grid.Row="4" Grid.Column="1" Width="180" Margin="0,0,8,8"/>
 
                     <!-- Whitelist by Category -->
                     <TextBlock Grid.Row="5" Grid.Column="0" Text="Whitelist by Category:" VerticalAlignment="Center" Margin="0,12,8,8"/>

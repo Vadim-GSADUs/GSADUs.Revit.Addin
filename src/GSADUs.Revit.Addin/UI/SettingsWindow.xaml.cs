@@ -98,7 +98,6 @@ namespace GSADUs.Revit.Addin.UI
             StageBufferBox.Text = _settings.StagingBuffer.ToString(System.Globalization.CultureInfo.InvariantCulture);
             StageMoveModeCombo.ItemsSource = new[] { "CentroidToOrigin", "MinToOrigin" };
             StageMoveModeCombo.SelectedItem = string.IsNullOrWhiteSpace(_settings.StageMoveMode) ? "CentroidToOrigin" : _settings.StageMoveMode;
-            UseStageExternalBox.IsChecked = _settings.UseStageMoveForExternal;
 
             _stageWhitelistCatIds = new List<int>((_settings.StagingAuthorizedCategoryNames ?? new List<string>()).Select(n => TryResolveBuiltInCategoryId(n, _doc)).Where(id => id != 0));
             _stageWhitelistUids = new List<string>(_settings.StagingAuthorizedUids ?? new List<string>());
@@ -232,7 +231,12 @@ namespace GSADUs.Revit.Addin.UI
         {
             _settings.SelectionSeedCategories = _seedIds.Distinct().ToList();
             _settings.SelectionProxyCategories = _proxyIds.Distinct().ToList();
-            _settings.CleanupBlacklistCategories = _cleanupBlacklistIds.Distinct().ToList();
+            // Always include <Sketch> (-2000045) in CleanupBlacklistCategories
+            const int SketchCategoryId = -2000045;
+            var blacklist = _cleanupBlacklistIds.Distinct().ToList();
+            if (!blacklist.Contains(SketchCategoryId))
+                blacklist.Add(SketchCategoryId);
+            _settings.CleanupBlacklistCategories = blacklist;
             if (double.TryParse(ProxyDistanceBox.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d))
                 _settings.SelectionProxyDistance = d;
 
@@ -254,7 +258,6 @@ namespace GSADUs.Revit.Addin.UI
             if (double.TryParse(StageHeightBox.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var h)) _settings.StagingHeight = h;
             if (double.TryParse(StageBufferBox.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var b)) _settings.StagingBuffer = b;
             _settings.StageMoveMode = StageMoveModeCombo.SelectedItem as string ?? "CentroidToOrigin";
-            _settings.UseStageMoveForExternal = UseStageExternalBox.IsChecked == true;
 
             _settings.StagingAuthorizedCategoryNames = _stageWhitelistCatIds
                 .Select(id => CategoryNameOrEnum((BuiltInCategory)id))

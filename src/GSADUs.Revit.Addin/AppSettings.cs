@@ -11,15 +11,16 @@ namespace GSADUs.Revit.Addin
     {
         public string? LogDir { get; set; }
         public string? DefaultOutputDir { get; set; }
-        public bool DefaultRunAuditBeforeExport { get; set; } = true;
-        public bool DefaultSaveBefore { get; set; } = true;
+        // All bool toggles default to false
+        public bool DefaultRunAuditBeforeExport { get; set; } = false;
+        public bool DefaultSaveBefore { get; set; } = false;
         public bool DefaultRecenterXY { get; set; } = false;
         public bool DefaultOverwrite { get; set; } = false;
         public bool DefaultCleanup { get; set; } = false;
         // New: open output folder when batch export completes
         public bool OpenOutputFolder { get; set; } = false;
         // New: toggle staging area validation prompt/logic
-        public bool ValidateStagingArea { get; set; } = true;
+        public bool ValidateStagingArea { get; set; } = false;
 
         // Selection Sets settings
         public List<int>? SelectionSeedCategories { get; set; }
@@ -72,7 +73,6 @@ namespace GSADUs.Revit.Addin
         public double StagingHeight { get; set; } = 200.0;  // model units
         public double StagingBuffer { get; set; } = 10.0;   // model units
         public string StageMoveMode { get; set; } = "CentroidToOrigin"; // or "MinToOrigin"
-        public bool UseStageMoveForExternal { get; set; } = false;       // future option
 
         // Staging authorization
         public List<string>? StagingAuthorizedUids { get; set; }
@@ -87,7 +87,7 @@ namespace GSADUs.Revit.Addin
         private static readonly string FilePath = Path.Combine(BaseDir, "settings.json");
 
         // Fallbacks used when no user override
-        internal static readonly string FallbackLogDir = @"G:\\Shared drives\\GSADUs Projects\\Our Models\\0 - CATALOG\\Config\\CSV Logs";
+        internal static readonly string FallbackLogDir = @"G:\\Shared drives\\GSADUs Projects\\Our Models\\0 - CATALOG\\Output";
         internal static readonly string FallbackOutputDir = @"G:\\Shared drives\\GSADUs Projects\\Our Models\\0 - CATALOG\\Output";
 
         public static AppSettings Load()
@@ -101,6 +101,7 @@ namespace GSADUs.Revit.Addin
                     var s = JsonSerializer.Deserialize<AppSettings>(json, opts) ?? new AppSettings();
                     EnsureWorkflowDefaults(s);
                     MigrateRvtWorkflowsIfNeeded(s);
+                    EnsureSketchInCleanupBlacklist(s);
                     return s;
                 }
             }
@@ -108,6 +109,7 @@ namespace GSADUs.Revit.Addin
             var fresh = new AppSettings();
             EnsureWorkflowDefaults(fresh);
             MigrateRvtWorkflowsIfNeeded(fresh);
+            EnsureSketchInCleanupBlacklist(fresh);
             return fresh;
         }
 
@@ -220,6 +222,16 @@ namespace GSADUs.Revit.Addin
             {
                 try { Save(s); } catch { }
             }
+        }
+
+        // Ensure <Sketch> category (-2000045) is always present in CleanupBlacklistCategories
+        private static void EnsureSketchInCleanupBlacklist(AppSettings s)
+        {
+            const int SketchCategoryId = -2000045;
+            if (s.CleanupBlacklistCategories == null)
+                s.CleanupBlacklistCategories = new List<int> { SketchCategoryId };
+            else if (!s.CleanupBlacklistCategories.Contains(SketchCategoryId))
+                s.CleanupBlacklistCategories.Add(SketchCategoryId);
         }
     }
 }
