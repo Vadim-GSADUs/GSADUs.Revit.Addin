@@ -20,6 +20,7 @@ namespace GSADUs.Revit.Addin
             // Populate with defaults that mirror existing pipeline
             // Removed RVT-related actions: export-rvt, open-dryrun, cleanup, backup-cleanup, resave-rvt
             // Only PDF and Image actions remain
+            _actions.Add(new ActionDescriptor { Id = "export-rvt", DisplayName = "Export RVT (from template)", Order = 300, RequiresExternalClone = false, DefaultSelected = false });
             _actions.Add(new ActionDescriptor { Id = "export-pdf", DisplayName = "Export PDF (in-place)", Order = 100, RequiresExternalClone = false, DefaultSelected = false });
             _actions.Add(new ActionDescriptor { Id = "export-image", DisplayName = "Export Image (in-place)", Order = 200, RequiresExternalClone = false, DefaultSelected = false });
         }

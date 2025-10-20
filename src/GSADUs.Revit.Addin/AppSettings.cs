@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Linq;
 
 namespace GSADUs.Revit.Addin
 {
@@ -99,12 +100,14 @@ namespace GSADUs.Revit.Addin
                     var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                     var s = JsonSerializer.Deserialize<AppSettings>(json, opts) ?? new AppSettings();
                     EnsureWorkflowDefaults(s);
+                    MigrateRvtWorkflowsIfNeeded(s);
                     return s;
                 }
             }
             catch { }
             var fresh = new AppSettings();
             EnsureWorkflowDefaults(fresh);
+            MigrateRvtWorkflowsIfNeeded(fresh);
             return fresh;
         }
 
@@ -149,7 +152,7 @@ namespace GSADUs.Revit.Addin
                     Name = "RVT ? Model",
                     Kind = WorkflowKind.External,
                     Output = OutputType.Rvt,
-                    Scope = "Model",
+                    Scope = "CurrentSet", // changed from Model so it's visible in BatchExportWindow
                     Description = "Deliverable RVT clone",
                     Order = 0,
                     ActionIds = new List<string> { "export-rvt" }
@@ -184,6 +187,38 @@ namespace GSADUs.Revit.Addin
                     Order = 3,
                     ActionIds = new List<string> { "export-csv" }
                 });
+            }
+        }
+
+        // One-time migration: make existing RVT workflows visible in Batch Export and ensure action id
+        private static void MigrateRvtWorkflowsIfNeeded(AppSettings s)
+        {
+            if (s.Workflows == null || s.Workflows.Count == 0) return;
+            bool changed = false;
+            foreach (var wf in s.Workflows)
+            {
+                try
+                {
+                    if (wf.Output == OutputType.Rvt)
+                    {
+                        if (string.IsNullOrWhiteSpace(wf.Scope) || wf.Scope.Equals("Model", StringComparison.OrdinalIgnoreCase))
+                        {
+                            wf.Scope = "CurrentSet";
+                            changed = true;
+                        }
+                        if (wf.ActionIds == null || !wf.ActionIds.Any(a => string.Equals(a, "export-rvt", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            wf.ActionIds ??= new List<string>();
+                            wf.ActionIds.Add("export-rvt");
+                            changed = true;
+                        }
+                    }
+                }
+                catch { }
+            }
+            if (changed)
+            {
+                try { Save(s); } catch { }
             }
         }
     }
