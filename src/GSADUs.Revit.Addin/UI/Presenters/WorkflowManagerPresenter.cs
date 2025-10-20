@@ -305,11 +305,11 @@ namespace GSADUs.Revit.Addin.UI
             try
             {
                 var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
-                var preselected = Settings.ImageBlacklistCategoryIds ?? new List<int>();
+                var preselected = Settings.ImageWhitelistCategoryIds ?? new List<int>();
                 var dlg = new CategoriesPickerWindow(preselected, doc, initialScope: 2);
                 if (dlg.ShowDialog() == true)
                 {
-                    Settings.ImageBlacklistCategoryIds = dlg.ResultIds?.Distinct().ToList() ?? new List<int>();
+                    Settings.ImageWhitelistCategoryIds = dlg.ResultIds?.Distinct().ToList() ?? new List<int>();
                     try { _catalog.Save(); } catch (Exception ex) { Debug.WriteLine(ex); throw; }
                     // Update summary immediately after selection
                     var summary = ComputeImageWhitelistSummary();
@@ -326,7 +326,7 @@ namespace GSADUs.Revit.Addin.UI
         // Helper for summary computation
         private string ComputeImageWhitelistSummary()
         {
-            var ids = Settings.ImageBlacklistCategoryIds ?? new List<int>();
+            var ids = Settings.ImageWhitelistCategoryIds ?? new List<int>();
             if (ids.Count == 0) return "(all categories)";
             var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
             string NameOrEnum(int id)
@@ -348,7 +348,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void UpdateImageWhitelistSummary()
         {
-            var ids = Settings.ImageBlacklistCategoryIds ?? new List<int>();
+            var ids = Settings.ImageWhitelistCategoryIds ?? new List<int>();
             if (ids.Count == 0) { ImageWorkflow.WhitelistSummary = "(all categories)"; return; }
             var doc = RevitUiContext.Current?.ActiveUIDocument?.Document;
             string NameOrEnum(int id)

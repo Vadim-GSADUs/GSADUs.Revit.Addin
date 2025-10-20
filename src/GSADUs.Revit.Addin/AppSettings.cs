@@ -30,8 +30,8 @@ namespace GSADUs.Revit.Addin
         // Cleanup settings
         public List<int>? CleanupBlacklistCategories { get; set; }
 
-        // PNG blacklist (mirrors proxy categories pattern)
-        public List<int>? ImageBlacklistCategoryIds { get; set; }
+        // Image Whielist (mirrors proxy categories pattern)
+        public List<int>? ImageWhitelistCategoryIds { get; set; }
 
         public int Version { get; set; } = 1;
 

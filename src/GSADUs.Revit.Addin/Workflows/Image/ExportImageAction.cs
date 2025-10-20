@@ -100,13 +100,12 @@ namespace GSADUs.Revit.Addin.Workflows.Image
             return (baseNoExt, ext, fileName);
         }
 
-        // NOTE: Existing settings property ImageBlacklistCategoryIds is now treated as a *whitelist*.
         // If list is non-empty only categories in it are considered for auto-crop.
         private static List<BoundingBoxXYZ> CollectVisiblePlanElementBoxes(ViewPlan plan, Document doc, IEnumerable<ElementId> setIds)
         {
             var boxes = new List<BoundingBoxXYZ>();
             if (plan == null || doc == null) return boxes;
-            List<int>? whitelist = null; try { whitelist = AppSettingsStore.Load()?.ImageBlacklistCategoryIds; } catch { }
+            List<int>? whitelist = null; try { whitelist = AppSettingsStore.Load()?.ImageWhitelistCategoryIds; } catch { }
             if (whitelist != null && whitelist.Count == 0) whitelist = null; // empty -> include all
 
             HashSet<ElementId>? visible = null;
