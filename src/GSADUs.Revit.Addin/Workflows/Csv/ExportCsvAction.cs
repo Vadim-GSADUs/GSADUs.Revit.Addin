@@ -69,9 +69,32 @@ namespace GSADUs.Revit.Addin.Workflows.Csv
                     catch { }
                     return new List<string>();
                 }
+                bool Gb(string k, bool def = false)
+                {
+                    try
+                    {
+                        if (p.TryGetValue(k, out var v))
+                        {
+                            if (v.ValueKind == JsonValueKind.True) return true;
+                            if (v.ValueKind == JsonValueKind.False) return false;
+                            if (v.ValueKind == JsonValueKind.String && bool.TryParse(v.GetString(), out var b)) return b;
+                        }
+                    }
+                    catch { }
+                    return def;
+                }
 
                 var scheduleIds = Gsa(CsvWorkflowKeys.scheduleIds);
                 var pattern = Gs(CsvWorkflowKeys.fileNamePattern);
+                // Read options (default false)
+                var headersFootersBlanks = Gb(CsvWorkflowKeys.headersFootersBlanks, false);
+                var includeTitle = Gb(CsvWorkflowKeys.title, false);
+                // Legacy inverse support: suppressBlankRows => !headersFootersBlanks
+                if (!p.ContainsKey(CsvWorkflowKeys.headersFootersBlanks) && p.TryGetValue(CsvWorkflowKeys.suppressBlankRowsLegacy, out _))
+                {
+                    headersFootersBlanks = !Gb(CsvWorkflowKeys.suppressBlankRowsLegacy, false);
+                }
+
                 if (string.IsNullOrWhiteSpace(pattern))
                 {
                     pattern = string.Equals(wf.Scope, "EntireProject", StringComparison.OrdinalIgnoreCase)
@@ -103,18 +126,17 @@ namespace GSADUs.Revit.Addin.Workflows.Csv
 
                     try
                     {
-                        // Late-bind options type and call Export to avoid compile-time dependency on specific API version
                         object? opts = CreateScheduleExportOptions(uiapp);
                         if (opts != null)
                         {
                             TrySetProperty(opts, "FieldDelimiter", ",");
                             TrySetProperty(opts, "TextQualifier", '"');
-                            TrySetProperty(opts, "HeadersFootersBlanks", true);
+                            TrySetProperty(opts, "HeadersFootersBlanks", headersFootersBlanks);
+                            TrySetProperty(opts, "Title", includeTitle);
                         }
 
-                        // Prefer overload with options if present
-                        bool exported = TryExportWithOptions(vs, outputDir, Path.GetFileName(fullPath), opts)
-                                        || TryExportBasic(vs, outputDir, Path.GetFileName(fullPath));
+                        // Only use the overload with options; remove 2-arg fallback
+                        bool exported = TryExportWithOptions(vs, outputDir, Path.GetFileName(fullPath), opts);
                         if (!exported)
                         {
                             try { uiapp.Application?.WriteJournalComment($"ExportCsvAction: no suitable Export overload found.", false); } catch { }
@@ -133,8 +155,8 @@ namespace GSADUs.Revit.Addin.Workflows.Csv
             try
             {
                 var asm = typeof(ViewSchedule).Assembly;
-                // Revit typically exposes Autodesk.Revit.DB.ScheduleExportOptions
-                var t = asm.GetType("Autodesk.Revit.DB.ScheduleExportOptions", throwOnError: false, ignoreCase: false);
+                // Revit exposes Autodesk.Revit.DB.ViewScheduleExportOptions for schedule exports
+                var t = asm.GetType("Autodesk.Revit.DB.ViewScheduleExportOptions", throwOnError: false, ignoreCase: false);
                 if (t == null) return null;
                 return Activator.CreateInstance(t);
             }
@@ -168,17 +190,22 @@ namespace GSADUs.Revit.Addin.Workflows.Csv
         {
             try
             {
-                var mi = typeof(ViewSchedule).GetMethod("Export", new[] { typeof(string), typeof(string), options?.GetType() ?? typeof(object) });
+                // Try exact signature first using the runtime type of options
+                var optType = options?.GetType();
+                var mi = optType != null
+                    ? typeof(ViewSchedule).GetMethod("Export", new[] { typeof(string), typeof(string), optType })
+                    : null;
                 if (mi == null && options != null)
                 {
-                    // Try to resolve overload dynamically when reflection with exact signature fails
+                    // Resolve overload dynamically when reflection with exact signature fails
                     var methods = typeof(ViewSchedule).GetMethods(BindingFlags.Instance | BindingFlags.Public)
                         .Where(m => m.Name == "Export" && m.GetParameters().Length == 3)
                         .ToList();
                     foreach (var m in methods)
                     {
                         var ps = m.GetParameters();
-                        if (ps[0].ParameterType == typeof(string) && ps[1].ParameterType == typeof(string) && ps[2].ParameterType.Name.Contains("ScheduleExportOptions"))
+                        if (ps[0].ParameterType == typeof(string) && ps[1].ParameterType == typeof(string) &&
+                            ps[2].ParameterType.Name.Contains("ViewScheduleExportOptions", StringComparison.Ordinal))
                         {
                             mi = m; break;
                         }
@@ -186,18 +213,6 @@ namespace GSADUs.Revit.Addin.Workflows.Csv
                 }
                 if (mi == null) return false;
                 mi.Invoke(vs, new object?[] { folder, fileName, options });
-                return true;
-            }
-            catch { return false; }
-        }
-
-        private static bool TryExportBasic(ViewSchedule vs, string folder, string fileName)
-        {
-            try
-            {
-                var mi = typeof(ViewSchedule).GetMethod("Export", new[] { typeof(string), typeof(string) });
-                if (mi == null) return false;
-                mi.Invoke(vs, new object?[] { folder, fileName });
                 return true;
             }
             catch { return false; }

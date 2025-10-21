@@ -292,6 +292,14 @@
                             </StackPanel>
                         </GroupBox>
 
+                        <!-- CSV Export Options -->
+                        <GroupBox Header="CSV Export Options" Margin="0,4,0,6">
+                            <StackPanel Margin="6" Orientation="Vertical">
+                                <CheckBox Content="Headers, Footers, and Blank Rows" IsChecked="{Binding HeadersFootersBlanks, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                <CheckBox Content="Title" IsChecked="{Binding IncludeTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="CSV File" Margin="0,4,0,6">
                             <StackPanel Margin="6" Orientation="Vertical">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">

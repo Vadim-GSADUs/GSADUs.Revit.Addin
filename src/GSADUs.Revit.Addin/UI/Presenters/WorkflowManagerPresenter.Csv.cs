@@ -65,6 +65,15 @@ namespace GSADUs.Revit.Addin.UI
             {
                 p[CsvWorkflowKeys.fileNamePattern] = d2.RootElement.Clone();
             }
+            // Persist options
+            using (var d3 = JsonDocument.Parse(vm.HeadersFootersBlanks ? "true" : "false"))
+            {
+                p[CsvWorkflowKeys.headersFootersBlanks] = d3.RootElement.Clone();
+            }
+            using (var d4 = JsonDocument.Parse(vm.IncludeTitle ? "true" : "false"))
+            {
+                p[CsvWorkflowKeys.title] = d4.RootElement.Clone();
+            }
 
             existing.Parameters = p;
             EnsureActionId(existing, "export-csv");
@@ -131,7 +140,6 @@ namespace GSADUs.Revit.Addin.UI
                 }
                 catch { }
 
-                // Apply selection state to available list (preserve if not loaded yet)
                 if (CsvWorkflow.AvailableSchedules.Count > 0)
                 {
                     foreach (var o in CsvWorkflow.AvailableSchedules)
@@ -139,6 +147,41 @@ namespace GSADUs.Revit.Addin.UI
                         o.IsSelected = ids.Contains(o.Id);
                     }
                 }
+
+                // Options (default false)
+                bool headers = false;
+                try
+                {
+                    if (p != null)
+                    {
+                        if (p.TryGetValue(CsvWorkflowKeys.headersFootersBlanks, out var b))
+                        {
+                            headers = b.ValueKind == JsonValueKind.True ||
+                                      (b.ValueKind == JsonValueKind.String && bool.TryParse(b.GetString(), out var bb) && bb);
+                        }
+                        else if (p.TryGetValue(CsvWorkflowKeys.suppressBlankRowsLegacy, out var legacy))
+                        {
+                            // Legacy inverse: suppressBlankRows=true => headersFootersBlanks=false
+                            var suppress = legacy.ValueKind == JsonValueKind.True ||
+                                           (legacy.ValueKind == JsonValueKind.String && bool.TryParse(legacy.GetString(), out var sb) && sb);
+                            headers = !suppress;
+                        }
+                    }
+                }
+                catch { }
+                CsvWorkflow.HeadersFootersBlanks = headers;
+
+                bool title = false;
+                try
+                {
+                    if (p != null && p.TryGetValue(CsvWorkflowKeys.title, out var t))
+                    {
+                        title = t.ValueKind == JsonValueKind.True ||
+                                (t.ValueKind == JsonValueKind.String && bool.TryParse(t.GetString(), out var bt) && bt);
+                    }
+                }
+                catch { }
+                CsvWorkflow.IncludeTitle = title;
             }
             catch { }
         }

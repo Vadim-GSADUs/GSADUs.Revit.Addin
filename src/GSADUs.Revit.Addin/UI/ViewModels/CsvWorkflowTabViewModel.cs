@@ -22,7 +22,9 @@ namespace GSADUs.Revit.Addin.UI
                     || e.PropertyName == nameof(Name)
                     || e.PropertyName == nameof(WorkflowScope)
                     || e.PropertyName == nameof(Description)
-                    || e.PropertyName == nameof(CsvPattern))
+                    || e.PropertyName == nameof(CsvPattern)
+                    || e.PropertyName == nameof(HeadersFootersBlanks)
+                    || e.PropertyName == nameof(IncludeTitle))
                 {
                     HasUnsavedChanges = true;
                     OnChanged(nameof(HasUnsavedChanges));
@@ -111,6 +113,21 @@ namespace GSADUs.Revit.Addin.UI
         public ObservableCollection<ScheduleOption> AvailableSchedules { get; } = new();
 
         public string[] SelectedScheduleIds => AvailableSchedules.Where(o => o.IsSelected).Select(o => o.Id).ToArray();
+
+        // NEW: Options
+        private bool _headersFootersBlanks;
+        public bool HeadersFootersBlanks
+        {
+            get => _headersFootersBlanks;
+            set { if (_headersFootersBlanks != value) { _headersFootersBlanks = value; OnChanged(nameof(HeadersFootersBlanks)); } }
+        }
+
+        private bool _includeTitle;
+        public bool IncludeTitle
+        {
+            get => _includeTitle;
+            set { if (_includeTitle != value) { _includeTitle = value; OnChanged(nameof(IncludeTitle)); } }
+        }
 
         // File name pattern and preview list
         private string _csvPattern = DefaultPatternCurrentSet;
@@ -240,6 +257,8 @@ namespace GSADUs.Revit.Addin.UI
             WorkflowScope = string.Empty;
             Description = string.Empty;
             CsvPattern = DefaultPatternCurrentSet;
+            HeadersFootersBlanks = false;
+            IncludeTitle = false;
             foreach (var o in AvailableSchedules) o.IsSelected = false;
             FileNamePreview.Clear();
             SetDirty(true);
