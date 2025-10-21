@@ -11,6 +11,9 @@ Scope of this plan
 
 Decisions confirmed by user
 - Selection: Multiple selection is supported and should result in multiple CSV files (one per selected schedule).
+- Current-set iteration: When a workflow is saved with `Scope == CurrentSet`, the batch run exports the same schedule once per
+  set processed. Each pass relies on the existing `BatchRunCoordinator` staging loop (which already toggles the
+  `CurrentSet` parameter via `TryToggleCurrentSet`) so filtered schedules pick up the active set before each export.
 - Inclusion: Include all schedule types, including Key Schedules and Material Takeoffs.
 - Host scope: Schedules come from the host document only (no linked documents).
 - No data changes: Export schedule data exactly as shown in Revit; no filtering/transformation beyond what the schedule already defines.
@@ -52,12 +55,15 @@ Decisions confirmed by user
     - `AvailableSchedules` (collection): all `ViewSchedule`, including key schedules and material takeoffs, from the active document (host only).
     - `SelectedSchedules` (collection): multi-select; one CSV per selected schedule per run (per set when applicable).
     - `RefreshSchedulesCommand` to re-enumerate.
-  - File Name section
-    - `FileNamePattern` (string) with supported tokens: `{SetName}`, `{FileName}`, `{ViewName}` only.
-    - `FileNamePreview` (collection of strings): live preview of resolved filenames for all `SelectedSchedules` (like the PDF workflow).
+- File Name section
+  - `FileNamePattern` (string) with supported tokens: `{SetName}`, `{FileName}`, `{ViewName}` only. Reuse the same binding and
+    validation helpers that power the PDF tab so token parsing and error surfacing stay consistent.
+  - `FileNamePreview` (collection of strings): live preview of resolved filenames for all `SelectedSchedules` (like the PDF workflow).
     - Defaulting behavior
-      - If `Scope == CurrentSet` and pattern is empty, default to `{SetName} {ViewName}`.
-      - If `Scope == EntireProject` and pattern is empty, default to `{FileName} {ViewName}`.
+      - If `Scope == CurrentSet` and pattern is empty, default to `{SetName} {ViewName}` so the exported file names stay unique
+        per set.
+      - If `Scope == EntireProject` and pattern is empty, default to `{FileName} {ViewName}` to mirror the "entire project"
+        behavior in the PDF tab.
       - On scope change: if pattern equals the previous default or is empty, switch to the new default; otherwise, preserve user-entered pattern.
     - Validation: pattern must only contain allowed tokens; no unknown tokens.
 
@@ -106,6 +112,13 @@ Decisions confirmed by user
 7) Behavior and state
 - On document or scope change: refresh `AvailableSchedules`.
 - On selection or pattern change: recalc `FileNamePreview`.
+- During batch execution:
+  - `BatchRunCoordinator` already toggles the `CurrentSet` parameter to true while a set is staged and resets it afterwards. The
+    CSV export action must simply respect the active set context passed in so schedules filtered on `CurrentSet == 1` update for
+    each iteration without duplicating toggling logic.
+  - For `Scope == CurrentSet`, compute filenames per `(setName, schedule)` pair using `{SetName}` and `{ViewName}` tokens so each
+    exported schedule per set resolves to a distinct path.
+  - For `Scope == EntireProject`, generate one export per selected schedule using `{FileName}` (host model name) and `{ViewName}`.
 - On save: write to `settings.json` Workflows; CSV workflow should use `ActionIds: ["export-csv"]` and `Output: 3` to match existing convention.
 
 8) Filename collision and overwrite handling
