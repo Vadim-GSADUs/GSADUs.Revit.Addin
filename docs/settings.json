@@ -1,0 +1,192 @@
+{
+  "LogDir": "G:\\\\Shared drives\\\\GSADUs Projects\\\\Our Models\\\\0 - CATALOG\\\\Config\\\\CSV Logs",
+  "DefaultOutputDir": "G:\\\\Shared drives\\\\GSADUs Projects\\\\Our Models\\\\0 - CATALOG\\\\Output",
+  "DefaultRunAuditBeforeExport": false,
+  "DefaultSaveBefore": false,
+  "DefaultRecenterXY": false,
+  "DefaultOverwrite": true,
+  "DefaultCleanup": true,
+  "OpenOutputFolder": true,
+  "ValidateStagingArea": false,
+  "SelectionSeedCategories": [
+    -2000011,
+    -2000032,
+    -2000035
+  ],
+  "SelectionProxyCategories": [
+    -2000080,
+    -2008234,
+    -2000011,
+    -2000023,
+    -2001060,
+    -2001350,
+    -2001160,
+    -2000014,
+    -2000100,
+    -2001140,
+    -2000032,
+    -2000151,
+    -2000260,
+    -2000160,
+    -2000480,
+    -2000460,
+    -2000450,
+    -2000079,
+    -2003200,
+    -2005020,
+    -2001000,
+    -2000035,
+    -2000066,
+    -2001390,
+    -2001391,
+    -2001320,
+    -2000170,
+    -2000320,
+    -2000171,
+    -2000038,
+    -2000126,
+    -2000946,
+    -2000530,
+    -2001120,
+    -2001330,
+    -2008016,
+    -2001360,
+    -2000321,
+    -2000051
+  ],
+  "SelectionProxyDistance": 1,
+  "CleanupBlacklistCategories": [
+    -2000045
+  ],
+  "Version": 1,
+  "DeepAnnoStatus": false,
+  "DryrunDiagnostics": false,
+  "PurgeCompact": true,
+  "PerfDiagnostics": false,
+  "DrawAmbiguousRectangles": false,
+  "Workflows": [
+    {
+      "Id": "e6f3231a68f54772ad04e5b3e1146d5b",
+      "Name": "RVT",
+      "Kind": 1,
+      "Output": 0,
+      "Scope": "CurrentSet",
+      "Description": "Deliverable RVT clone",
+      "ActionIds": [
+        "export-rvt"
+      ],
+      "Parameters": {},
+      "Enabled": true,
+      "Order": 0
+    },
+    {
+      "Id": "e381e77df4704ebdb8c025e26459c537",
+      "Name": "Image",
+      "Kind": 0,
+      "Output": 2,
+      "Scope": "CurrentSet",
+      "Description": "Test",
+      "ActionIds": [
+        "export-image"
+      ],
+      "Parameters": {
+        "fileNamePattern": "{SetName}",
+        "cropMode": "Auto",
+        "cropOffset": "1",
+        "resolutionPreset": "Ultra",
+        "imageFormat": "PNG",
+        "exportScope": "SingleView",
+        "singleViewId": "369"
+      },
+      "Enabled": true,
+      "Order": 2
+    },
+    {
+      "Id": "43b150e9b7a042a5b200a8ee4a8740a9",
+      "Name": "CSV ? Schedule ? Room",
+      "Kind": 0,
+      "Output": 3,
+      "Scope": "CurrentSet",
+      "Description": "Export Room schedule CSV (stub)",
+      "ActionIds": [
+        "export-csv"
+      ],
+      "Parameters": {},
+      "Enabled": true,
+      "Order": 3
+    },
+    {
+      "Id": "9463b55955004c57a588a7526d69417d",
+      "Name": "PDF",
+      "Kind": 0,
+      "Output": 1,
+      "Scope": "CurrentSet",
+      "Description": "PDF",
+      "ActionIds": [
+        "export-pdf"
+      ],
+      "Parameters": {
+        "printSetName": "COMPLETE SET PRINT ORDER (01/13/23)",
+        "exportSetupName": "GSADUs",
+        "fileNamePattern": "{SetName}.pdf"
+      },
+      "Enabled": true,
+      "Order": 0
+    },
+    {
+      "Id": "7f410505fbb7431db0d8d2317704116d",
+      "Name": "NEW FULL SET",
+      "Kind": 0,
+      "Output": 1,
+      "Scope": "CurrentSet",
+      "Description": "NEW FULL SET",
+      "ActionIds": [],
+      "Parameters": {},
+      "Enabled": true,
+      "Order": 0
+    },
+    {
+      "Id": "3ff9a4da49ec4e14bb4189a1234c83fa",
+      "Name": "Test",
+      "Kind": 0,
+      "Output": 1,
+      "Scope": "CurrentSet",
+      "Description": "Test",
+      "ActionIds": [],
+      "Parameters": {},
+      "Enabled": true,
+      "Order": 0
+    },
+    {
+      "Id": "fa8d182f04344c78b9664d19ef918eee",
+      "Name": "CSV Schedules",
+      "Kind": 0,
+      "Output": 3,
+      "Scope": "CurrentSet",
+      "Description": "Generic Schedules",
+      "ActionIds": [
+        "export-csv"
+      ],
+      "Parameters": {
+        "scheduleIds": [
+          "3459386",
+          "2879735",
+          "2592149"
+        ],
+        "fileNamePattern": "{SetName} {ViewName}"
+      },
+      "Enabled": true,
+      "Order": 0
+    }
+  ],
+  "SelectedWorkflowIds": [
+    "fa8d182f04344c78b9664d19ef918eee"
+  ],
+  "CurrentSetParameterName": "CurrentSet",
+  "StagingWidth": 200,
+  "StagingHeight": 200,
+  "StagingBuffer": 10,
+  "StageMoveMode": "CentroidToOrigin",
+  "StagingAuthorizedUids": [],
+  "StagingAuthorizedCategoryNames": []
+}
