@@ -75,6 +75,8 @@ namespace GSADUs.Revit.Addin.UI
             _presenter.OnWindowConstructed(this);
 
             this.Loaded += WorkflowManagerWindow_Loaded;
+
+            // CSV wiring now handled inside presenter.WireCsv(), invoked by presenter ctor
         }
 
         // Helper to require named element lookups
@@ -87,9 +89,13 @@ namespace GSADUs.Revit.Addin.UI
 
         private void WorkflowManagerWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            var uiDoc = RevitUiContext.Current?.ActiveUIDocument;
-
-            _presenter.OnLoaded(uiDoc, this);
+            try
+            {
+                var uidoc = RevitUiContext.Current?.ActiveUIDocument;
+                // Single auto-refresh on open for all tabs (PDF/Image/CSV)
+                _presenter.OnLoaded(uidoc, this);
+            }
+            catch { }
         }
 
         private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)

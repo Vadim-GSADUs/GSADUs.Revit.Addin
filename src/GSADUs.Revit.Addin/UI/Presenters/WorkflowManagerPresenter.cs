@@ -11,7 +11,7 @@ using System.Diagnostics;
 
 namespace GSADUs.Revit.Addin.UI
 {
-    internal sealed class WorkflowManagerPresenter
+    internal sealed partial class WorkflowManagerPresenter
     {
         private readonly WorkflowCatalogService _catalog;
         private readonly IDialogService _dialogs;
@@ -49,6 +49,9 @@ namespace GSADUs.Revit.Addin.UI
             var scopes = new[] { "CurrentSet", "SelectionSet", "EntireProject" };
             PdfWorkflow.Scopes.Clear(); foreach (var s in scopes) PdfWorkflow.Scopes.Add(s);
             ImageWorkflow.Scopes.Clear(); foreach (var s in scopes) ImageWorkflow.Scopes.Add(s);
+
+            // Wire CSV tab
+            try { WireCsv(); } catch { }
 
             // Wire image whitelist command
             ImageWorkflow.PickWhitelistCommand = new DelegateCommand(_ => ExecutePickWhitelist());
@@ -97,6 +100,11 @@ namespace GSADUs.Revit.Addin.UI
             {
                 ImageWorkflow.SelectedWorkflowId = null;
                 ImageWorkflow.Reset();
+            }
+            if (CsvWorkflow != null && string.Equals(CsvWorkflow.SelectedWorkflowId, id, StringComparison.OrdinalIgnoreCase))
+            {
+                CsvWorkflow.SelectedWorkflowId = null;
+                CsvWorkflow.Reset();
             }
         }
 
@@ -172,15 +180,20 @@ namespace GSADUs.Revit.Addin.UI
             var img = all.Where(w => w.Output == OutputType.Image)
                          .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
                          .ToList();
+            var csv = all.Where(w => w.Output == OutputType.Csv)
+                         .Select(w => new SavedWorkflowListItem { Id = w.Id, Display = $"{w.Name} - {w.Scope} - {w.Description}" })
+                         .ToList();
 
             // Temporarily detach handlers to avoid transient reloads during list mutations
             try
             {
                 PdfWorkflow.PropertyChanged -= VmOnPropertyChanged;
                 ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                CsvWorkflow.PropertyChanged -= VmOnPropertyChanged;
 
                 PdfWorkflow.SavedWorkflows.Clear(); foreach (var i in pdf) PdfWorkflow.SavedWorkflows.Add(i);
                 ImageWorkflow.SavedWorkflows.Clear(); foreach (var i in img) ImageWorkflow.SavedWorkflows.Add(i);
+                CsvWorkflow.SavedWorkflows.Clear(); foreach (var i in csv) CsvWorkflow.SavedWorkflows.Add(i);
             }
             finally
             {
@@ -189,6 +202,8 @@ namespace GSADUs.Revit.Addin.UI
                 PdfWorkflow.PropertyChanged += VmOnPropertyChanged;
                 ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
                 ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
+                CsvWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                CsvWorkflow.PropertyChanged += VmOnPropertyChanged;
             }
         }
 
@@ -202,6 +217,10 @@ namespace GSADUs.Revit.Addin.UI
             {
                 System.Diagnostics.Trace.WriteLine($"[Presenter] PropertyChanged(Image.SelectedWorkflowId) from sender {sender?.GetHashCode()} value={(i.SelectedWorkflowId ?? "<null>")}");
                 LoadWorkflowIntoImageVm(i.SelectedWorkflowId);
+            }
+            else if (sender is CsvWorkflowTabViewModel c && e.PropertyName == nameof(CsvWorkflowTabViewModel.SelectedWorkflowId))
+            {
+                LoadWorkflowIntoCsvVm(c.SelectedWorkflowId);
             }
         }
 
@@ -247,6 +266,8 @@ namespace GSADUs.Revit.Addin.UI
                 {
                     HydratePdfVmSources(doc);
                     PopulateImageSources(doc);
+                    // CSV sources
+                    try { PopulateCsvSources(doc); } catch { }
                 }
             }
             catch (Exception ex)
@@ -551,12 +572,14 @@ namespace GSADUs.Revit.Addin.UI
             // Cache current selections to restore after refresh
             var pdfId = PdfWorkflow.SelectedWorkflowId;
             var imgId = ImageWorkflow.SelectedWorkflowId;
+            var csvId = CsvWorkflow.SelectedWorkflowId;
 
             // Temporarily detach handlers to avoid transient reloads during refresh + selection restore
             try
             {
                 PdfWorkflow.PropertyChanged -= VmOnPropertyChanged;
                 ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                CsvWorkflow.PropertyChanged -= VmOnPropertyChanged;
 
                 _catalog.SaveAndRefresh();
                 PopulateSavedLists();
@@ -584,6 +607,18 @@ namespace GSADUs.Revit.Addin.UI
                 {
                     ImageWorkflow.SelectedWorkflowId = ImageWorkflow.SavedWorkflows[0].Id;
                 }
+
+                // Restore selection for CSV tab
+                if (!string.IsNullOrWhiteSpace(csvId) &&
+                    CsvWorkflow.SavedWorkflows.Any(w => string.Equals(w.Id, csvId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    CsvWorkflow.SelectedWorkflowId = csvId;
+                }
+                else if (string.IsNullOrWhiteSpace(CsvWorkflow.SelectedWorkflowId) &&
+                         CsvWorkflow.SavedWorkflows.Count > 0)
+                {
+                    CsvWorkflow.SelectedWorkflowId = CsvWorkflow.SavedWorkflows[0].Id;
+                }
             }
             finally
             {
@@ -592,6 +627,8 @@ namespace GSADUs.Revit.Addin.UI
                 PdfWorkflow.PropertyChanged += VmOnPropertyChanged;
                 ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
                 ImageWorkflow.PropertyChanged += VmOnPropertyChanged;
+                CsvWorkflow.PropertyChanged -= VmOnPropertyChanged;
+                CsvWorkflow.PropertyChanged += VmOnPropertyChanged;
             }
         }
 

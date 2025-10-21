@@ -52,6 +52,7 @@ namespace GSADUs.Revit.Addin.UI
 
         public PdfWorkflowTabViewModel Pdf => _presenter.PdfWorkflow;
         public ImageWorkflowTabViewModel Image => _presenter.ImageWorkflow;
+        public CsvWorkflowTabViewModel Csv => _presenter.CsvWorkflow;
 
         private void OpenWorkflow(WorkflowDefinition? wf)
         {
@@ -67,6 +68,10 @@ namespace GSADUs.Revit.Addin.UI
                 case OutputType.Image:
                     SelectedTabIndex = 2;
                     _presenter.ImageWorkflow.SelectedWorkflowId = wf.Id;
+                    break;
+                case OutputType.Csv:
+                    SelectedTabIndex = 3; // CSV tab index
+                    _presenter.CsvWorkflow.SelectedWorkflowId = wf.Id;
                     break;
                 default:
                     SelectedTabIndex = 0;

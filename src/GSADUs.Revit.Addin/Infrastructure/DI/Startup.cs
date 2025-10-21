@@ -5,6 +5,7 @@ using GSADUs.Revit.Addin.Workflows.Pdf; // Updated namespace for ExportPdfAction
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using GSADUs.Revit.Addin.Workflows.Rvt;
+using GSADUs.Revit.Addin.Workflows.Csv;
 
 namespace GSADUs.Revit.Addin
 {
@@ -43,11 +44,10 @@ namespace GSADUs.Revit.Addin
             services.AddSingleton<IActionRegistry, ActionRegistry>();
 
             // Built-in action implementations (execution)
-
-            // In-place action stubs
             services.AddSingleton<IExportAction, ExportPdfAction>();
             services.AddSingleton<IExportAction, ExportImageAction>();
             services.AddSingleton<IExportAction, ExportRvtAction>();
+            services.AddSingleton<IExportAction, ExportCsvAction>();
 
             // Phase 2: settings persistence abstraction and catalog/presenter scaffolding
             services.AddSingleton<ISettingsPersistence, SettingsPersistence>();

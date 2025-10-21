@@ -270,6 +270,28 @@
                             <Button x:Name="CsvNewBtn" Content="New" Width="90" Margin="8,0,0,0" Command="{Binding NewCommand}"/>
                         </StackPanel>
 
+                        <!-- Name and Scope -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox x:Name="CsvNameBox" Width="240" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Text="  Scope:" VerticalAlignment="Center" Margin="12,0,8,0"/>
+                            <ComboBox x:Name="CsvScopeCombo" Width="200" ItemsSource="{Binding Scopes}" SelectedItem="{Binding WorkflowScope, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+
+                        <!-- CSV Export Range: schedule selection (auto-refreshed on open) -->
+                        <GroupBox Header="CSV Export Range" Margin="0,4,0,6">
+                            <StackPanel Margin="6" Orientation="Vertical">
+                                <TextBlock Text="Schedules (host document):" Margin="0,0,0,6"/>
+                                <ListBox x:Name="CsvSchedulesList" ItemsSource="{Binding AvailableSchedules}" MinHeight="160" MaxHeight="260">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Content="{Binding Name}"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="CSV File" Margin="0,4,0,6">
                             <StackPanel Margin="6" Orientation="Vertical">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -280,8 +302,16 @@
                                         </TextBox.Text>
                                     </TextBox>
                                 </StackPanel>
+                                <TextBlock Text="Allowed tokens: {SetName}, {FileName}, {ViewName}" Foreground="Gray" Margin="0,0,0,6"/>
+                                <TextBlock Text="Preview:" FontWeight="Bold" Margin="0,4,0,2"/>
+                                <ListBox x:Name="CsvPreviewList" ItemsSource="{Binding FileNamePreview}" MinHeight="80" MaxHeight="160"/>
                             </StackPanel>
                         </GroupBox>
+
+                        <StackPanel>
+                            <TextBlock Text="Workflow Description:" Margin="0,0,0,4"/>
+                            <TextBox x:Name="CsvDescBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" VerticalScrollBarVisibility="Auto" Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
 
                         <DockPanel LastChildFill="False" Margin="0,8,0,0">
                             <Button x:Name="CsvSaveBtn" Content="Save Workflow" Width="140" DockPanel.Dock="Right"
