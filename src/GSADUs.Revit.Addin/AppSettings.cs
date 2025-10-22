@@ -154,7 +154,7 @@ namespace GSADUs.Revit.Addin
                     Name = "RVT ? Model",
                     Kind = WorkflowKind.External,
                     Output = OutputType.Rvt,
-                    Scope = "CurrentSet", // changed from Model so it's visible in BatchExportWindow
+                    Scope = "SelectionSet",
                     Description = "Deliverable RVT clone",
                     Order = 0,
                     ActionIds = new List<string> { "export-rvt" }
@@ -164,7 +164,7 @@ namespace GSADUs.Revit.Addin
                     Name = "PDF ? Floorplan",
                     Kind = WorkflowKind.Internal,
                     Output = OutputType.Pdf,
-                    Scope = "CurrentSet",
+                    Scope = "SelectionSet",
                     Description = "Export floor plan PDFs (stub)",
                     Order = 1,
                     ActionIds = new List<string> { "export-pdf" }
@@ -174,7 +174,7 @@ namespace GSADUs.Revit.Addin
                     Name = "Image ? Floorplan",
                     Kind = WorkflowKind.Internal,
                     Output = OutputType.Image,
-                    Scope = "CurrentSet",
+                    Scope = "SelectionSet",
                     Description = "Export floor plan images (stub)",
                     Order = 2,
                     ActionIds = new List<string> { "export-image" }
@@ -184,7 +184,7 @@ namespace GSADUs.Revit.Addin
                     Name = "CSV ? Schedule ? Room",
                     Kind = WorkflowKind.Internal,
                     Output = OutputType.Csv,
-                    Scope = "CurrentSet",
+                    Scope = "SelectionSet",
                     Description = "Export Room schedule CSV (stub)",
                     Order = 3,
                     ActionIds = new List<string> { "export-csv" }
@@ -205,7 +205,7 @@ namespace GSADUs.Revit.Addin
                     {
                         if (string.IsNullOrWhiteSpace(wf.Scope) || wf.Scope.Equals("Model", StringComparison.OrdinalIgnoreCase))
                         {
-                            wf.Scope = "CurrentSet";
+                            wf.Scope = "SelectionSet";
                             changed = true;
                         }
                         if (wf.ActionIds == null || !wf.ActionIds.Any(a => string.Equals(a, "export-rvt", StringComparison.OrdinalIgnoreCase)))

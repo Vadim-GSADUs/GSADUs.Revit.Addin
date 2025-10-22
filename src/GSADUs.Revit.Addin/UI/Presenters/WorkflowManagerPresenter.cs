@@ -46,7 +46,7 @@ namespace GSADUs.Revit.Addin.UI
             _dialogs = dialogs;
 
             // Initialize scope options
-            var scopes = new[] { "CurrentSet", "SelectionSet", "EntireProject" };
+            var scopes = new[] { "SelectionSet", "SelectionSet", "EntireProject" };
             PdfWorkflow.Scopes.Clear(); foreach (var s in scopes) PdfWorkflow.Scopes.Add(s);
             ImageWorkflow.Scopes.Clear(); foreach (var s in scopes) ImageWorkflow.Scopes.Add(s);
 

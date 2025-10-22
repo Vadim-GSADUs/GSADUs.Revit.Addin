@@ -16,7 +16,7 @@ The Batch Export feature currently assumes every workflow is scoped to a selecti
 * Workflow actions receive the set name and member UID list, and staging helpers toggle the `CurrentSet` parameter around each loop. Project-scoped workflows will need alternate inputs (probably `null`/empty set context) and should bypass staging. 【F:src/GSADUs.Revit.Addin/Orchestration/BatchRunCoordinator.cs†L315-L385】
 
 ## Settings Defaults
-* `AppSettingsStore.EnsureWorkflowDefaults` seeds all sample workflows with `Scope = "CurrentSet"` so they remain visible in the Batch Export window. When support for `EntireProject` is added, the defaults and migrations should be reviewed to avoid re-migrating project-wide scopes back to `CurrentSet`. 【F:src/GSADUs.Revit.Addin/AppSettings.cs†L143-L193】
+* `AppSettingsStore.EnsureWorkflowDefaults` seeds all sample workflows with `Scope = "SelectionSet"` so they remain visible in the Batch Export window. When support for `EntireProject` is added, the defaults and migrations should be reviewed to avoid re-migrating project-wide scopes back to `SelectionSet`. 【F:src/GSADUs.Revit.Addin/AppSettings.cs†L143-L193】
 
 ## Risks & Considerations
 * `BatchExportSettings` and downstream actions assume non-empty `SetNames`/`SetIds`. Callers and implementations must tolerate empty collections when only project-scoped workflows are selected. 【F:src/GSADUs.Revit.Addin/BatchExportSettings.cs†L5-L15】

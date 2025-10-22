@@ -14,7 +14,7 @@ namespace GSADUs.Revit.Addin.UI
         private void WireCsv()
         {
             // Populate scope options
-            var scopes = new[] { "CurrentSet", "EntireProject" };
+            var scopes = new[] { "SelectionSet", "EntireProject" };
             CsvWorkflow.Scopes.Clear(); foreach (var s in scopes) CsvWorkflow.Scopes.Add(s);
 
             // Commands

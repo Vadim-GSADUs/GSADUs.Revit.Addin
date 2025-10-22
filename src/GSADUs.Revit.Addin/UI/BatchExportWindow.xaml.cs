@@ -143,7 +143,6 @@ namespace GSADUs.Revit.Addin.UI
                 BatchExportPrefs.Save(_prefs);
             }
             catch { }
-            // Removed fallback apply here; deferred apply handled immediately after SSM closes.
         }
 
         private static void SaveColumnOrder(ListView lv, List<string> target, bool skipFirst)
@@ -454,9 +453,6 @@ namespace GSADUs.Revit.Addin.UI
                 var selected = new HashSet<string>(_settings.SelectedWorkflowIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
                 foreach (var wf in (_settings.Workflows ?? new List<WorkflowDefinition>()))
                 {
-                    var scope = (wf.Scope ?? string.Empty).Trim();
-                    bool isCurrentSet = scope.Equals("CurrentSet", StringComparison.OrdinalIgnoreCase) || scope.Equals("SelectionSet", StringComparison.OrdinalIgnoreCase) || scope.Equals("Selection Sets", StringComparison.OrdinalIgnoreCase) || scope.Equals("Selection Sets (Current)", StringComparison.OrdinalIgnoreCase);
-                    if (!isCurrentSet) continue;
                     _workRows.Add(new WorkRow { Id = wf.Id, Name = wf.Name ?? string.Empty, Output = wf.Output.ToString(), Scope = wf.Scope ?? string.Empty, Description = wf.Description ?? string.Empty, IsSelected = selected.Contains(wf.Id) });
                 }
 
@@ -664,7 +660,7 @@ namespace GSADUs.Revit.Addin.UI
                     }
                     catch (Exception ex) { try { PerfLogger.Write("BatchExport.ZeroSelection.LogSyncError", ex.ToString(), TimeSpan.Zero); } catch { } }
                 }
-                ShowShortError("No sets selected – exports skipped. (Curation/log sync performed.)");
+                ShowShortError("No sets selected â€“ exports skipped. (Curation/log sync performed.)");
                 return;
             }
 
