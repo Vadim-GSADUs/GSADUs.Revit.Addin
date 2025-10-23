@@ -597,6 +597,20 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
+        private bool IsCsvEntireProjectSelected()
+        {
+            try
+            {
+                var selectedIds = new HashSet<string>(_settings.SelectedWorkflowIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                var selectedWorkflows = (_settings.Workflows ?? new List<WorkflowDefinition>())
+                    .Where(w => selectedIds.Contains(w.Id))
+                    .ToList();
+                if (selectedWorkflows.Count == 0) return false; // nothing selected
+                return selectedWorkflows.All(w => w.Output == OutputType.Csv && string.Equals(w.Scope, "EntireProject", StringComparison.OrdinalIgnoreCase));
+            }
+            catch { return false; }
+        }
+
         private void Run_Click(object sender, RoutedEventArgs e)
         {
             SaveSelectedWorkflowIds();
@@ -607,7 +621,9 @@ namespace GSADUs.Revit.Addin.UI
             var selectedRows = visibleSetRows.Where(r => _selectedSetIds.Contains(r.Key)).ToList();
             try { PerfLogger.Write("BatchExport.Debug.SelectionSnapshot", $"TotalRows={visibleSetRows.Count};CheckedRows={selectedRows.Count}", TimeSpan.Zero); } catch { }
 
-            if (selectedRows.Count == 0)
+            bool allowZeroSets = IsCsvEntireProjectSelected();
+
+            if (selectedRows.Count == 0 && !allowZeroSets)
             {
                 var doc = _uidoc?.Document;
                 if (doc != null)
@@ -670,6 +686,11 @@ namespace GSADUs.Revit.Addin.UI
             try
             {
                 var sb = new System.Text.StringBuilder();
+                if (allowZeroSets)
+                {
+                    sb.AppendLine("Project-scoped CSV run (no sets).");
+                    sb.AppendLine();
+                }
                 sb.AppendLine($"Selected Sets ({selectedNames.Count}):");
                 foreach (var nm in selectedNames.Take(20)) sb.AppendLine(" - " + nm);
                 if (selectedNames.Count > 20) sb.AppendLine($" (+{selectedNames.Count - 20} more)");
@@ -700,29 +721,33 @@ namespace GSADUs.Revit.Addin.UI
             // Pre-audit / curate just the selected sets if configured and not already applied by SSM save
             try
             {
-                var doc = _uidoc?.Document;
-                if (doc != null)
+                // Skip pre-audit when running project-scoped CSV (no sets by design)
+                if (!allowZeroSets)
                 {
-                    var globalSettings = AppSettingsStore.Load();
-                    if (globalSettings.DefaultRunAuditBeforeExport && !_curationAppliedFlag)
+                    var doc = _uidoc?.Document;
+                    if (doc != null)
                     {
-                        var view = _uidoc?.ActiveView as Autodesk.Revit.DB.View;
-                        if (view != null)
+                        var globalSettings = AppSettingsStore.Load();
+                        if (globalSettings.DefaultRunAuditBeforeExport && !_curationAppliedFlag)
                         {
-                            CuratePlan? plan = null;
-                            // Build restrict list (prefer UniqueIds) combining ids & names for fallback
-                            var restrict = selectedIds.Concat(selectedNames).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                            using (PerfLogger.Measure("Curate.PreRun.Compute", $"SelCount={restrict.Count};Scope=Restricted"))
+                            var view = _uidoc?.ActiveView as Autodesk.Revit.DB.View;
+                            if (view != null)
                             {
-                                try { plan = AuditAndCurate.Compute(doc, view, restrict, null); } catch { plan = null; }
-                            }
-                            if (plan != null)
-                            {
-                                using (PerfLogger.Measure("Curate.PreRun.Apply", string.Empty))
+                                CuratePlan? plan = null;
+                                // Build restrict list (prefer UniqueIds) combining ids & names for fallback
+                                var restrict = selectedIds.Concat(selectedNames).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                                using (PerfLogger.Measure("Curate.PreRun.Compute", $"SelCount={restrict.Count};Scope=Restricted"))
                                 {
-                                    try { AuditAndCurate.Apply(doc, plan); _curationAppliedFlag = true; } catch { }
+                                    try { plan = AuditAndCurate.Compute(doc, view, restrict, null); } catch { plan = null; }
                                 }
-                                try { AuditAndCurate.ReconcileWithModel(doc, plan, true); } catch { }
+                                if (plan != null)
+                                {
+                                    using (PerfLogger.Measure("Curate.PreRun.Apply", string.Empty))
+                                    {
+                                        try { AuditAndCurate.Apply(doc, plan); _curationAppliedFlag = true; } catch { }
+                                    }
+                                    try { AuditAndCurate.ReconcileWithModel(doc, plan, true); } catch { }
+                                }
                             }
                         }
                     }
@@ -742,7 +767,10 @@ namespace GSADUs.Revit.Addin.UI
         }
 
         private void ShowShortError(string message)
-        { try { MessageBox.Show(this, message, "Batch Export", MessageBoxButton.OK, MessageBoxImage.Information); } catch { } }
+        {
+            try { MessageBox.Show(this, message, "Batch Export", MessageBoxButton.OK, MessageBoxImage.Information); }
+            catch { }
+        }
 
         private void ManageWorkflows_Click(object sender, RoutedEventArgs e)
         {

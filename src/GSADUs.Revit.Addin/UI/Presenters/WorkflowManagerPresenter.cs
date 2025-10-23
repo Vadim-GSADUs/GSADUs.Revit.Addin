@@ -45,10 +45,10 @@ namespace GSADUs.Revit.Addin.UI
             _catalog = catalog;
             _dialogs = dialogs;
 
-            // Initialize scope options
-            var scopes = new[] { "SelectionSet", "SelectionSet", "EntireProject" };
-            PdfWorkflow.Scopes.Clear(); foreach (var s in scopes) PdfWorkflow.Scopes.Add(s);
-            ImageWorkflow.Scopes.Clear(); foreach (var s in scopes) ImageWorkflow.Scopes.Add(s);
+            // Initialize scope options: PDF/Image are SelectionSet only
+            var scopesPdfImg = new[] { "SelectionSet" };
+            PdfWorkflow.Scopes.Clear(); foreach (var s in scopesPdfImg) PdfWorkflow.Scopes.Add(s);
+            ImageWorkflow.Scopes.Clear(); foreach (var s in scopesPdfImg) ImageWorkflow.Scopes.Add(s);
 
             // Wire CSV tab
             try { WireCsv(); } catch { }
@@ -112,9 +112,8 @@ namespace GSADUs.Revit.Addin.UI
         {
             var vm = PdfWorkflow;
             var nameVal = vm?.Name?.Trim() ?? string.Empty;
-            var scopeVal = vm?.WorkflowScope ?? string.Empty;
             var descVal = vm?.Description ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(nameVal) || string.IsNullOrWhiteSpace(scopeVal)) { _dialogs.Info("Save", "Name and Scope required."); return; }
+            if (string.IsNullOrWhiteSpace(nameVal)) { _dialogs.Info("Save", "Name is required."); return; }
 
             var existing = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>())
                 .FirstOrDefault(w => string.Equals(w.Id, vm.SelectedWorkflowId, StringComparison.OrdinalIgnoreCase) && w.Output == OutputType.Pdf);
@@ -126,7 +125,7 @@ namespace GSADUs.Revit.Addin.UI
                 vm.SelectedWorkflowId = existing.Id;
             }
 
-            existing.Name = nameVal; existing.Scope = scopeVal; existing.Description = descVal;
+            existing.Name = nameVal; existing.Scope = "SelectionSet"; existing.Description = descVal;
             if (!SavePdfWorkflow(existing)) return;
             vm.SetDirty(false);
             RefreshListsAfterSave();
@@ -136,9 +135,8 @@ namespace GSADUs.Revit.Addin.UI
         {
             var vm = ImageWorkflow;
             var nameVal = vm?.Name?.Trim() ?? string.Empty;
-            var scopeVal = vm?.WorkflowScope ?? string.Empty;
             var descVal = vm?.Description ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(nameVal) || string.IsNullOrWhiteSpace(scopeVal)) { _dialogs.Info("Save", "Name and Scope required."); return; }
+            if (string.IsNullOrWhiteSpace(nameVal)) { _dialogs.Info("Save", "Name is required."); return; }
 
             var existing = (_catalog.Settings.Workflows ?? new List<WorkflowDefinition>())
                 .FirstOrDefault(w => string.Equals(w.Id, vm.SelectedWorkflowId, StringComparison.OrdinalIgnoreCase) && w.Output == OutputType.Image);
@@ -150,7 +148,7 @@ namespace GSADUs.Revit.Addin.UI
                 vm.SelectedWorkflowId = existing.Id;
             }
 
-            existing.Name = nameVal; existing.Scope = scopeVal; existing.Description = descVal;
+            existing.Name = nameVal; existing.Scope = "SelectionSet"; existing.Description = descVal;
             SaveImageWorkflow(existing);
             vm.SetDirty(false);
             RefreshListsAfterSave();

@@ -24,8 +24,9 @@ namespace GSADUs.Revit.Addin.Orchestration
             var doc = uidoc.Document;
             if (string.IsNullOrWhiteSpace(doc.PathName)) { dialogs.Info("Batch Export", "Save the model first."); return Result.Cancelled; }
 
+            // Previously: blocked when no selection filters exist. Now allow window to open; window validation will decide.
             var allSetsInitial = SelectionSets.Get(doc);
-            if (allSetsInitial.Count == 0) { dialogs.Info("Batch Export", "No Selection Filters found."); return Result.Cancelled; }
+            Trace.WriteLine($"COLLECT_SHEETS initial={allSetsInitial.Count} corr={Logging.RunLog.CorrId}");
 
             bool anyCompleted = false;
             while (true)
@@ -73,6 +74,18 @@ namespace GSADUs.Revit.Addin.Orchestration
             }
         }
 
+        private static bool IsCsvEntireProjectSelected(AppSettings appSettings)
+        {
+            try
+            {
+                var sel = new HashSet<string>(appSettings.SelectedWorkflowIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                var wfs = (appSettings.Workflows ?? new List<WorkflowDefinition>()).Where(w => sel.Contains(w.Id)).ToList();
+                if (wfs.Count == 0) return false;
+                return wfs.All(w => w.Output == OutputType.Csv && string.Equals(w.Scope, "EntireProject", StringComparison.OrdinalIgnoreCase));
+            }
+            catch { return false; }
+        }
+
         internal static RunOutcome RunOnce(UIApplication uiapp, UIDocument uidoc)
         {
             Trace.WriteLine("BEGIN RunOnce corr=" + Logging.RunLog.CorrId);
@@ -88,13 +101,7 @@ namespace GSADUs.Revit.Addin.Orchestration
             var allSetsForWindow = SelectionSets.Get(doc);
             Trace.WriteLine($"COLLECT_SHEETS requested={allSetsForWindow.Count} corr={Logging.RunLog.CorrId}");
 
-            if (allSetsForWindow.Count == 0)
-            {
-                dialogs.Info("Batch Export", "No Selection Filters found.");
-                Trace.WriteLine("FAIL no filters corr=" + Logging.RunLog.CorrId);
-                return RunOutcome.CanceledBeforeStart;
-            }
-
+            // Allow dialog even when zero filters exist; window may allow CSV EntireProject runs.
             var win = new UI.BatchExportWindow(allSetsForWindow.Select(s => s.Name), uidoc) { Owner = null };
             Trace.WriteLine("OPEN WorkflowManagerWindow corr=" + Logging.RunLog.CorrId);
 
@@ -104,10 +111,10 @@ namespace GSADUs.Revit.Addin.Orchestration
                 return RunOutcome.CanceledBeforeStart;
             }
 
-            var isDryRun = win.IsDryRun(); // is this a RVT-specific remnant?
+            var isDryRun = win.IsDryRun();
 
             appSettings = AppSettingsStore.Load();
-            var uiOpts = win.Result!; // now contains SetIds + SetNames
+            var uiOpts = win.Result!; // contains SetIds + SetNames
 
             // Build action ids list from selected workflows into settings DTO
             var selectedWorkflowIds = new HashSet<string>(appSettings.SelectedWorkflowIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
@@ -124,9 +131,9 @@ namespace GSADUs.Revit.Addin.Orchestration
             if (workflows.Any(w => w.Output == OutputType.Image) && !chosenActionIds.Any(a => string.Equals(a, "export-image", StringComparison.OrdinalIgnoreCase)))
                 chosenActionIds.Add("export-image");
 
-            // BatchExportSettings now includes SetIds (optional, preferred)
+            // BatchExportSettings includes SetIds (optional)
             var request = new BatchExportSettings(
-                uiOpts.SetNames,  // retained for legacy display / summaries
+                uiOpts.SetNames,
                 uiOpts.OutputDir,
                 uiOpts.SaveBefore,
                 false,
@@ -147,7 +154,6 @@ namespace GSADUs.Revit.Addin.Orchestration
             var externalActions = resolved.Where(a => a.desc.RequiresExternalClone).ToList();
             bool requiresClone = externalActions.Any();
 
-            // NEW GUARD: no enabled actions -> abort early with message
             if (resolved.Count == 0)
             {
                 try { PerfLogger.Write("BatchExport.NoActions", string.Join(";", chosenActionIds), TimeSpan.Zero); } catch { }
@@ -155,13 +161,12 @@ namespace GSADUs.Revit.Addin.Orchestration
                 return RunOutcome.CanceledBeforeStart;
             }
 
-            // --- Selection resolution by SetId first ---
+            // Selection resolution by SetId first
             var allFilterElems = new FilteredElementCollector(doc)
                 .OfClass(typeof(SelectionFilterElement))
                 .Cast<SelectionFilterElement>()
                 .ToList();
 
-            // Build name->SetId map ONCE (for later write-back)
             var nameToId = allFilterElems
                 .Where(sf => !string.IsNullOrWhiteSpace(sf.Name) && !string.IsNullOrWhiteSpace(sf.UniqueId))
                 .GroupBy(sf => sf.Name!, StringComparer.OrdinalIgnoreCase)
@@ -190,7 +195,6 @@ namespace GSADUs.Revit.Addin.Orchestration
             }
             else
             {
-                // Fallback: resolve by names (legacy behavior)
                 foreach (var name in request.SetNames)
                 {
                     if (filterByName.TryGetValue(name, out var sfe))
@@ -209,7 +213,9 @@ namespace GSADUs.Revit.Addin.Orchestration
                 effectiveSetNames = effectiveSetNames.Take(1).ToList();
             }
 
-            if (selectedFilterElems.Count == 0)
+            bool isCsvEntireProject = IsCsvEntireProjectSelected(appSettings);
+
+            if (selectedFilterElems.Count == 0 && !isCsvEntireProject)
             {
                 dialogs.Info("Batch Export", "No matching Selection Filters for chosen sets.");
                 return RunOutcome.CanceledBeforeStart;
@@ -241,7 +247,7 @@ namespace GSADUs.Revit.Addin.Orchestration
             // One-time staging area validation
             using (PerfLogger.Measure("Batch.OneTimePrep", string.Empty))
             {
-                if (appSettings.ValidateStagingArea)
+                if (appSettings.ValidateStagingArea && !isCsvEntireProject)
                 {
                     Trace.WriteLine("Validating staging area...");
                     if (!EnsureStagingAreaClear(doc, appSettings, dialogs))
@@ -267,7 +273,7 @@ namespace GSADUs.Revit.Addin.Orchestration
             var logPathSan = System.IO.Path.Combine(AppSettingsStore.GetEffectiveLogDir(appSettings), csvNameSan);
             var logSan = GSADUs.Revit.Addin.Logging.GuardedBatchLog.Wrap(logFactory.Load(logPathSan));
 
-            // Pre-compute member element unique ids per setId (for staging toggle and membership hash)
+            // Pre-compute member element unique ids per setId
             var memberUidsBySetId = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var elementIdsBySetId = new Dictionary<string, List<ElementId>>(StringComparer.OrdinalIgnoreCase);
             foreach (var sf in selectedFilterElems)
@@ -282,11 +288,61 @@ namespace GSADUs.Revit.Addin.Orchestration
                 memberUidsBySetId[sf.UniqueId] = uids;
             }
 
-            var progressWin = new UI.ProgressWindow();
-            var cts = new CancellationTokenSource();
-            bool cancelRequested = false;
-            progressWin.CancelRequested += (_, __) => { cancelRequested = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
-            try { progressWin.Show(); } catch { }
+            // PROJECT-SCOPED CSV BRANCH
+            if (isCsvEntireProject)
+            {
+                var cts = new CancellationTokenSource();
+                bool cancelRequested = false;
+                var progressWin = new UI.ProgressWindow();
+                progressWin.CancelRequested += (_, __) => { cancelRequested = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
+                try { progressWin.Show(); } catch { }
+                var swOnce = Stopwatch.StartNew();
+                try { progressWin.Update("EntireProject", 1, 1, 0.0, swOnce.Elapsed); } catch { }
+                UI.ProgressWindow.DoEvents();
+
+                try
+                {
+                    using (PerfLogger.Measure("Batch.Workflows.ProjectCsv", "EntireProject"))
+                    {
+                        foreach (var a in internalActions)
+                        {
+                            using (PerfLogger.Measure($"Action.{a.desc.Id}", "EntireProject"))
+                            {
+                                Trace.WriteLine($"Executing action (project): {a.desc.Id}");
+                                a.impl.Execute(uiapp, doc, null, string.Empty, new List<string>(), isDryRun);
+                                Trace.WriteLine($"Action {a.desc.Id} completed (project).");
+                            }
+                            UI.ProgressWindow.DoEvents();
+                            if (cts.IsCancellationRequested) break;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    dialogs.Info("Batch Export", $"Project run failed: {ex.Message}");
+                }
+                finally
+                {
+                    try { progressWin.ForceClose(); } catch { }
+                    swOnce.Stop();
+                }
+
+                if (cancelRequested)
+                {
+                    dialogs.Info("Batch Export", "Cancelled after current step.");
+                    return RunOutcome.CancelledDuringRun;
+                }
+
+                dialogs.Info("Batch Export", isDryRun ? "Dry run completed." : "Done.");
+                Trace.WriteLine("END RunOnce corr=" + Logging.RunLog.CorrId);
+                return RunOutcome.Completed;
+            }
+
+            var progressWin2 = new UI.ProgressWindow();
+            var cts2 = new CancellationTokenSource();
+            bool cancelRequested2 = false;
+            progressWin2.CancelRequested += (_, __) => { cancelRequested2 = true; if (!cts2.IsCancellationRequested) cts2.Cancel(); };
+            try { progressWin2.Show(); } catch { }
             var sw = Stopwatch.StartNew();
 
             bool breakAfterThisSet = false;
@@ -298,7 +354,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                 var setId = sf.UniqueId;
                 var setName = sf.Name ?? string.Empty;
                 iSet++;
-                try { progressWin.Update(setName, iSet, totalCount, totalCount > 0 ? (double)(iSet - 1) * 100.0 / totalCount : 0.0, sw.Elapsed); } catch { }
+                try { progressWin2.Update(setName, iSet, totalCount, totalCount > 0 ? (double)(iSet - 1) * 100.0 / totalCount : 0.0, sw.Elapsed); } catch { }
                 UI.ProgressWindow.DoEvents();
 
                 if (!elementIdsBySetId.ContainsKey(setId))
@@ -359,7 +415,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                                 Trace.WriteLine($"Action {a.desc.Id} completed.");
                             }
                             UI.ProgressWindow.DoEvents();
-                            if (cts.IsCancellationRequested) { breakAfterThisSet = true; break; }
+                            if (cts2.IsCancellationRequested) { breakAfterThisSet = true; break; }
                         }
                         if (breakAfterThisSet) throw new OperationCanceledException();
                     }
@@ -385,26 +441,26 @@ namespace GSADUs.Revit.Addin.Orchestration
                     }
                 }
 
-                try { progressWin.Update(setName, iSet, totalCount, totalCount > 0 ? (double)iSet * 100.0 / totalCount : 100.0, sw.Elapsed); } catch { }
+                try { progressWin2.Update(setName, iSet, totalCount, totalCount > 0 ? (double)iSet * 100.0 / totalCount : 100.0, sw.Elapsed); } catch { }
                 UI.ProgressWindow.DoEvents();
 
                 if (breakAfterThisSet)
                 {
-                    cancelRequested = true;
+                    cancelRequested2 = true;
                     break;
                 }
             }
 
-            try { progressWin.ForceClose(); } catch { }
+            try { progressWin2.ForceClose(); } catch { }
             sw.Stop();
 
-            if (cancelRequested)
+            if (cancelRequested2)
             {
                 dialogs.Info("Batch Export", "Cancelled after current step.");
                 return RunOutcome.CancelledDuringRun;
             }
 
-            dialogs.Info("Batch Export", isDryRun ? "Dry run completed." : "Done."); // is this a RVT-specific remnant?
+            dialogs.Info("Batch Export", isDryRun ? "Dry run completed." : "Done.");
 
             // New: optionally open output folder after completion
             try
