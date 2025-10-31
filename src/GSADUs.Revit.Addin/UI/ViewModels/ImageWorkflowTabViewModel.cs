@@ -23,7 +23,9 @@ namespace GSADUs.Revit.Addin.UI
                     || e.PropertyName == nameof(Format)
                     || e.PropertyName == nameof(Pattern)
                     || e.PropertyName == nameof(ImagePattern)
-                    || e.PropertyName == nameof(IsBaseSaveEnabled))
+                    || e.PropertyName == nameof(IsBaseSaveEnabled)
+                    || e.PropertyName == nameof(HeuristicFov)
+                    || e.PropertyName == nameof(HeuristicBufferPct))
                 {
                     _saveImageCommand.RaiseCanExecuteChanged();
                 }
@@ -187,6 +189,21 @@ namespace GSADUs.Revit.Addin.UI
             set { if (_format != value) { _format = value ?? "PNG"; OnPropertyChanged(nameof(Format)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
         }
 
+        // New heuristic FOV properties
+        private string _heuristicFov = "50"; // degrees default
+        public string HeuristicFov
+        {
+            get => _heuristicFov;
+            set { if (_heuristicFov != value) { _heuristicFov = value ?? string.Empty; OnPropertyChanged(nameof(HeuristicFov)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+        }
+
+        private string _heuristicBufferPct = "5"; // percent default
+        public string HeuristicBufferPct
+        {
+            get => _heuristicBufferPct;
+            set { if (_heuristicBufferPct != value) { _heuristicBufferPct = value ?? string.Empty; OnPropertyChanged(nameof(HeuristicBufferPct)); HasUnsavedChanges = true; OnPropertyChanged(nameof(HasUnsavedChanges)); RecomputePreview(); _saveImageCommand.RaiseCanExecuteChanged(); } }
+        }
+
         private bool _isSaveEnabled;
         public bool IsSaveEnabled
         {
@@ -265,6 +282,9 @@ namespace GSADUs.Revit.Addin.UI
             SelectedPrintSet = null;
             SelectedSingleViewId = null;
             SelectedImage = null;
+            // heuristic defaults
+            HeuristicFov = "50";
+            HeuristicBufferPct = "5";
             SetDirty(true);
             Recompute();
             _saveImageCommand.RaiseCanExecuteChanged();

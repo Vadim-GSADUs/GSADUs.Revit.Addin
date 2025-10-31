@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:GSADUs.Revit.Addin.UI"
         xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
-        Title="Workflow Manager" Width="850" Height="750" MinWidth="820" MinHeight="480"
+        Title="Workflow Manager" Width="1024" Height="750" MinWidth="820" MinHeight="480"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
     <Window.Resources>
         <ui:EqualityToBooleanConverter x:Key="EqualityToBooleanConverter"/>
@@ -213,6 +213,10 @@
                                     </ComboBox>
                                     <TextBlock Text="  Crop Offset (ft):" VerticalAlignment="Center" Margin="16,0,8,0"/>
                                     <TextBox x:Name="ImageCropOffsetBox" Width="60" Text="{Binding CropOffset, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="  Heuristic FOV (deg):" VerticalAlignment="Center" Margin="12,0,8,0"/>
+                                    <TextBox x:Name="ImageHeuristicFovBox" Width="60" Text="{Binding HeuristicFov, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="  Buffer (%):" VerticalAlignment="Center" Margin="12,0,8,0"/>
+                                    <TextBox x:Name="ImageHeuristicBufferBox" Width="60" Text="{Binding HeuristicBufferPct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>

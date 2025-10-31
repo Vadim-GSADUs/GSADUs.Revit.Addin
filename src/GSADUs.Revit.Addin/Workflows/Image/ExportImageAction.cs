@@ -138,6 +138,136 @@ namespace GSADUs.Revit.Addin.Workflows.Image
             return boxes;
         }
 
+        // Collect bounding boxes for 3D views (respecting visibility in that view)
+        private static List<BoundingBoxXYZ> CollectVisible3DElementBoxes(View3D view3d, Document doc, IEnumerable<ElementId> setIds)
+        {
+            var boxes = new List<BoundingBoxXYZ>();
+            if (view3d == null || doc == null) return boxes;
+            List<int>? whitelist = null; try { whitelist = AppSettingsStore.Load()?.ImageWhitelistCategoryIds; } catch { }
+            if (whitelist != null && whitelist.Count == 0) whitelist = null;
+
+            HashSet<ElementId>? visible = null;
+            try { visible = new HashSet<ElementId>(new FilteredElementCollector(doc, view3d.Id).ToElementIds()); } catch { }
+
+            foreach (var id in setIds)
+            {
+                if (visible != null && !visible.Contains(id)) continue;
+                Element? el = null; try { el = doc.GetElement(id); } catch { }
+                if (el == null) continue;
+
+                bool allowed = true;
+                try
+                {
+                    if (whitelist != null)
+                    {
+                        long raw = 0; try { raw = el.Category?.Id?.Value ?? 0; } catch { raw = 0; }
+                        int catId = raw >= int.MinValue && raw <= int.MaxValue ? (int)raw : 0;
+                        if (!whitelist.Contains(catId)) allowed = false;
+                    }
+                }
+                catch { }
+                if (!allowed) continue;
+
+                BoundingBoxXYZ? bb = null; try { bb = el.get_BoundingBox(view3d); } catch { }
+                if (bb == null) { try { bb = el.get_BoundingBox(null); } catch { bb = null; } }
+                if (bb == null || bb.Min == null || bb.Max == null) continue;
+                if (Math.Abs(bb.Max.X - bb.Min.X) < 1e-9 || Math.Abs(bb.Max.Y - bb.Min.Y) < 1e-9) continue;
+                boxes.Add(new BoundingBoxXYZ { Min = bb.Min, Max = bb.Max, Enabled = bb.Enabled });
+            }
+            return boxes;
+        }
+
+        // Adjust a perspective camera's eye XY distance to fit the bounding box with given horizontal FOV and buffer percent.
+        // Preserves original Eye.Z and Center.Z (target elevation).
+        private static bool TryAdjustPerspectiveCamera(View3D v3, BoundingBoxXYZ targetBox, double heuristicFovDeg, double bufferPct)
+        {
+            try
+            {
+                if (v3 == null || targetBox == null) return false;
+                // Validate FOV
+                if (heuristicFovDeg <= 0 || heuristicFovDeg >= 180) return false;
+
+                var ori = v3.GetOrientation();
+                if (ori == null) return false;
+
+                var eye = ori.EyePosition;
+                // Use view's direction properties; compute center from orientation if needed via Eye + Forward
+                XYZ center;
+                try { center = ori.EyePosition + ori.ForwardDirection; } catch { center = new XYZ(ori.EyePosition.X - ori.ForwardDirection.X, ori.EyePosition.Y - ori.ForwardDirection.Y, ori.EyePosition.Z - ori.ForwardDirection.Z); }
+                // Keep Z components
+                double eyeZ = eye.Z; double centerZ = center.Z;
+
+                // Compute horizontal center (target) as center projected to XY
+                var centerXY = new XYZ(center.X, center.Y, 0);
+
+                // Compute forward direction in XY (from center -> eye)
+                var eyeXY = new XYZ(eye.X, eye.Y, 0);
+                var dir = eyeXY - centerXY;
+                double dirLen = dir.GetLength();
+                XYZ forwardXY;
+                if (dirLen < 1e-9)
+                {
+                    // fallback to view forward projected to XY
+                    var fwd = ori.ForwardDirection ?? new XYZ(0, 0, -1);
+                    forwardXY = new XYZ(fwd.X, fwd.Y, 0);
+                    var fl = forwardXY.GetLength();
+                    if (fl < 1e-9) forwardXY = new XYZ(1, 0, 0); else forwardXY = forwardXY.Normalize();
+                }
+                else
+                {
+                    forwardXY = dir.Normalize();
+                }
+
+                // right axis in XY
+                var rightXY = new XYZ(-forwardXY.Y, forwardXY.X, 0);
+
+                // Collect all 8 corners of targetBox and project onto right axis to compute half width
+                var corners = new List<XYZ>();
+                var min = targetBox.Min; var max = targetBox.Max;
+                for (int xi = 0; xi < 2; xi++) for (int yi = 0; yi < 2; yi++) for (int zi = 0; zi < 2; zi++)
+                {
+                    double x = xi == 0 ? min.X : max.X;
+                    double y = yi == 0 ? min.Y : max.Y;
+                    double z = zi == 0 ? min.Z : max.Z;
+                    corners.Add(new XYZ(x, y, z));
+                }
+
+                double minProj = double.PositiveInfinity, maxProj = double.NegativeInfinity;
+                foreach (var c in corners)
+                {
+                    var rel = new XYZ(c.X - centerXY.X, c.Y - centerXY.Y, 0);
+                    double p = rel.DotProduct(rightXY);
+                    minProj = Math.Min(minProj, p); maxProj = Math.Max(maxProj, p);
+                }
+                double span = maxProj - minProj; if (span <= 0) span = (targetBox.Max.X - targetBox.Min.X);
+                double halfWidth = span * 0.5;
+
+                double fovRad = heuristicFovDeg * Math.PI / 180.0;
+                double halfFov = fovRad * 0.5;
+                if (halfFov <= 1e-6) return false;
+
+                // Desired distance in the XY plane from center to eye
+                double desiredDist = halfWidth / Math.Tan(halfFov);
+                // Apply buffer percent (can be negative)
+                desiredDist *= (1.0 + bufferPct / 100.0);
+
+                if (double.IsNaN(desiredDist) || double.IsInfinity(desiredDist)) return false;
+                // Safety clamp to avoid extreme values
+                desiredDist = Math.Clamp(desiredDist, 0.01, 1e6);
+
+                // New eye XY = centerXY + forwardXY * desiredDist (note forward points from center to eye)
+                var newEyeXY = centerXY + forwardXY * desiredDist;
+                var newEye = new XYZ(newEyeXY.X, newEyeXY.Y, eyeZ);
+
+                // Rebuild forward vector from new eye to center (preserve Zs)
+                var desiredForward = new XYZ((center.X - newEye.X), (center.Y - newEye.Y), (centerZ - newEye.Z));
+                var newOri = new ViewOrientation3D(newEye, ori.UpDirection, desiredForward);
+                v3.SetOrientation(newOri);
+                return true;
+            }
+            catch { return false; }
+        }
+
         private const string ClampCode = "IMAGE_EXPORT_CLAMP";
         private const string AutoVisibleCode = "AUTO_SET_VISIBLE";
         private const string StaticCropCode = "STATIC_CROP";
@@ -314,6 +444,156 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 bool anySheet = sourceViews.Any(v => v is ViewSheet);
                 bool allPlans = !any3d && !anySheet && sourceViews.All(v => v is ViewPlan);
                 bool autoCropEligible = allPlans && string.Equals(cropModeParam, "Auto", StringComparison.OrdinalIgnoreCase);
+                bool autoCrop3dEligible = any3d && string.Equals(cropModeParam, "Auto", StringComparison.OrdinalIgnoreCase);
+
+                // If eligible for 3D auto-crop (contains 3D views and cropMode Auto), handle per-view 3D logic
+                if (autoCrop3dEligible)
+                {
+                    string patternSet = GetStr(ImageWorkflowKeys.fileNamePattern);
+                    if (string.IsNullOrWhiteSpace(patternSet)) patternSet = "{SetName}";
+
+                    // Selection filter (once) for determining which elements define extents
+                    List<ElementId> selectionIds3d = new List<ElementId>();
+                    try
+                    {
+                        SelectionFilterElement? sfe = null; try { sfe = new FilteredElementCollector(sourceDoc).OfClass(typeof(SelectionFilterElement)).Cast<SelectionFilterElement>().FirstOrDefault(f => string.Equals(f.Name, setName, StringComparison.OrdinalIgnoreCase)); } catch { }
+                        if (sfe != null) selectionIds3d = sfe.GetElementIds()?.ToList() ?? new List<ElementId>();
+                    }
+                    catch { }
+
+                    var docForExport3 = outDoc ?? sourceDoc;
+
+                    // Record originals for restore
+                    var originals3d = new List<(View3D v, BoundingBoxXYZ? sectionBox, ViewOrientation3D? ori)>();
+
+                    foreach (var v in sourceViews.OfType<View3D>())
+                    {
+                        try
+                        {
+                            // Compute visible set ids in this view
+                            var visibleInView = new FilteredElementCollector(sourceDoc, v.Id).WhereElementIsNotElementType().ToElementIds();
+                            var visibleSetIds = selectionIds3d.Where(visibleInView.Contains).ToList();
+                            if (visibleSetIds.Count == 0) continue;
+
+                            var boxes = CollectVisible3DElementBoxes(v, sourceDoc, visibleSetIds);
+                            if (boxes.Count == 0) continue;
+
+                            // Merge boxes into a single BB in model coords
+                            double minX = double.PositiveInfinity, minY = double.PositiveInfinity, minZ = double.PositiveInfinity;
+                            double maxX = double.NegativeInfinity, maxY = double.NegativeInfinity, maxZ = double.NegativeInfinity;
+                            foreach (var bb in boxes)
+                            {
+                                minX = Math.Min(minX, bb.Min.X); minY = Math.Min(minY, bb.Min.Y); minZ = Math.Min(minZ, bb.Min.Z);
+                                maxX = Math.Max(maxX, bb.Max.X); maxY = Math.Max(maxY, bb.Max.Y); maxZ = Math.Max(maxZ, bb.Max.Z);
+                            }
+                            var merged = new BoundingBoxXYZ { Min = new XYZ(minX, minY, minZ), Max = new XYZ(maxX, maxY, maxZ) };
+
+                            // Save originals
+                            BoundingBoxXYZ? origSection = null; try { origSection = v.GetSectionBox(); } catch { }
+                            ViewOrientation3D? origOri = null; try { origOri = v.GetOrientation(); } catch { }
+                            originals3d.Add((v, origSection, origOri));
+
+                            using (var t = new Transaction(sourceDoc, "Auto Crop 3D"))
+                            {
+                                t.Start();
+                                try
+                                {
+                                    if (!v.IsPerspective)
+                                    {
+                                        // Orthographic: set section box to merged extents with Z preserved
+                                        var sb = new BoundingBoxXYZ { Min = new XYZ(merged.Min.X, merged.Min.Y, merged.Min.Z), Max = new XYZ(merged.Max.X, merged.Max.Y, merged.Max.Z) };
+                                        try { v.SetSectionBox(sb); } catch { }
+                                    }
+                                    else
+                                    {
+                                        // Perspective: attempt camera distance adjust according to heuristic
+                                        double hf = 50.0; double.TryParse(GetStr(ImageWorkflowKeys.heuristicFovDeg), out hf);
+                                        if (hf <= 0) hf = 50.0;
+                                        hf = Math.Clamp(hf, 1.0, 90.0);
+                                        double hb = 5.0; double.TryParse(GetStr(ImageWorkflowKeys.heuristicFovBufferPct), out hb);
+                                        hb = Math.Clamp(hb, -50.0, 100.0);
+
+                                        // Inflate merged by offset param
+                                        if (Math.Abs(offset) > 0)
+                                        {
+                                            merged.Min = new XYZ(merged.Min.X - offset, merged.Min.Y - offset, merged.Min.Z - offset);
+                                            merged.Max = new XYZ(merged.Max.X + offset, merged.Max.Y + offset, merged.Max.Z + offset);
+                                        }
+
+                                        TryAdjustPerspectiveCamera(v, merged, hf, hb);
+                                    }
+                                    t.Commit();
+                                }
+                                catch { try { t.RollBack(); } catch { } }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    try { sourceDoc.Regenerate(); } catch { }
+
+                    // Export each 3D view individually
+                    foreach (var v in sourceViews)
+                    {
+                        if (v is View3D v3)
+                        {
+                            var opts = new ImageExportOptions
+                            {
+                                ExportRange = ExportRange.SetOfViews,
+                                HLRandWFViewsFileType = type,
+                                ShadowViewsFileType = type,
+                                ZoomType = ZoomFitType.Zoom,
+                                ImageResolution = res
+                            };
+                            try { opts.SetViewsAndSheets(new List<ElementId> { v3.Id }); } catch { continue; }
+
+                            var (baseNoExt, ext, fileName) = BuildImageFileName(
+                                patternSet,
+                                setName,
+                                type,
+                                v3.Name);
+
+                            if (!app.DefaultOverwrite)
+                                fileName = EnsureUnique(outputDir, fileName);
+
+                            var basePathNoExt = System.IO.Path.Combine(outputDir, System.IO.Path.GetFileNameWithoutExtension(fileName));
+                            opts.FilePath = basePathNoExt;
+
+                            if (app.DefaultOverwrite)
+                            {
+                                try { var full = basePathNoExt + ext; if (System.IO.File.Exists(full)) System.IO.File.Delete(full); } catch { }
+                            }
+
+                            LogOnce(sourceDoc, AutoVisibleCode, setName, $"namePattern='{patternSet}', example='{fileName}'");
+                            try { (outDoc ?? sourceDoc).ExportImage(opts); } catch { }
+                            if (singleViewScope && sourceViews.Count == 1) TryNormalizeExportedFile(outputDir, baseNoExt, ext);
+                        }
+                    }
+
+                    // Restore originals
+                    foreach (var orig in originals3d)
+                    {
+                        try
+                        {
+                            using (var t = new Transaction(sourceDoc, "Restore 3D Crop"))
+                            {
+                                t.Start();
+                                try
+                                {
+                                    if (orig.sectionBox != null) try { orig.v.SetSectionBox(orig.sectionBox); } catch { }
+                                    if (orig.ori != null) try { orig.v.SetOrientation(orig.ori); } catch { }
+                                    t.Commit();
+                                }
+                                catch { try { t.RollBack(); } catch { } }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    try { sourceDoc.Regenerate(); } catch { }
+
+                    continue;
+                }
 
                 // If NOT auto-crop eligible, keep original bulk export behavior for the set (now via unified builder)
                 if (!autoCropEligible)

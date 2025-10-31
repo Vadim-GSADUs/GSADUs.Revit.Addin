@@ -24,6 +24,10 @@ namespace GSADUs.Revit.Addin.Workflows.Image
         public const string cropOffset = "cropOffset";               // double feet, store only if > 0
         public const string cropMode = "cropMode";                   // Auto | Static (omit if Static)
 
+        // Heuristic camera controls (3D Auto crop)
+        public const string heuristicFovDeg = "heuristicFovDeg";     // string double degrees, e.g. "50"
+        public const string heuristicFovBufferPct = "heuristicFovBufferPct"; // string double percent, e.g. "5"
+
         // Visual overrides (reserved – still unused here)
         public const string background = "background";               // FromView | White | Black | Transparent (omit if FromView)
         public const string visualStyle = "visualStyle";             // FromView | HiddenLine | Shaded | ConsistentColors | Realistic | Wireframe (omit if FromView)
@@ -40,5 +44,8 @@ namespace GSADUs.Revit.Addin.Workflows.Image
         public const string CropMode = cropMode;
         public const string Background = background;
         public const string VisualStyle = visualStyle;
+        // PascalCase aliases for new keys
+        public const string HeuristicFovDeg = heuristicFovDeg;
+        public const string HeuristicFovBufferPct = heuristicFovBufferPct;
     }
 }

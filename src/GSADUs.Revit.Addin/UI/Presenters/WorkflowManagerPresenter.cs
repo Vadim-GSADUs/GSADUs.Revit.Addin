@@ -490,6 +490,11 @@ namespace GSADUs.Revit.Addin.UI
             if (!string.IsNullOrWhiteSpace(cm)) ImageWorkflow.CropMode = cm;
             var co = Gs(ImageWorkflowKeys.cropOffset);
             if (!string.IsNullOrWhiteSpace(co)) ImageWorkflow.CropOffset = co;
+            // Heuristic camera parameters (optional)
+            var hf = Gs(ImageWorkflowKeys.heuristicFovDeg);
+            if (!string.IsNullOrWhiteSpace(hf)) ImageWorkflow.HeuristicFov = hf;
+            var hb = Gs(ImageWorkflowKeys.heuristicFovBufferPct);
+            if (!string.IsNullOrWhiteSpace(hb)) ImageWorkflow.HeuristicBufferPct = hb;
             // Leave Resolution as-is. Do not set it here.
         }
 
@@ -556,6 +561,12 @@ namespace GSADUs.Revit.Addin.UI
 
             var cropOffset = vm?.CropOffset;
             if (!string.IsNullOrWhiteSpace(cropOffset)) SP(ImageWorkflowKeys.cropOffset, cropOffset);
+
+            // Persist heuristic camera parameters if provided
+            var hf = vm?.HeuristicFov;
+            if (!string.IsNullOrWhiteSpace(hf)) SP(ImageWorkflowKeys.heuristicFovDeg, hf);
+            var hb = vm?.HeuristicBufferPct;
+            if (!string.IsNullOrWhiteSpace(hb)) SP(ImageWorkflowKeys.heuristicFovBufferPct, hb);
 
             SP(ImageWorkflowKeys.resolutionPreset, vm?.Resolution);
 
