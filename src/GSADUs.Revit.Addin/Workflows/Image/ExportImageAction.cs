@@ -228,52 +228,9 @@ namespace GSADUs.Revit.Addin.Workflows.Image
             };
         }
 
-        private static void AppendBoxCorners(BoundingBoxXYZ? box, List<XYZ> dest)
-        {
-            if (box == null || box.Min == null || box.Max == null || dest == null) return;
-
-            var min = box.Min;
-            var max = box.Max;
-
-            for (int xi = 0; xi < 2; xi++)
-            {
-                double x = xi == 0 ? min.X : max.X;
-                for (int yi = 0; yi < 2; yi++)
-                {
-                    double y = yi == 0 ? min.Y : max.Y;
-                    for (int zi = 0; zi < 2; zi++)
-                    {
-                        double z = zi == 0 ? min.Z : max.Z;
-                        dest.Add(new XYZ(x, y, z));
-                    }
-                }
-            }
-        }
-
-        private static List<XYZ> CollectPerspectiveCorners(IEnumerable<BoundingBoxXYZ> boxes, double offset)
-        {
-            var corners = new List<XYZ>();
-            if (boxes == null) return corners;
-
-            foreach (var box in boxes)
-            {
-                if (box == null) continue;
-                BoundingBoxXYZ? inflated = null;
-                try { inflated = CloneWithOffset(box, offset); } catch { inflated = box; }
-                AppendBoxCorners(inflated ?? box, corners);
-            }
-
-            return corners;
-        }
-
         // Adjust a perspective camera's eye XY distance to fit the bounding box with given horizontal FOV and buffer percent.
         // Preserves original Eye.Z and Target.Z (target elevation).
-        private static bool TryAdjustPerspectiveCamera(
-            View3D v3,
-            BoundingBoxXYZ targetBox,
-            IReadOnlyList<XYZ> corners,
-            double heuristicFovDeg,
-            double bufferPct)
+        private static bool TryAdjustPerspectiveCamera(View3D v3, BoundingBoxXYZ targetBox, double heuristicFovDeg, double bufferPct)
         {
             try
             {
@@ -295,24 +252,17 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 double targetZ = target.Z;
 
                 var forwardNorm = forwardVec.Normalize();
-                var upHint = ori.UpDirection ?? XYZ.BasisZ;
-                if (upHint.GetLength() < 1e-9) upHint = XYZ.BasisZ;
-                else upHint = upHint.Normalize();
+                var upVec = ori.UpDirection ?? XYZ.BasisZ;
+                if (upVec.GetLength() < 1e-9) upVec = XYZ.BasisZ;
+                else upVec = upVec.Normalize();
 
-                var rightHint = forwardNorm.CrossProduct(upHint);
-                if (rightHint.GetLength() < 1e-9)
+                var rightVec = forwardNorm.CrossProduct(upVec);
+                if (rightVec.GetLength() < 1e-9)
                 {
-                    rightHint = forwardNorm.CrossProduct(XYZ.BasisZ);
+                    rightVec = forwardNorm.CrossProduct(XYZ.BasisZ);
                 }
-                if (rightHint.GetLength() < 1e-9) return false;
-                rightHint = rightHint.Normalize();
-
-                // Establish target center (XY from bounding box, keep original Z)
-                if (targetBox.Min == null || targetBox.Max == null) return false;
-                var center = new XYZ(
-                    (targetBox.Min.X + targetBox.Max.X) * 0.5,
-                    (targetBox.Min.Y + targetBox.Max.Y) * 0.5,
-                    (targetBox.Min.Z + targetBox.Max.Z) * 0.5);
+                if (rightVec.GetLength() < 1e-9) return false;
+                rightVec = rightVec.Normalize();
 
                 var desiredTarget = new XYZ(center.X, center.Y, targetZ);
 
@@ -334,11 +284,16 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 var projectionCorners = corners;
                 if (projectionCorners == null || projectionCorners.Count == 0)
                 {
-                    var fallback = new List<XYZ>();
-                    AppendBoxCorners(targetBox, fallback);
-                    projectionCorners = fallback;
+                    var rel = c - target;
+                    double p = rel.DotProduct(rightVec);
+                    minProj = Math.Min(minProj, p);
+                    maxProj = Math.Max(maxProj, p);
                 }
-                if (projectionCorners == null || projectionCorners.Count == 0) return false;
+                double span = maxProj - minProj;
+                if (double.IsNaN(span) || double.IsInfinity(span) || span <= 0)
+                    span = Math.Abs(targetBox.Max.X - targetBox.Min.X);
+                if (span <= 1e-9) span = MinExtentFeet;
+                double halfWidth = span * 0.5;
 
                 double fovRad = heuristicFovDeg * Math.PI / 180.0;
                 double halfFov = fovRad * 0.5;
@@ -404,53 +359,32 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                         if (ratio > localMax) localMax = ratio;
                     }
 
-                    maxRatio = localMax;
-                    orientation = new ViewOrientation3D(candidateEye, up, forwardCandidate);
-                    return true;
-                }
-
-                // Expand search range until geometry fits inside the desired FOV
-                double maxRatioCheck;
-                ViewOrientation3D? tmpOri;
-                int expandGuard = 0;
-                while (expandGuard < 32)
+                var targetXY = new XYZ(target.X, target.Y, 0);
+                var centerToEyeXY = new XYZ(eye.X - target.X, eye.Y - target.Y, 0);
+                XYZ forwardXY;
+                double dirLen = centerToEyeXY.GetLength();
+                if (dirLen < 1e-9)
                 {
-                    if (TryCompute(maxDist, out maxRatioCheck, out tmpOri) && maxRatioCheck <= tanHalf) break;
-                    maxDist *= 2.0;
-                    expandGuard++;
+                    forwardXY = new XYZ(-forwardNorm.X, -forwardNorm.Y, 0);
+                    var fl = forwardXY.GetLength();
+                    if (fl < 1e-9) forwardXY = new XYZ(1, 0, 0); else forwardXY = forwardXY.Normalize();
                 }
-                if (expandGuard >= 32) return false;
-
-                double best = maxDist;
-
-                for (int i = 0; i < 40; i++)
+                else
                 {
-                    double mid = (minDist + maxDist) * 0.5;
-                    if (!TryCompute(mid, out var ratio, out var midOri))
-                    {
-                        minDist = mid;
-                        continue;
-                    }
-
-                    if (ratio <= tanHalf)
-                    {
-                        best = mid;
-                        maxDist = mid;
-                    }
-                    else
-                    {
-                        minDist = mid;
-                    }
+                    forwardXY = centerToEyeXY.Normalize();
                 }
 
-                double finalDist = best * (1.0 + bufferPct / 100.0);
-                if (double.IsNaN(finalDist) || double.IsInfinity(finalDist)) return false;
-                finalDist = Math.Clamp(finalDist, 0.01, 1e6);
+                // New eye XY = targetXY + forwardXY * desiredDist (forwardXY points from target to eye)
+                var newEyeXY = targetXY + forwardXY * desiredDist;
+                var newEye = new XYZ(newEyeXY.X, newEyeXY.Y, eyeZ);
 
-                if (!TryCompute(finalDist, out var _, out var finalOri) || finalOri == null)
-                    return false;
-
-                v3.SetOrientation(finalOri);
+                // Rebuild forward vector from new eye to center (preserve Zs)
+                var desiredForward = new XYZ((target.X - newEye.X), (target.Y - newEye.Y), (targetZ - newEye.Z));
+                if (desiredForward.GetLength() < 1e-9) return false;
+                var upForOrientation = ori.UpDirection ?? XYZ.BasisZ;
+                if (upForOrientation.GetLength() < 1e-9) upForOrientation = XYZ.BasisZ;
+                var newOri = new ViewOrientation3D(newEye, upForOrientation, desiredForward);
+                v3.SetOrientation(newOri);
                 return true;
             }
             catch { return false; }
@@ -705,9 +639,8 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                                         double hb = 5.0; double.TryParse(GetStr(ImageWorkflowKeys.heuristicFovBufferPct), out hb);
                                         hb = Math.Clamp(hb, -50.0, 100.0);
 
-                                        var adjustedBox = CloneWithOffset(merged, offset) ?? merged;
-                                        var projectionCorners = CollectPerspectiveCorners(boxes, offset);
-                                        TryAdjustPerspectiveCamera(v, adjustedBox, projectionCorners, hf, hb);
+                                        var adjustedBox = CloneWithOffset(merged, offset);
+                                        TryAdjustPerspectiveCamera(v, adjustedBox ?? merged, hf, hb);
                                     }
                                     t.Commit();
                                 }
