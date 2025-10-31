@@ -409,16 +409,29 @@ namespace GSADUs.Revit.Addin.UI
                 foreach (var n in setNamesForImage)
                     ImageWorkflow.AvailablePrintSets.Add(n);
 
+                // Include plans/sections/drafting/area plans AND 3D views (perspective + orthographic). Exclude templates and sheets.
                 var views = new FilteredElementCollector(doc)
                     .OfClass(typeof(View))
                     .Cast<View>()
                     .Where(v => !v.IsTemplate
-                                && v.ViewType != ViewType.ThreeD
                                 && v.ViewType != ViewType.DrawingSheet
-                                && (v is ViewPlan || v is ViewDrafting || v is ViewSection || v.ViewType == ViewType.AreaPlan))
+                                && (v is ViewPlan || v is ViewDrafting || v is ViewSection || v.ViewType == ViewType.AreaPlan || v is View3D))
                     .OrderBy(v => v.ViewType.ToString())
                     .ThenBy(v => v.Name)
-                    .Select(v => new SingleViewOption { Id = v.Id.ToString(), Label = $"{v.ViewType} - {v.Name}" })
+                    .Select(v =>
+                    {
+                        string label;
+                        if (v is View3D v3)
+                        {
+                            bool isPerspective = false; try { isPerspective = v3.IsPerspective; } catch { }
+                            label = isPerspective ? $"3D (Perspective) - {v.Name}" : $"3D - {v.Name}";
+                        }
+                        else
+                        {
+                            label = $"{v.ViewType} - {v.Name}";
+                        }
+                        return new SingleViewOption { Id = v.Id.ToString(), Label = label };
+                    })
                     .ToList();
                 ImageWorkflow.AvailableSingleViews.Clear();
                 foreach (var o in views)

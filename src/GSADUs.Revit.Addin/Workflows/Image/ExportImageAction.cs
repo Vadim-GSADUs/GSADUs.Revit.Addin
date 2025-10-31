@@ -262,9 +262,9 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                         {
                             if (sourceDoc.GetElement(vid) is View v
                                 && !v.IsTemplate
-                                && v.ViewType != ViewType.ThreeD
                                 && v.ViewType != ViewType.DrawingSheet)
                             {
+                                // Allow any non-template non-sheet, including 3D/camera
                                 printSetViewIds = new List<ElementId> { vid };
                             }
                         }
@@ -333,11 +333,18 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                     try { opts.SetViewsAndSheets(printSetViewIds); } catch { continue; }
                     var viewCountForExport = printSetViewIds?.Count ?? 0; // added: count views for rename gating
 
+                    // If exporting a single view (e.g., SingleView scope), expand {ViewName} using that view's name for preview parity
+                    string? singleViewName = null;
+                    if (singleViewScope && viewCountForExport == 1)
+                    {
+                        try { singleViewName = (sourceViews.FirstOrDefault()?.Name) ?? null; } catch { }
+                    }
+
                     var (baseNoExt, ext, fileName) = BuildImageFileName(
                         patternSet,
                         setName,
                         type,
-                        null);
+                        singleViewName);
 
                     if (!app.DefaultOverwrite)
                         fileName = EnsureUnique(outputDir, fileName);
