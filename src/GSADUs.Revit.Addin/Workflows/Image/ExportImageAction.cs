@@ -177,8 +177,59 @@ namespace GSADUs.Revit.Addin.Workflows.Image
             return boxes;
         }
 
+        private const double MinExtentFeet = 1.0 / 12.0; // 1 inch safeguard shared with plan auto-crop
+
+        private static void EnsureMinExtent(ref double min, ref double max)
+        {
+            if (max <= min)
+            {
+                var mid = 0.5 * (min + max);
+                var half = MinExtentFeet * 0.5;
+                min = mid - half;
+                max = mid + half;
+                return;
+            }
+
+            if ((max - min) < MinExtentFeet)
+            {
+                var mid = 0.5 * (min + max);
+                var half = MinExtentFeet * 0.5;
+                min = mid - half;
+                max = mid + half;
+            }
+        }
+
+        private static BoundingBoxXYZ CloneWithOffset(BoundingBoxXYZ box, double offset)
+        {
+            if (box == null) return box;
+
+            double minX = box.Min.X;
+            double minY = box.Min.Y;
+            double minZ = box.Min.Z;
+            double maxX = box.Max.X;
+            double maxY = box.Max.Y;
+            double maxZ = box.Max.Z;
+
+            if (Math.Abs(offset) > 0)
+            {
+                minX -= offset; minY -= offset; minZ -= offset;
+                maxX += offset; maxY += offset; maxZ += offset;
+            }
+
+            EnsureMinExtent(ref minX, ref maxX);
+            EnsureMinExtent(ref minY, ref maxY);
+            EnsureMinExtent(ref minZ, ref maxZ);
+
+            return new BoundingBoxXYZ
+            {
+                Min = new XYZ(minX, minY, minZ),
+                Max = new XYZ(maxX, maxY, maxZ),
+                Enabled = box.Enabled
+            };
+        }
+
         // Adjust a perspective camera's eye XY distance to fit the bounding box with given horizontal FOV and buffer percent.
-        // Preserves original Eye.Z and Center.Z (target elevation).
+        // Preserves original Eye.Z and Target.Z (target elevation).
         private static bool TryAdjustPerspectiveCamera(View3D v3, BoundingBoxXYZ targetBox, double heuristicFovDeg, double bufferPct)
         {
             try
@@ -191,35 +242,27 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 if (ori == null) return false;
 
                 var eye = ori.EyePosition;
-                // Use view's direction properties; compute center from orientation if needed via Eye + Forward
-                XYZ center;
-                try { center = ori.EyePosition + ori.ForwardDirection; } catch { center = new XYZ(ori.EyePosition.X - ori.ForwardDirection.X, ori.EyePosition.Y - ori.ForwardDirection.Y, ori.EyePosition.Z - ori.ForwardDirection.Z); }
-                // Keep Z components
-                double eyeZ = eye.Z; double centerZ = center.Z;
+                var forwardVec = ori.ForwardDirection;
+                if (forwardVec == null) return false;
+                double forwardLen = forwardVec.GetLength();
+                if (forwardLen < 1e-9) return false;
 
-                // Compute horizontal center (target) as center projected to XY
-                var centerXY = new XYZ(center.X, center.Y, 0);
+                var target = eye + forwardVec;
+                double eyeZ = eye.Z;
+                double targetZ = target.Z;
 
-                // Compute forward direction in XY (from center -> eye)
-                var eyeXY = new XYZ(eye.X, eye.Y, 0);
-                var dir = eyeXY - centerXY;
-                double dirLen = dir.GetLength();
-                XYZ forwardXY;
-                if (dirLen < 1e-9)
+                var forwardNorm = forwardVec.Normalize();
+                var upVec = ori.UpDirection ?? XYZ.BasisZ;
+                if (upVec.GetLength() < 1e-9) upVec = XYZ.BasisZ;
+                else upVec = upVec.Normalize();
+
+                var rightVec = forwardNorm.CrossProduct(upVec);
+                if (rightVec.GetLength() < 1e-9)
                 {
-                    // fallback to view forward projected to XY
-                    var fwd = ori.ForwardDirection ?? new XYZ(0, 0, -1);
-                    forwardXY = new XYZ(fwd.X, fwd.Y, 0);
-                    var fl = forwardXY.GetLength();
-                    if (fl < 1e-9) forwardXY = new XYZ(1, 0, 0); else forwardXY = forwardXY.Normalize();
+                    rightVec = forwardNorm.CrossProduct(XYZ.BasisZ);
                 }
-                else
-                {
-                    forwardXY = dir.Normalize();
-                }
-
-                // right axis in XY
-                var rightXY = new XYZ(-forwardXY.Y, forwardXY.X, 0);
+                if (rightVec.GetLength() < 1e-9) return false;
+                rightVec = rightVec.Normalize();
 
                 // Collect all 8 corners of targetBox and project onto right axis to compute half width
                 var corners = new List<XYZ>();
@@ -235,11 +278,15 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 double minProj = double.PositiveInfinity, maxProj = double.NegativeInfinity;
                 foreach (var c in corners)
                 {
-                    var rel = new XYZ(c.X - centerXY.X, c.Y - centerXY.Y, 0);
-                    double p = rel.DotProduct(rightXY);
-                    minProj = Math.Min(minProj, p); maxProj = Math.Max(maxProj, p);
+                    var rel = c - target;
+                    double p = rel.DotProduct(rightVec);
+                    minProj = Math.Min(minProj, p);
+                    maxProj = Math.Max(maxProj, p);
                 }
-                double span = maxProj - minProj; if (span <= 0) span = (targetBox.Max.X - targetBox.Min.X);
+                double span = maxProj - minProj;
+                if (double.IsNaN(span) || double.IsInfinity(span) || span <= 0)
+                    span = Math.Abs(targetBox.Max.X - targetBox.Min.X);
+                if (span <= 1e-9) span = MinExtentFeet;
                 double halfWidth = span * 0.5;
 
                 double fovRad = heuristicFovDeg * Math.PI / 180.0;
@@ -255,13 +302,31 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 // Safety clamp to avoid extreme values
                 desiredDist = Math.Clamp(desiredDist, 0.01, 1e6);
 
-                // New eye XY = centerXY + forwardXY * desiredDist (note forward points from center to eye)
-                var newEyeXY = centerXY + forwardXY * desiredDist;
+                var targetXY = new XYZ(target.X, target.Y, 0);
+                var centerToEyeXY = new XYZ(eye.X - target.X, eye.Y - target.Y, 0);
+                XYZ forwardXY;
+                double dirLen = centerToEyeXY.GetLength();
+                if (dirLen < 1e-9)
+                {
+                    forwardXY = new XYZ(-forwardNorm.X, -forwardNorm.Y, 0);
+                    var fl = forwardXY.GetLength();
+                    if (fl < 1e-9) forwardXY = new XYZ(1, 0, 0); else forwardXY = forwardXY.Normalize();
+                }
+                else
+                {
+                    forwardXY = centerToEyeXY.Normalize();
+                }
+
+                // New eye XY = targetXY + forwardXY * desiredDist (forwardXY points from target to eye)
+                var newEyeXY = targetXY + forwardXY * desiredDist;
                 var newEye = new XYZ(newEyeXY.X, newEyeXY.Y, eyeZ);
 
                 // Rebuild forward vector from new eye to center (preserve Zs)
-                var desiredForward = new XYZ((center.X - newEye.X), (center.Y - newEye.Y), (centerZ - newEye.Z));
-                var newOri = new ViewOrientation3D(newEye, ori.UpDirection, desiredForward);
+                var desiredForward = new XYZ((target.X - newEye.X), (target.Y - newEye.Y), (targetZ - newEye.Z));
+                if (desiredForward.GetLength() < 1e-9) return false;
+                var upForOrientation = ori.UpDirection ?? XYZ.BasisZ;
+                if (upForOrientation.GetLength() < 1e-9) upForOrientation = XYZ.BasisZ;
+                var newOri = new ViewOrientation3D(newEye, upForOrientation, desiredForward);
                 v3.SetOrientation(newOri);
                 return true;
             }
@@ -500,9 +565,13 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                                 {
                                     if (!v.IsPerspective)
                                     {
-                                        // Orthographic: set section box to merged extents with Z preserved
-                                        var sb = new BoundingBoxXYZ { Min = new XYZ(merged.Min.X, merged.Min.Y, merged.Min.Z), Max = new XYZ(merged.Max.X, merged.Max.Y, merged.Max.Z) };
-                                        try { v.SetSectionBox(sb); } catch { }
+                                        // Orthographic: set section box to merged extents with offset applied
+                                        var sb = CloneWithOffset(merged, offset);
+                                        if (sb != null)
+                                        {
+                                            sb.Enabled = true;
+                                            try { v.SetSectionBox(sb); } catch { }
+                                        }
                                     }
                                     else
                                     {
@@ -513,14 +582,8 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                                         double hb = 5.0; double.TryParse(GetStr(ImageWorkflowKeys.heuristicFovBufferPct), out hb);
                                         hb = Math.Clamp(hb, -50.0, 100.0);
 
-                                        // Inflate merged by offset param
-                                        if (Math.Abs(offset) > 0)
-                                        {
-                                            merged.Min = new XYZ(merged.Min.X - offset, merged.Min.Y - offset, merged.Min.Z - offset);
-                                            merged.Max = new XYZ(merged.Max.X + offset, merged.Max.Y + offset, merged.Max.Z + offset);
-                                        }
-
-                                        TryAdjustPerspectiveCamera(v, merged, hf, hb);
+                                        var adjustedBox = CloneWithOffset(merged, offset);
+                                        TryAdjustPerspectiveCamera(v, adjustedBox ?? merged, hf, hb);
                                     }
                                     t.Commit();
                                 }
