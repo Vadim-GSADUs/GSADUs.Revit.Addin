@@ -247,8 +247,8 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 double forwardLen = forwardVec.GetLength();
                 if (forwardLen < 1e-9) return false;
 
+                // Compute a target point and preserve its Z
                 var target = eye + forwardVec;
-                double eyeZ = eye.Z;
                 double targetZ = target.Z;
 
                 var forwardNorm = forwardVec.Normalize();
@@ -256,6 +256,7 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 if (upVec.GetLength() < 1e-9) upVec = XYZ.BasisZ;
                 else upVec = upVec.Normalize();
 
+                // Right vector for camera
                 var rightVec = forwardNorm.CrossProduct(upVec);
                 if (rightVec.GetLength() < 1e-9)
                 {
@@ -264,36 +265,67 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 if (rightVec.GetLength() < 1e-9) return false;
                 rightVec = rightVec.Normalize();
 
-                var desiredTarget = new XYZ(center.X, center.Y, targetZ);
+                // Build 2D center of target box (preserve targetZ for orientation later)
+                double centerX = 0.5 * (targetBox.Min.X + targetBox.Max.X);
+                double centerY = 0.5 * (targetBox.Min.Y + targetBox.Max.Y);
+                var center = new XYZ(centerX, centerY, targetZ);
 
-                var horizontalForward = new XYZ(forwardNorm.X, forwardNorm.Y, 0.0);
-                if (horizontalForward.GetLength() < 1e-9)
+                // Prepare horizontal (XY) forward vector from target to eye
+                var centerToEyeXY = new XYZ(eye.X - center.X, eye.Y - center.Y, 0.0);
+                XYZ forwardXY;
+                double dirLen = centerToEyeXY.GetLength();
+                if (dirLen < 1e-9)
                 {
-                    horizontalForward = new XYZ(desiredTarget.X - eye.X, desiredTarget.Y - eye.Y, 0.0);
+                    // fall back to negative forward direction's XY
+                    forwardXY = new XYZ(-forwardNorm.X, -forwardNorm.Y, 0);
+                    var fl = forwardXY.GetLength();
+                    if (fl < 1e-9)
+                        forwardXY = new XYZ(1, 0, 0);
+                    else
+                        forwardXY = forwardXY.Normalize();
                 }
-                if (horizontalForward.GetLength() < 1e-9)
+                else
                 {
-                    horizontalForward = rightHint.CrossProduct(XYZ.BasisZ);
+                    forwardXY = centerToEyeXY.Normalize();
                 }
-                if (horizontalForward.GetLength() < 1e-9)
-                {
-                    horizontalForward = new XYZ(1, 0, 0);
-                }
-                horizontalForward = horizontalForward.Normalize();
 
-                var projectionCorners = corners;
-                if (projectionCorners == null || projectionCorners.Count == 0)
+                // Project box corners into camera-right axis (using XY only)
+                var rightXY = new XYZ(rightVec.X, rightVec.Y, 0.0);
+                if (rightXY.GetLength() < 1e-9)
                 {
-                    var rel = c - target;
-                    double p = rel.DotProduct(rightVec);
+                    rightXY = new XYZ(1, 0, 0);
+                }
+                rightXY = rightXY.Normalize();
+
+                var corners = new List<XYZ>
+                {
+                    new XYZ(targetBox.Min.X, targetBox.Min.Y, center.Z),
+                    new XYZ(targetBox.Min.X, targetBox.Max.Y, center.Z),
+                    new XYZ(targetBox.Max.X, targetBox.Min.Y, center.Z),
+                    new XYZ(targetBox.Max.X, targetBox.Max.Y, center.Z)
+                };
+
+                double minProj = double.PositiveInfinity, maxProj = double.NegativeInfinity;
+                foreach (var c in corners)
+                {
+                    var rel = new XYZ(c.X - center.X, c.Y - center.Y, 0.0);
+                    double p = rel.DotProduct(rightXY);
                     minProj = Math.Min(minProj, p);
                     maxProj = Math.Max(maxProj, p);
                 }
+
                 double span = maxProj - minProj;
                 if (double.IsNaN(span) || double.IsInfinity(span) || span <= 0)
+                {
+                    // fallback to box X extent
                     span = Math.Abs(targetBox.Max.X - targetBox.Min.X);
+                }
                 if (span <= 1e-9) span = MinExtentFeet;
-                double halfWidth = span * 0.5;
+
+                // Apply buffer percent
+                double bufferFactor = 1.0 + (bufferPct / 100.0);
+                if (bufferFactor <= 0) bufferFactor = 1.0;
+                double halfWidth = 0.5 * span * bufferFactor;
 
                 double fovRad = heuristicFovDeg * Math.PI / 180.0;
                 double halfFov = fovRad * 0.5;
@@ -301,86 +333,18 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 double tanHalf = Math.Tan(halfFov);
                 if (double.IsNaN(tanHalf) || double.IsInfinity(tanHalf) || tanHalf <= 0) return false;
 
-                double initialHorizontal = Math.Sqrt(Math.Pow(eye.X - target.X, 2) + Math.Pow(eye.Y - target.Y, 2));
-                if (double.IsNaN(initialHorizontal) || initialHorizontal < 0.01) initialHorizontal = 1.0;
+                double desiredDist = halfWidth / tanHalf;
+                if (double.IsNaN(desiredDist) || double.IsInfinity(desiredDist) || desiredDist <= 0) desiredDist = 1.0;
 
-                double minDist = 0.01;
-                double maxDist = Math.Max(initialHorizontal * 8.0, minDist * 2.0);
-                if (maxDist < 10.0) maxDist = 10.0;
-
-                bool TryCompute(double horizontalDist, out double maxRatio, out ViewOrientation3D? orientation)
-                {
-                    orientation = null;
-                    maxRatio = double.PositiveInfinity;
-                    if (horizontalDist < 0.005) horizontalDist = 0.005;
-
-                    var candidateEye = new XYZ(
-                        desiredTarget.X - horizontalForward.X * horizontalDist,
-                        desiredTarget.Y - horizontalForward.Y * horizontalDist,
-                        eyeZ);
-
-                    var forwardCandidate = desiredTarget - candidateEye;
-                    if (forwardCandidate.GetLength() < 1e-9) return false;
-                    var forwardUnit = forwardCandidate.Normalize();
-
-                    var right = forwardUnit.CrossProduct(upHint);
-                    if (right.GetLength() < 1e-9)
-                    {
-                        right = forwardUnit.CrossProduct(XYZ.BasisZ);
-                    }
-                    if (right.GetLength() < 1e-9) return false;
-                    right = right.Normalize();
-
-                    var up = right.CrossProduct(forwardUnit);
-                    if (up.GetLength() < 1e-9)
-                    {
-                        up = upHint;
-                    }
-                    if (up.GetLength() < 1e-9) up = XYZ.BasisZ;
-                    up = up.Normalize();
-
-                    double localMax = 0;
-                    foreach (var corner in projectionCorners)
-                    {
-                        var vec = corner - candidateEye;
-                        double depth = vec.DotProduct(forwardUnit);
-                        double horiz = vec.DotProduct(right);
-                        if (depth <= 1e-6)
-                        {
-                            maxRatio = double.PositiveInfinity;
-                            return false;
-                        }
-                        double ratio = Math.Abs(horiz) / depth;
-                        if (double.IsNaN(ratio) || double.IsInfinity(ratio))
-                        {
-                            maxRatio = double.PositiveInfinity;
-                            return false;
-                        }
-                        if (ratio > localMax) localMax = ratio;
-                    }
-
-                var targetXY = new XYZ(target.X, target.Y, 0);
-                var centerToEyeXY = new XYZ(eye.X - target.X, eye.Y - target.Y, 0);
-                XYZ forwardXY;
-                double dirLen = centerToEyeXY.GetLength();
-                if (dirLen < 1e-9)
-                {
-                    forwardXY = new XYZ(-forwardNorm.X, -forwardNorm.Y, 0);
-                    var fl = forwardXY.GetLength();
-                    if (fl < 1e-9) forwardXY = new XYZ(1, 0, 0); else forwardXY = forwardXY.Normalize();
-                }
-                else
-                {
-                    forwardXY = centerToEyeXY.Normalize();
-                }
-
-                // New eye XY = targetXY + forwardXY * desiredDist (forwardXY points from target to eye)
+                // Build new eye position in XY, preserve original eye.Z
+                var targetXY = new XYZ(center.X, center.Y, 0);
                 var newEyeXY = targetXY + forwardXY * desiredDist;
-                var newEye = new XYZ(newEyeXY.X, newEyeXY.Y, eyeZ);
+                var newEye = new XYZ(newEyeXY.X, newEyeXY.Y, eye.Z);
 
                 // Rebuild forward vector from new eye to center (preserve Zs)
-                var desiredForward = new XYZ((target.X - newEye.X), (target.Y - newEye.Y), (targetZ - newEye.Z));
+                var desiredForward = new XYZ(center.X - newEye.X, center.Y - newEye.Y, targetZ - newEye.Z);
                 if (desiredForward.GetLength() < 1e-9) return false;
+
                 var upForOrientation = ori.UpDirection ?? XYZ.BasisZ;
                 if (upForOrientation.GetLength() < 1e-9) upForOrientation = XYZ.BasisZ;
                 var newOri = new ViewOrientation3D(newEye, upForOrientation, desiredForward);
