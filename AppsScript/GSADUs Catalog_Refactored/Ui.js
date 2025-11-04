@@ -1,6 +1,8 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('GSADUs')
+    .addItem('Refresh (Master)', 'GS.Update.runAll')
+    .addSeparator()
     .addItem('Refresh Image Registry', 'GS.Registry.refresh')
     .addItem('Refresh Model Galleries', 'GS.Galleries.refresh')
     .addSubMenu(

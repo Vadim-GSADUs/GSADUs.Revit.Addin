@@ -1,14 +1,39 @@
-// Single source of truth. Do NOT re-declare these anywhere else.
+// Config.gs
 const CFG = Object.freeze({
-  // Drive IDs you already use
-  ROOT_FOLDER_ID: '1tnai9lsArYCHGU62b56QLv1pMCKrglA_',      // PNG root
-  HTML_OUTPUT_FOLDER_ID: '1H0Vj-3Gq-klRbDxj-JFPwBpnYpnUjfhI',// Support/HTML
+  // Single Drive anchor: "Working" folder
+  ROOT_ID: '1vYB2hmB4WfqksvMZDrxSR8l6SqK1ffT1',
 
-  // Sheet structure
+  // Human-readable relative paths from ROOT_ID
+  PATHS: {
+    // Images
+    IMAGE_ROOT: 'Support/PNG',
+    IMAGE_FLOORPLAN: 'Support/PNG/FloorPlan',
+    IMAGE_NE: 'Support/PNG/Northeast',
+    IMAGE_NW: 'Support/PNG/Northwest',
+    IMAGE_SE: 'Support/PNG/Southeast',
+    IMAGE_SW: 'Support/PNG/Southwest',
+
+    // CSV input
+    CSV_CATALOG: 'Support/CSV',
+
+    // PDFs (optional)
+    PDF_ROOT: 'Support/PDF',
+    PDF_FLOORPLAN: 'Support/PDF/FloorPlan',
+    PDF_PLANSET: 'Support/PDF/Planset',
+
+    // AppSheet data (optional)
+    APPSHEET_DATA: 'appsheet/data/GSADUsCatalog-434555248'
+  },
+
+  // CSV selection rules
+  CSV_CATALOG_BASENAME: 'GSADUs Catalog_Registry',
+
+  // Sheets
+  CATALOG_RAW_TAB: 'Catalog_Raw',
   CATALOG_TAB: 'Catalog',
   MODEL_HEADER: 'Model',
   GALLERY_HEADER: 'Gallery',
 
-  // Target Production Sheet (fill with the Published Sheet ID)
-  PRODUCTION_SHEET_ID: '' // TODO: paste the ID from GSADUs Catalog Published.gsheet URL
+  // Optional publish target
+  PRODUCTION_SHEET_ID: ''
 });
