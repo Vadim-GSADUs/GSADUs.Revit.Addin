@@ -383,8 +383,6 @@ GS.Registry.refresh = function() {
     else if (r - (find.hr + 1) > 50) break;
   }
 
-  // For AppSheet consumption, use direct Drive download links; WEBAPP_URL not required
-
   const rows = [];
   const root = GS.Path.folder(CFG.PATHS.IMAGE_ROOT);
 
@@ -399,11 +397,12 @@ GS.Registry.refresh = function() {
       const model = stem.includes(' ') ? stem.slice(0, stem.indexOf(' ')) : stem;
       if (models.size && !models.has(model)) continue;
 
-  const id      = f.getId();
+      const id      = f.getId();
       const relPath = [...parts, name].join('/');
-  const imageURL= `https://drive.google.com/uc?export=download&id=${id}`;
-      const viewURL = `https://drive.google.com/file/d/${id}/view`;
-  rows.push([model, relPath, id, name, imageURL, viewURL]);
+
+  // Keep relative path and compute Drive ViewURL;
+  const viewURL = `https://drive.google.com/file/d/${id}/view`;
+  rows.push([model, relPath, id, name, viewURL]);
     }
     const subs = folder.getFolders();
     while (subs.hasNext()) {
@@ -415,114 +414,67 @@ GS.Registry.refresh = function() {
   rows.sort((a,b)=> a[0].localeCompare(b[0], undefined, {numeric:true}) ||
                     a[3].localeCompare(b[3], undefined, {numeric:true}));
 
+  // Mirror Support/PNG/... (IMAGE_ROOT) into AppSheet data Images/ before writing
+  // Destination root: CFG.PATHS.APPSHEET_DATA/Images
+  const appDataRoot = GS.Path.folder(CFG.PATHS.APPSHEET_DATA);
+  let imagesDstIter = appDataRoot.getFoldersByName('Images');
+  const imagesDst = imagesDstIter.hasNext() ? imagesDstIter.next() : appDataRoot.createFolder('Images');
+
+  (function mirror(src, dst){
+    // Copy PNG files with simple freshness check; trash older duplicates
+    const files = src.getFiles();
+    while (files.hasNext()) {
+      const f = files.next();
+      const n = f.getName();
+      if (!n.toLowerCase().endsWith('.png')) continue;
+      const srcSize = (typeof f.getSize === 'function') ? f.getSize() : null;
+      const srcUpdated = f.getLastUpdated();
+      let upToDate = false;
+      const existing = dst.getFilesByName(n);
+      while (existing.hasNext()) {
+        const df = existing.next();
+        const dSize = (typeof df.getSize === 'function') ? df.getSize() : null;
+        const dUpdated = df.getLastUpdated();
+        if (srcSize !== null && dSize === srcSize && dUpdated >= srcUpdated) {
+          upToDate = true;
+        } else {
+          // remove stale duplicates
+          df.setTrashed(true);
+        }
+      }
+      if (!upToDate) f.makeCopy(n, dst);
+    }
+    // Recurse into subfolders
+    const subs = src.getFolders();
+    while (subs.hasNext()) {
+      const s = subs.next();
+      const name = s.getName();
+      let d = dst.getFoldersByName(name);
+      d = d.hasNext() ? d.next() : dst.createFolder(name);
+      mirror(s, d);
+    }
+  })(root, imagesDst);
+
   const sh = ss.getSheetByName('Image') || ss.insertSheet('Image');
   sh.clearContents();
-  const header = ['Model','ImagePath','FileId','FileName','ImageURL','ViewURL'];
+  const header = ['Model','ImagePath','FileId','FileName','ViewURL'];
   sh.getRange(1,1,1,header.length).setValues([header]);
-  if (rows.length) sh.getRange(2,1,rows.length,header.length).setValues(rows);
+
+  // Write ImagePath as relative to AppSheet data folder (Images/<relPath>) and blank URLs
+  const out = rows.map(r => {
+    const model = r[0];
+    const relPath = r[1];
+    const id = r[2];
+    const name = r[3];
+    const viewURL = r[4];
+    const appRel = 'Images/' + relPath;
+    return [model, appRel, id, name, viewURL];
+  });
+  if (out.length) sh.getRange(2,1,out.length,header.length).setValues(out);
 
   // Note: We intentionally avoid creating named ranges; tables are used instead.
 };
-
-  // Ensure GS.Galleries namespace exists before defining functions on it
-  GS.Galleries = GS.Galleries || {};
-
-  // --- Web renderer for a model's gallery ---
-  GS.Galleries.renderWeb = function(e) {
-  const model = (e && e.parameter && e.parameter.model || '').trim();
-  if (!model) return HtmlService.createHtmlOutput('Missing ?model=');
-  const files = GS.Galleries._listPngsForModel_(model);
-  const html = GS.Galleries._renderHtml_(model, files);
-  return HtmlService.createHtmlOutput(html).setTitle(model + ' — Gallery');
-};
-
-// internal: list PNGs for a given model from ROOT
-GS.Galleries._listPngsForModel_ = function(model) {
-  const out = [];
-  (function walk(folder){
-    const it = folder.getFiles();
-    while (it.hasNext()) {
-      const f = it.next();
-      const name = f.getName();
-      if (!name.toLowerCase().endsWith('.png')) continue;
-      const stem = name.slice(0, -4);
-      const m = stem.includes(' ') ? stem.slice(0, stem.indexOf(' ')) : stem;
-      if (m === model) out.push({ id: f.getId(), name });
-    }
-    const subs = folder.getFolders();
-    while (subs.hasNext()) walk(subs.next());
-  })(GS.Path.folder(CFG.PATHS.IMAGE_ROOT));
-  out.sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true}));
-  return out;
-};
-
-// internal: HTML template
-GS.Galleries._renderHtml_ = function(model, files) {
-  var BASE = PropertiesService.getScriptProperties().getProperty('WEBAPP_URL') || '';
-  var esc = function(s){ return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;'); };
-
-  var items = files.map(function(f){
-    return (
-`<a class="card" href="https://drive.google.com/file/d/${f.id}/view" target="_blank" rel="noopener">
-  <img loading="lazy" src="${BASE}?img=${f.id}" alt="${esc(f.name)}">
-  <div class="cap">${esc(f.name)}</div>
-</a>`
-    );
-  }).join('\n');
-
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(model)} — Gallery</title>
-<style>
-body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-header{padding:12px 16px;border-bottom:1px solid #ddd}
-h1{margin:0;font-size:18px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:12px}
-.card{display:block;text-decoration:none;color:inherit;border:1px solid #ddd;border-radius:6px;overflow:hidden;background:#fff}
-.card img{display:block;width:100%;height:180px;object-fit:contain;background:#f8f8f8}
-.cap{padding:6px 8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-footer{padding:16px;color:#666;font-size:12px;text-align:center}
-</style></head>
-<body>
-<header><h1>${esc(model)} — Images</h1></header>
-<main class="grid">
-${items}
-</main>
-<footer>Generated ${new Date().toISOString()}</footer>
-</body></html>`;
-};
-
-
-// Replace previous GS.Galleries.refresh write step with Web App links:
-GS.Galleries.refresh = function() {
-  const ss = SpreadsheetApp.getActive();
-  const sh = ss.getSheetByName(CFG.CATALOG_TAB);
-  if (!sh) throw new Error(`Tab not found: ${CFG.CATALOG_TAB}`);
-
-  // find Model and Gallery columns
-  const { hr, col, data } = GS._findHeader(sh, CFG.MODEL_HEADER);
-  if (hr === -1) throw new Error(`Header "${CFG.MODEL_HEADER}" not found in ${CFG.CATALOG_TAB}`);
-  let gcol = -1;
-  for (let c=0; c<data[hr].length; c++) {
-    const v = String(data[hr][c]).trim().toLowerCase();
-    if (v === String(CFG.GALLERY_HEADER).trim().toLowerCase()) { gcol = c; break; }
-  }
-  if (gcol === -1) throw new Error(`Header "${CFG.GALLERY_HEADER}" not found in ${CFG.CATALOG_TAB}`);
-
-  // Base URL from your deployment (fill after deploy)
-  const BASE = PropertiesService.getScriptProperties().getProperty('WEBAPP_URL') || '';
-  if (!BASE) throw new Error('Set Script Property WEBAPP_URL to the Web App URL');
-
-  // write HYPERLINK formulas
-  const formulas = [];
-  for (let r = hr + 1; r < data.length; r++) {
-    const model = String(data[r][col] ?? '').trim();
-    formulas.push([ model ? `=HYPERLINK("${BASE}?model=${encodeURIComponent(model)}","Open Gallery")` : '' ]);
-  }
-  if (formulas.length) sh.getRange(hr+2, gcol+1, formulas.length, 1).setFormulas(formulas);
-};
+  
 
 
   // ---------- Publish to Production (values-only push) ----------
@@ -553,7 +505,6 @@ GS.Galleries.refresh = function() {
     // Clears all project triggers and re-creates required ones.
     ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
     ScriptApp.newTrigger('GS.Registry.refresh').timeBased().everyDays(1).atHour(2).create();
-    ScriptApp.newTrigger('GS.Galleries.refresh').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(3).create();
   };
 
   // ---------- Update runner (master) ----------
@@ -563,8 +514,6 @@ GS.Galleries.refresh = function() {
     GS.CsvImport.importCatalogRaw();
     GS.Catalog.buildFromMap();
     GS.Registry.refresh();
-    // Also rewrite Gallery hyperlinks to point to the Web App per model
-    GS.Galleries.refresh();
     // Write/refresh path diagnostics
     GS.Path.writeDiagnostics();
     // Cleanup redundant tabs if present
@@ -579,25 +528,6 @@ GS.Galleries.refresh = function() {
 })(this.GS || {});
 
 function doGet(e) {
-  // Route: /exec?img=<FILE_ID>  -> binary PNG/JPG
-  if (e && e.parameter && e.parameter.img) {
-    var id = e.parameter.img.trim();
-    var file = DriveApp.getFileById(id);
-    // Get the blob and ensure a proper image content type; return the blob directly
-    var blob = file.getBlob();
-    var ct = (blob.getContentType() || '').toLowerCase();
-    if (ct.indexOf('png') !== -1) {
-      blob.setContentType('image/png');
-    } else if (ct.indexOf('jpeg') !== -1 || ct.indexOf('jpg') !== -1) {
-      blob.setContentType('image/jpeg');
-    } else {
-      // Default to PNG if unknown
-      blob.setContentType('image/png');
-    }
-    return blob;
-  }
-  // Default: /exec?model=<MODEL> -> gallery page
-  return GS.Galleries.renderWeb(e);
+  // Minimal ping handler for deployment verification
+  return HtmlService.createHtmlOutput('ping');
 }
-
-
