@@ -414,61 +414,21 @@ GS.Registry.refresh = function() {
   rows.sort((a,b)=> a[0].localeCompare(b[0], undefined, {numeric:true}) ||
                     a[3].localeCompare(b[3], undefined, {numeric:true}));
 
-  // Mirror Support/PNG/... (IMAGE_ROOT) into AppSheet data Images/ before writing
-  // Destination root: CFG.PATHS.APPSHEET_DATA/Images
-  const appDataRoot = GS.Path.folder(CFG.PATHS.APPSHEET_DATA);
-  let imagesDstIter = appDataRoot.getFoldersByName('Images');
-  const imagesDst = imagesDstIter.hasNext() ? imagesDstIter.next() : appDataRoot.createFolder('Images');
-
-  (function mirror(src, dst){
-    // Copy PNG files with simple freshness check; trash older duplicates
-    const files = src.getFiles();
-    while (files.hasNext()) {
-      const f = files.next();
-      const n = f.getName();
-      if (!n.toLowerCase().endsWith('.png')) continue;
-      const srcSize = (typeof f.getSize === 'function') ? f.getSize() : null;
-      const srcUpdated = f.getLastUpdated();
-      let upToDate = false;
-      const existing = dst.getFilesByName(n);
-      while (existing.hasNext()) {
-        const df = existing.next();
-        const dSize = (typeof df.getSize === 'function') ? df.getSize() : null;
-        const dUpdated = df.getLastUpdated();
-        if (srcSize !== null && dSize === srcSize && dUpdated >= srcUpdated) {
-          upToDate = true;
-        } else {
-          // remove stale duplicates
-          df.setTrashed(true);
-        }
-      }
-      if (!upToDate) f.makeCopy(n, dst);
-    }
-    // Recurse into subfolders
-    const subs = src.getFolders();
-    while (subs.hasNext()) {
-      const s = subs.next();
-      const name = s.getName();
-      let d = dst.getFoldersByName(name);
-      d = d.hasNext() ? d.next() : dst.createFolder(name);
-      mirror(s, d);
-    }
-  })(root, imagesDst);
+  // No mirroring: we now read PNGs directly under CFG.PATHS.IMAGE_ROOT and write relative paths only
 
   const sh = ss.getSheetByName('Image') || ss.insertSheet('Image');
   sh.clearContents();
   const header = ['Model','ImagePath','FileId','FileName','ViewURL'];
   sh.getRange(1,1,1,header.length).setValues([header]);
 
-  // Write ImagePath as relative to AppSheet data folder (Images/<relPath>) and blank URLs
+  // Write ImagePath as relPath (relative to CFG.PATHS.IMAGE_ROOT). URLs are not generated except ViewURL.
   const out = rows.map(r => {
     const model = r[0];
     const relPath = r[1];
     const id = r[2];
     const name = r[3];
     const viewURL = r[4];
-    const appRel = 'Images/' + relPath;
-    return [model, appRel, id, name, viewURL];
+    return [model, relPath, id, name, viewURL];
   });
   if (out.length) sh.getRange(2,1,out.length,header.length).setValues(out);
 
@@ -500,6 +460,81 @@ GS.Registry.refresh = function() {
     }
   };
 
+  // ---------- Config Helper (introspection tables) ----------
+  GS.ConfigHelper = GS.ConfigHelper || {};
+  GS.ConfigHelper.refresh = function() {
+    const ss = SpreadsheetApp.getActive();
+    const sh = ss.getSheetByName('Config_Helper') || ss.insertSheet('Config_Helper');
+    sh.clearContents();
+
+    // _Tabs at A1
+    const tabHeader = ['Tab'];
+    const sheets = ss.getSheets();
+    const tabRows = sheets.map(s => [s.getName()]);
+    sh.getRange(1, 1, 1, tabHeader.length).setValues([tabHeader]);
+    if (tabRows.length) sh.getRange(2, 1, tabRows.length, tabHeader.length).setValues(tabRows);
+
+    // _Tables at D1: Table, Headers, Tab, Range (Advanced Sheets API; simpler fields mask)
+    const tblHeader = ['Table', 'Headers', 'Tab', 'Range'];
+    sh.getRange(1, 4, 1, tblHeader.length).setValues([tblHeader]);
+
+    const tableRows = [];
+    const spreadsheetId = ss.getId();
+    // Simpler mask: get table name and range; derive headers by reading the first row in the table range
+    const fields = 'sheets(properties.title,properties.sheetId,tables(name,range))';
+
+    try {
+      const spreadsheetInfo = Sheets.Spreadsheets.get(spreadsheetId, { fields });
+      if (spreadsheetInfo.sheets) {
+        for (const sheetInfo of spreadsheetInfo.sheets) {
+          if (!sheetInfo || !sheetInfo.properties) continue;
+          if (!sheetInfo.tables || !sheetInfo.tables.length) continue;
+
+          const s = ss.getSheetByName(sheetInfo.properties.title);
+          if (!s) continue; // Skip if sheet isn't found
+
+          for (const table of sheetInfo.tables) {
+            const tableName = table.name;
+            const r = table.range;
+            if (!r) continue;
+
+            // Derive headers from the first row of the table's range
+            const headerRow = (r.startRowIndex || 0) + 1; // 1-based
+            const startCol = (r.startColumnIndex || 0) + 1; // 1-based
+            const numCols = (r.endColumnIndex - r.startColumnIndex) || 0;
+            let headers = '';
+            if (numCols > 0) {
+              const headerValues = s.getRange(headerRow, startCol, 1, numCols).getValues()[0];
+              headers = headerValues
+                .map(h => String(h || ''))
+                .filter(h => h)
+                .join(', ');
+            }
+
+            const tabName = sheetInfo.properties.title;
+
+            // Compute full A1 notation of the table range (guard against empty)
+            const numRows = (r.endRowIndex - r.startRowIndex) || 0;
+            let a1Notation = '';
+            if (numRows > 0 && numCols > 0) {
+              a1Notation = s.getRange(headerRow, startCol, numRows, numCols).getA1Notation();
+            }
+
+            tableRows.push([tableName, headers, tabName, a1Notation]);
+          }
+        }
+      }
+    } catch (e) {
+      tableRows.push(['ERROR', 'An unexpected error occurred.', String(e && e.message || e), '']);
+    }
+
+    if (tableRows.length) sh.getRange(2, 4, tableRows.length, tblHeader.length).setValues(tableRows);
+
+    // Auto-resize columns for readability
+    sh.autoResizeColumns(1, 1);
+    sh.autoResizeColumns(4, 7);
+  };
+
   // ---------- Optional: trigger builder (run once) ----------
   GS.createTriggers = function() {
     // Clears all project triggers and re-creates required ones.
@@ -514,6 +549,8 @@ GS.Registry.refresh = function() {
     GS.CsvImport.importCatalogRaw();
     GS.Catalog.buildFromMap();
     GS.Registry.refresh();
+    // Introspection helper tables for config visibility
+    GS.ConfigHelper.refresh();
     // Write/refresh path diagnostics
     GS.Path.writeDiagnostics();
     // Cleanup redundant tabs if present
