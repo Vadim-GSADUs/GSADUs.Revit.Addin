@@ -7,19 +7,12 @@ const CFG = Object.freeze({
   PATHS: {
     // Images
     IMAGE_ROOT: 'Support/PNG',
-    IMAGE_FLOORPLAN: 'Support/PNG/FloorPlan',
-    IMAGE_NE: 'Support/PNG/Northeast',
-    IMAGE_NW: 'Support/PNG/Northwest',
-    IMAGE_SE: 'Support/PNG/Southeast',
-    IMAGE_SW: 'Support/PNG/Southwest',
 
     // CSV input
     CSV_CATALOG: 'Support/CSV',
 
     // PDFs (optional)
     PDF_ROOT: 'Support/PDF',
-    PDF_FLOORPLAN: 'Support/PDF/FloorPlan',
-    PDF_PLANSET: 'Support/PDF/Planset',
 
     // AppSheet data (optional)
     APPSHEET_DATA: 'appsheet/data/GSADUsCatalog-434555248'
@@ -32,7 +25,6 @@ const CFG = Object.freeze({
   CATALOG_RAW_TAB: 'Catalog_Raw',
   CATALOG_TAB: 'Catalog',
   MODEL_HEADER: 'Model',
-  GALLERY_HEADER: 'Gallery',
 
   // Optional publish target
   PRODUCTION_SHEET_ID: ''

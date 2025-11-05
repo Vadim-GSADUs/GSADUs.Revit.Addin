@@ -4,7 +4,6 @@ function onOpen() {
     .addItem('Refresh (Master)', 'GS.Update.runAll')
     .addSeparator()
     .addItem('Refresh Image Registry', 'GS.Registry.refresh')
-    .addItem('Refresh Model Galleries', 'GS.Galleries.refresh')
     .addSubMenu(
       ui.createMenu('Publish')
         .addItem('Publish to Production', 'GS.Publish.publishCatalog')

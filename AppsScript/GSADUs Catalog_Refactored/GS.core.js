@@ -50,7 +50,6 @@ var GS = (function(GS = {}) {
     return DriveApp.getFolderById(GS.Path.id(rel, refresh));
   };
 
-  // Write diagnostics for configured paths into a sheet named "_Paths".
   // Columns: Key, RelativePath, FolderId, Exists, FolderName
   GS.Path.writeDiagnostics = function() {
     const rows = [];
@@ -78,11 +77,23 @@ var GS = (function(GS = {}) {
     });
 
     const ss = SpreadsheetApp.getActive();
-    const sh = ss.getSheetByName('_Paths') || ss.insertSheet('_Paths');
-    sh.clearContents();
+    const cfg = ss.getSheetByName('Config_Helper') || ss.insertSheet('Config_Helper');
     const header = ['Key','RelativePath','FolderId','Exists','FolderName'];
-    sh.getRange(1,1,1,header.length).setValues([header]);
-    if (rows.length) sh.getRange(2,1,rows.length,header.length).setValues(rows);
+    // Prefer an existing Google Table named "_Paths";
+  const found = (GS.ConfigHelper && GS.ConfigHelper._findTable_) ? GS.ConfigHelper._findTable_('_Paths') : null;
+  if (!found) throw new Error('Config_Helper table not found: _Paths');
+    if (found) {
+      const { sheet: s, startRow: r0, startCol: c0 } = found;
+      s.getRange(r0, c0, 1, header.length).setValues([header]);
+      if (rows.length) s.getRange(r0+1, c0, rows.length, header.length).setValues(rows);
+    } else {
+      const r0 = 1, c0 = 9; // I1
+      cfg.getRange(r0, c0, 1, header.length).setValues([header]);
+      // Clear previous block below header to avoid leftovers
+      const maxRows = Math.max(0, cfg.getMaxRows() - r0);
+      if (maxRows) cfg.getRange(r0+1, c0, maxRows, header.length).clearContent();
+      if (rows.length) cfg.getRange(r0+1, c0, rows.length, header.length).setValues(rows);
+    }
   };
 
   // ---------- CSV Import ----------
@@ -462,21 +473,65 @@ GS.Registry.refresh = function() {
 
   // ---------- Config Helper (introspection tables) ----------
   GS.ConfigHelper = GS.ConfigHelper || {};
+  // Find a Google Table by name and return its anchor info
+  GS.ConfigHelper._findTable_ = function(tableName) {
+    const ss = SpreadsheetApp.getActive();
+    const fields = 'sheets(properties.title,properties.sheetId,tables(name,range))';
+    try {
+      const info = Sheets.Spreadsheets.get(ss.getId(), { fields });
+      for (const sheetInfo of (info.sheets || [])) {
+        const title = sheetInfo && sheetInfo.properties && sheetInfo.properties.title;
+        const tables = (sheetInfo && sheetInfo.tables) || [];
+        for (const t of tables) {
+          if (t && t.name === tableName && t.range) {
+            const s = ss.getSheetByName(title);
+            if (!s) continue;
+            const r = t.range;
+            return {
+              sheet: s,
+              tabName: title,
+              startRow: (r.startRowIndex || 0) + 1,
+              startCol: (r.startColumnIndex || 0) + 1,
+              numRows: (r.endRowIndex - r.startRowIndex) || 0,
+              numCols: (r.endColumnIndex - r.startColumnIndex) || 0
+            };
+          }
+        }
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  };
   GS.ConfigHelper.refresh = function() {
     const ss = SpreadsheetApp.getActive();
     const sh = ss.getSheetByName('Config_Helper') || ss.insertSheet('Config_Helper');
-    sh.clearContents();
+    // Do not clear entire sheet; we target specific blocks to avoid wiping other helper data
 
     // _Tabs at A1
     const tabHeader = ['Tab'];
     const sheets = ss.getSheets();
     const tabRows = sheets.map(s => [s.getName()]);
-    sh.getRange(1, 1, 1, tabHeader.length).setValues([tabHeader]);
-    if (tabRows.length) sh.getRange(2, 1, tabRows.length, tabHeader.length).setValues(tabRows);
+  const tabsTbl = GS.ConfigHelper._findTable_('_Tabs');
+  if (!tabsTbl) throw new Error('Config_Helper table not found: _Tabs');
+    if (tabsTbl) {
+      const { sheet: ts, startRow: tr, startCol: tc } = tabsTbl;
+      ts.getRange(tr, tc, 1, tabHeader.length).setValues([tabHeader]);
+      if (tabRows.length) ts.getRange(tr+1, tc, tabRows.length, tabHeader.length).setValues(tabRows);
+    } else {
+      sh.getRange(1, 1, 1, tabHeader.length).setValues([tabHeader]);
+      const maxRows = Math.max(0, sh.getMaxRows() - 1);
+      if (maxRows) sh.getRange(2, 1, maxRows, 1).clearContent();
+      if (tabRows.length) sh.getRange(2, 1, tabRows.length, tabHeader.length).setValues(tabRows);
+    }
 
     // _Tables at D1: Table, Headers, Tab, Range (Advanced Sheets API; simpler fields mask)
     const tblHeader = ['Table', 'Headers', 'Tab', 'Range'];
-    sh.getRange(1, 4, 1, tblHeader.length).setValues([tblHeader]);
+  const tablesTbl = GS.ConfigHelper._findTable_('_Tables');
+  if (!tablesTbl) throw new Error('Config_Helper table not found: _Tables');
+    if (!tablesTbl) {
+      sh.getRange(1, 4, 1, tblHeader.length).setValues([tblHeader]);
+      const maxRows2 = Math.max(0, sh.getMaxRows() - 1);
+      if (maxRows2) sh.getRange(2, 4, maxRows2, tblHeader.length).clearContent();
+    }
 
     const tableRows = [];
     const spreadsheetId = ss.getId();
@@ -528,7 +583,15 @@ GS.Registry.refresh = function() {
       tableRows.push(['ERROR', 'An unexpected error occurred.', String(e && e.message || e), '']);
     }
 
-    if (tableRows.length) sh.getRange(2, 4, tableRows.length, tblHeader.length).setValues(tableRows);
+    if (tableRows.length) {
+      if (tablesTbl) {
+        const { sheet: ts2, startRow: tr2, startCol: tc2 } = tablesTbl;
+        ts2.getRange(tr2, tc2, 1, tblHeader.length).setValues([tblHeader]);
+        ts2.getRange(tr2+1, tc2, tableRows.length, tblHeader.length).setValues(tableRows);
+      } else {
+        sh.getRange(2, 4, tableRows.length, tblHeader.length).setValues(tableRows);
+      }
+    }
 
     // Auto-resize columns for readability
     sh.autoResizeColumns(1, 1);
