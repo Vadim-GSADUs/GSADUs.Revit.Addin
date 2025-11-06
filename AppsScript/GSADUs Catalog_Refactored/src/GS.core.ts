@@ -76,24 +76,9 @@ var GS = (function(GS = {}) {
       rows.push([key, rel, id, exists, name]);
     });
 
-    const ss = SpreadsheetApp.getActive();
-    const cfg = ss.getSheetByName('Config_Helper') || ss.insertSheet('Config_Helper');
     const header = ['Key','RelativePath','FolderId','Exists','FolderName'];
-    // Prefer an existing Google Table named "_Paths";
-  const found = (GS.ConfigHelper && GS.ConfigHelper._findTable_) ? GS.ConfigHelper._findTable_('_Paths') : null;
-  if (!found) throw new Error('Config_Helper table not found: _Paths');
-    if (found) {
-      const { sheet: s, startRow: r0, startCol: c0 } = found;
-      s.getRange(r0, c0, 1, header.length).setValues([header]);
-      if (rows.length) s.getRange(r0+1, c0, rows.length, header.length).setValues(rows);
-    } else {
-      const r0 = 1, c0 = 9; // I1
-      cfg.getRange(r0, c0, 1, header.length).setValues([header]);
-      // Clear previous block below header to avoid leftovers
-      const maxRows = Math.max(0, cfg.getMaxRows() - r0);
-      if (maxRows) cfg.getRange(r0+1, c0, maxRows, header.length).clearContent();
-      if (rows.length) cfg.getRange(r0+1, c0, rows.length, header.length).setValues(rows);
-    }
+    // Write only into the named Google Table '_Paths'; if missing, skip and notify
+    GS.ConfigHelper._writeTableStrict_('_Paths', header, rows);
   };
 
   // ---------- CSV Import ----------
@@ -476,7 +461,7 @@ GS.Registry.refresh = function() {
   // Find a Google Table by name and return its anchor info
   GS.ConfigHelper._findTable_ = function(tableName) {
     const ss = SpreadsheetApp.getActive();
-    const fields = 'sheets(properties.title,properties.sheetId,tables(name,range))';
+    const fields = 'sheets(properties.title,properties.sheetId,tables(tableId,name,range))';
     try {
       const info = Sheets.Spreadsheets.get(ss.getId(), { fields });
       for (const sheetInfo of (info.sheets || [])) {
@@ -489,7 +474,9 @@ GS.Registry.refresh = function() {
             const r = t.range;
             return {
               sheet: s,
+              sheetId: (sheetInfo && sheetInfo.properties && sheetInfo.properties.sheetId) || null,
               tabName: title,
+              tableId: t.tableId || null,
               startRow: (r.startRowIndex || 0) + 1,
               startCol: (r.startColumnIndex || 0) + 1,
               numRows: (r.endRowIndex - r.startRowIndex) || 0,
@@ -501,38 +488,139 @@ GS.Registry.refresh = function() {
     } catch (e) { /* ignore */ }
     return null;
   };
+  
+  // Write a header + rows into either a named Google Table (preferred) or a default anchor
+  // Ensures previous data in the target block is cleared to avoid duplicate/leftover rows.
+  GS.ConfigHelper._writeTable_ = function(tableName, header, rows, defaultAnchor) {
+    const ss = SpreadsheetApp.getActive();
+    const cfg = ss.getSheetByName('_Config') || ss.insertSheet('_Config');
+    const found = GS.ConfigHelper._findTable_ ? GS.ConfigHelper._findTable_(tableName) : null;
+    const sheet = found ? found.sheet : cfg;
+    const startRow = found ? found.startRow : (defaultAnchor && defaultAnchor.row) || 1;
+    const startCol = found ? found.startCol : (defaultAnchor && defaultAnchor.col) || 1;
+    const nCols = header.length;
+
+    // Write header row
+    sheet.getRange(startRow, startCol, 1, nCols).setValues([header]);
+
+    // Clear any existing non-empty rows below the header in the target columns to avoid duplicates.
+    const lastRow = sheet.getLastRow();
+    const dataRowCount = Math.max(0, lastRow - startRow);
+    if (dataRowCount > 0) {
+      const area = sheet.getRange(startRow + 1, startCol, dataRowCount, nCols).getValues();
+      // find the last non-empty row index in area
+      let lastNonEmpty = -1;
+      for (let i = area.length - 1; i >= 0; i--) {
+        const row = area[i];
+        if (row.some(c => String(c).trim() !== '')) { lastNonEmpty = i; break; }
+      }
+      if (lastNonEmpty >= 0) {
+        sheet.getRange(startRow + 1, startCol, lastNonEmpty + 1, nCols).clearContent();
+      }
+    }
+
+    // Write new rows
+    if (rows && rows.length) {
+      sheet.getRange(startRow + 1, startCol, rows.length, nCols).setValues(rows);
+    }
+  };
+  
+  // Strict table writer: only write into an existing named Google Table.
+  // If the table is missing, or the table range is too small for the rows, record a notification
+  // but do NOT write to any hard-coded cell ranges.
+  GS.ConfigHelper._notifications = GS.ConfigHelper._notifications || [];
+  GS.ConfigHelper._notify_ = function(msg) {
+    GS.ConfigHelper._notifications = GS.ConfigHelper._notifications || [];
+    GS.ConfigHelper._notifications.push(String(msg));
+  };
+
+  GS.ConfigHelper._writeTableStrict_ = function(tableName, header, rows) {
+    const found = GS.ConfigHelper._findTable_ ? GS.ConfigHelper._findTable_(tableName) : null;
+    if (!found) {
+      GS.ConfigHelper._notify_(`Missing table: ${tableName}`);
+      return;
+    }
+    const s = found.sheet;
+    const startRow = found.startRow;
+    const startCol = found.startCol;
+    let tableNumRows = found.numRows || 0;
+    let tableNumCols = found.numCols || header.length;
+    const nCols = header.length;
+    const desiredTotalRows = Math.max(1, 1 + (rows ? rows.length : 0));
+
+    // Attempt to resize the Google Table to exactly match header + data columns
+    // This avoids trailing empty rows in the table.
+    try {
+      if (found.tableId && found.sheetId && (tableNumRows !== desiredTotalRows || tableNumCols !== nCols)) {
+        Sheets.Spreadsheets.batchUpdate({
+          requests: [
+            {
+              updateTable: {
+                table: {
+                  tableId: found.tableId,
+                  range: {
+                    sheetId: found.sheetId,
+                    startRowIndex: startRow - 1,
+                    startColumnIndex: startCol - 1,
+                    endRowIndex: (startRow - 1) + desiredTotalRows,
+                    endColumnIndex: (startCol - 1) + nCols
+                  }
+                },
+                fields: 'range'
+              }
+            }
+          ]
+        }, SpreadsheetApp.getActive().getId());
+        // Refresh table info
+        const ref = GS.ConfigHelper._findTable_(tableName);
+        if (ref) {
+          tableNumRows = ref.numRows || desiredTotalRows;
+          tableNumCols = ref.numCols || nCols;
+        }
+      }
+    } catch (e) {
+      GS.ConfigHelper._notify_(`Unable to resize table ${tableName}: ${e && e.message ? e.message : e}`);
+    }
+
+    // Write header into the table header row
+    s.getRange(startRow, startCol, 1, nCols).setValues([header]);
+
+    // Determine capacity (rows available below header inside the table)
+  const capacity = Math.max(0, tableNumRows - 1);
+    if (rows && rows.length) {
+      if (capacity === 0 && rows.length > 0) {
+        GS.ConfigHelper._notify_(`Table ${tableName} has no data rows defined (size=${tableNumRows}); cannot write ${rows.length} rows.`);
+        return;
+      }
+      // Clear existing content in the table body area
+      s.getRange(startRow + 1, startCol, capacity, nCols).clearContent();
+
+      // If rows exceed capacity, write what fits and notify
+      if (rows.length > capacity) {
+        s.getRange(startRow + 1, startCol, capacity, nCols).setValues(rows.slice(0, capacity));
+        GS.ConfigHelper._notify_(`Table ${tableName} capacity (${capacity}) is smaller than rows to write (${rows.length}); truncated.`);
+      } else {
+        s.getRange(startRow + 1, startCol, rows.length, nCols).setValues(rows);
+      }
+    } else {
+      // No rows: clear any existing content in the table body
+      if (tableNumRows > 1) s.getRange(startRow + 1, startCol, tableNumRows - 1, nCols).clearContent();
+    }
+  };
   GS.ConfigHelper.refresh = function() {
     const ss = SpreadsheetApp.getActive();
-    const sh = ss.getSheetByName('Config_Helper') || ss.insertSheet('Config_Helper');
+    const sh = ss.getSheetByName('_Config') || ss.insertSheet('_Config');
     // Do not clear entire sheet; we target specific blocks to avoid wiping other helper data
 
     // _Tabs at A1
     const tabHeader = ['Tab'];
     const sheets = ss.getSheets();
     const tabRows = sheets.map(s => [s.getName()]);
-  const tabsTbl = GS.ConfigHelper._findTable_('_Tabs');
-  if (!tabsTbl) throw new Error('Config_Helper table not found: _Tabs');
-    if (tabsTbl) {
-      const { sheet: ts, startRow: tr, startCol: tc } = tabsTbl;
-      ts.getRange(tr, tc, 1, tabHeader.length).setValues([tabHeader]);
-      if (tabRows.length) ts.getRange(tr+1, tc, tabRows.length, tabHeader.length).setValues(tabRows);
-    } else {
-      sh.getRange(1, 1, 1, tabHeader.length).setValues([tabHeader]);
-      const maxRows = Math.max(0, sh.getMaxRows() - 1);
-      if (maxRows) sh.getRange(2, 1, maxRows, 1).clearContent();
-      if (tabRows.length) sh.getRange(2, 1, tabRows.length, tabHeader.length).setValues(tabRows);
-    }
+  // Write only into the named table '_Tabs'. If it doesn't exist, skip and notify.
+  GS.ConfigHelper._writeTableStrict_('_Tabs', tabHeader, tabRows);
 
     // _Tables at D1: Table, Headers, Tab, Range (Advanced Sheets API; simpler fields mask)
     const tblHeader = ['Table', 'Headers', 'Tab', 'Range'];
-  const tablesTbl = GS.ConfigHelper._findTable_('_Tables');
-  if (!tablesTbl) throw new Error('Config_Helper table not found: _Tables');
-    if (!tablesTbl) {
-      sh.getRange(1, 4, 1, tblHeader.length).setValues([tblHeader]);
-      const maxRows2 = Math.max(0, sh.getMaxRows() - 1);
-      if (maxRows2) sh.getRange(2, 4, maxRows2, tblHeader.length).clearContent();
-    }
-
     const tableRows = [];
     const spreadsheetId = ss.getId();
     // Simpler mask: get table name and range; derive headers by reading the first row in the table range
@@ -584,18 +672,24 @@ GS.Registry.refresh = function() {
     }
 
     if (tableRows.length) {
-      if (tablesTbl) {
-        const { sheet: ts2, startRow: tr2, startCol: tc2 } = tablesTbl;
-        ts2.getRange(tr2, tc2, 1, tblHeader.length).setValues([tblHeader]);
-        ts2.getRange(tr2+1, tc2, tableRows.length, tblHeader.length).setValues(tableRows);
-      } else {
-        sh.getRange(2, 4, tableRows.length, tblHeader.length).setValues(tableRows);
-      }
+      GS.ConfigHelper._writeTableStrict_('_Tables', tblHeader, tableRows);
     }
 
     // Auto-resize columns for readability
     sh.autoResizeColumns(1, 1);
     sh.autoResizeColumns(4, 7);
+
+    // If there were any notifications (missing or truncated tables), surface them to the user
+    try {
+      const notes = (GS.ConfigHelper._notifications || []).slice();
+      GS.ConfigHelper._notifications = [];
+      if (notes.length) {
+        const ui = SpreadsheetApp.getUi();
+        ui.alert('Config Helper: Issues detected', notes.join('\n'), ui.ButtonSet.OK);
+      }
+    } catch (e) {
+      // If UI fails (non-interactive), ignore; notifications remain in memory for later inspection
+    }
   };
 
   // ---------- Optional: trigger builder (run once) ----------
@@ -616,12 +710,6 @@ GS.Registry.refresh = function() {
     GS.ConfigHelper.refresh();
     // Write/refresh path diagnostics
     GS.Path.writeDiagnostics();
-    // Cleanup redundant tabs if present
-    const ss = SpreadsheetApp.getActive();
-    const rm = (name) => { const sh = ss.getSheetByName(name); if (sh) ss.deleteSheet(sh); };
-    rm('ADU_Catalog');
-    rm('Import_Log');
-    console.timeEnd('GS.Update');
   };
 
   return GS;
