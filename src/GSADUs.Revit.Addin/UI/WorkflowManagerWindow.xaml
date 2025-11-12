@@ -41,7 +41,8 @@
                         </CollectionViewSource>
                     </Grid.Resources>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition/>
+                        <ColumnDefinition Width="367*"/>
+                        <ColumnDefinition Width="635*"/>
                         <ColumnDefinition Width="0*"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
@@ -50,7 +51,7 @@
                     </Grid.RowDefinitions>
                     <ListView x:Name="WorkflowsList" SelectionMode="Single"
                               ItemsSource="{Binding Source={StaticResource WorkflowsView}}"
-                              SelectedItem="{Binding SelectedWorkflow, Mode=TwoWay}" SelectionChanged="WorkflowsList_SelectionChanged">
+                              SelectedItem="{Binding SelectedWorkflow, Mode=TwoWay}" SelectionChanged="WorkflowsList_SelectionChanged" Grid.ColumnSpan="2">
                         <ListView.InputBindings>
                             <MouseBinding Gesture="LeftDoubleClick" Command="{Binding DataContext.OpenWorkflowCommand, RelativeSource={RelativeSource AncestorType=TabItem}}" CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=ListView}}"/>
                         </ListView.InputBindings>
@@ -63,7 +64,7 @@
                             </GridView>
                         </ListView.View>
                     </ListView>
-                    <UniformGrid Grid.Row="1" Rows="1" Columns="5" Margin="0,8,0,0">
+                    <UniformGrid Grid.Row="1" Rows="1" Columns="5" Margin="0,8,0,0" Grid.ColumnSpan="2">
                         <Button x:Name="DupBtn"     MinWidth="110" Margin="4,0" Content="Duplicate" Command="{Binding DuplicateSelectedCommand}"/>
                         <Button x:Name="RenBtn"     MinWidth="110" Margin="4,0" Content="Rename Workflow" Command="{Binding RenameSelectedCommand}"/>
                         <Button x:Name="DelBtn"     MinWidth="110" Margin="4,0" Content="Delete Workflow" Command="{Binding DeleteSelectedCommand}"/>

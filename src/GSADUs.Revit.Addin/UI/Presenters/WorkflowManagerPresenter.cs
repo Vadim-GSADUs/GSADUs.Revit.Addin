@@ -149,7 +149,7 @@ namespace GSADUs.Revit.Addin.UI
             }
 
             existing.Name = nameVal; existing.Scope = "SelectionSet"; existing.Description = descVal;
-            SaveImageWorkflow(existing);
+            if (!SaveImageWorkflowInternal(existing)) return; // abort if validation fails
             vm.SetDirty(false);
             RefreshListsAfterSave();
         }
@@ -225,7 +225,9 @@ namespace GSADUs.Revit.Addin.UI
         private void ApplyBaseFields(WorkflowDefinition? wf, WorkflowTabBaseViewModel vm)
         {
             vm.Name = wf?.Name ?? string.Empty;
-            vm.WorkflowScope = wf?.Scope ?? string.Empty;
+            var scopeRaw = wf?.Scope ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(scopeRaw)) scopeRaw = "SelectionSet"; // default predominant scope
+            vm.WorkflowScope = scopeRaw;
             vm.Description = wf?.Description ?? string.Empty;
         }
 
@@ -469,33 +471,32 @@ namespace GSADUs.Revit.Addin.UI
             if (p == null)
             {
                 if (string.IsNullOrWhiteSpace(ImageWorkflow.Pattern)) ImageWorkflow.Pattern = "{SetName}";
+                if (string.IsNullOrWhiteSpace(ImageWorkflow.Format)) ImageWorkflow.Format = "PNG";
+                if (string.IsNullOrWhiteSpace(ImageWorkflow.Resolution)) ImageWorkflow.Resolution = "Ultra"; // updated default
+                if (string.IsNullOrWhiteSpace(ImageWorkflow.CropMode)) ImageWorkflow.CropMode = "Static";
                 return;
             }
-            string Gs(string k) =>
-                (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String)
-                    ? (v.GetString() ?? string.Empty)
-                    : string.Empty;
-            ImageWorkflow.ExportScope          = Gs(ImageWorkflowKeys.exportScope);
-            ImageWorkflow.SelectedPrintSet     = Gs(ImageWorkflowKeys.imagePrintSetName);
+            string Gs(string k) => (p != null && p.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String) ? (v.GetString() ?? string.Empty) : string.Empty;
+            ImageWorkflow.ExportScope = Gs(ImageWorkflowKeys.exportScope);
+            ImageWorkflow.SelectedPrintSet = Gs(ImageWorkflowKeys.imagePrintSetName);
             ImageWorkflow.SelectedSingleViewId = Gs(ImageWorkflowKeys.singleViewId);
             var pattern = Gs(ImageWorkflowKeys.fileNamePattern);
-            ImageWorkflow.Pattern              = string.IsNullOrWhiteSpace(pattern) ? "{SetName}" : pattern;
-            ImageWorkflow.Format               = Gs(ImageWorkflowKeys.imageFormat);
-            // ---- META (no params dict needed) ----
-            ImageWorkflow.Name          = wf?.Name  ?? string.Empty;
-            ImageWorkflow.WorkflowScope = wf?.Scope ?? string.Empty;
-            ImageWorkflow.Description   = wf?.Description ?? string.Empty;
-            // ---- PARAMS (guarded; do NOT touch Resolution) ----
+            ImageWorkflow.Pattern = string.IsNullOrWhiteSpace(pattern) ? "{SetName}" : pattern;
+            var fmt = Gs(ImageWorkflowKeys.imageFormat);
+            ImageWorkflow.Format = string.IsNullOrWhiteSpace(fmt) ? "PNG" : fmt;
+            ImageWorkflow.Name = wf?.Name ?? string.Empty;
+            ImageWorkflow.WorkflowScope = string.IsNullOrWhiteSpace(wf?.Scope) ? "SelectionSet" : (wf?.Scope ?? "SelectionSet");
+            ImageWorkflow.Description = wf?.Description ?? string.Empty;
             var cm = Gs(ImageWorkflowKeys.cropMode);
-            if (!string.IsNullOrWhiteSpace(cm)) ImageWorkflow.CropMode = cm;
+            ImageWorkflow.CropMode = string.IsNullOrWhiteSpace(cm) ? "Static" : cm;
             var co = Gs(ImageWorkflowKeys.cropOffset);
-            if (!string.IsNullOrWhiteSpace(co)) ImageWorkflow.CropOffset = co;
-            // Heuristic camera parameters (optional)
+            ImageWorkflow.CropOffset = string.IsNullOrWhiteSpace(co) ? string.Empty : co;
             var hf = Gs(ImageWorkflowKeys.heuristicFovDeg);
-            if (!string.IsNullOrWhiteSpace(hf)) ImageWorkflow.HeuristicFov = hf;
+            ImageWorkflow.HeuristicFov = string.IsNullOrWhiteSpace(hf) ? (string.IsNullOrWhiteSpace(ImageWorkflow.HeuristicFov) ? "50" : ImageWorkflow.HeuristicFov) : hf;
             var hb = Gs(ImageWorkflowKeys.heuristicFovBufferPct);
-            if (!string.IsNullOrWhiteSpace(hb)) ImageWorkflow.HeuristicBufferPct = hb;
-            // Leave Resolution as-is. Do not set it here.
+            ImageWorkflow.HeuristicBufferPct = string.IsNullOrWhiteSpace(hb) ? (string.IsNullOrWhiteSpace(ImageWorkflow.HeuristicBufferPct) ? "5" : ImageWorkflow.HeuristicBufferPct) : hb;
+            var res = Gs(ImageWorkflowKeys.resolutionPreset);
+            ImageWorkflow.Resolution = string.IsNullOrWhiteSpace(res) ? "Ultra" : res; // updated default when missing
         }
 
         private static void EnsureActionId(WorkflowDefinition wf, string id)
@@ -543,53 +544,79 @@ namespace GSADUs.Revit.Addin.UI
 
         public void SaveImageWorkflow(WorkflowDefinition existing)
         {
+            // Legacy signature retained for compatibility; new validation wraps Save logic.
+            _ = SaveImageWorkflowInternal(existing);
+        }
+
+        private bool SaveImageWorkflowInternal(WorkflowDefinition existing)
+        {
             var vm = ImageWorkflow;
+            if (vm == null) return false;
+
+            // Basic validation aligned with VM logic
+            var rawScope = vm.ExportScope;
+            if (string.IsNullOrWhiteSpace(rawScope) ||
+                (!rawScope.Equals("PrintSet", StringComparison.OrdinalIgnoreCase) &&
+                 !rawScope.Equals("SingleView", StringComparison.OrdinalIgnoreCase)))
+            {
+                rawScope = "PrintSet"; // fallback
+            }
+
+            // Range validation depending on scope
+            if (rawScope.Equals("PrintSet", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(vm.SelectedPrintSet))
+                return false;
+            if (rawScope.Equals("SingleView", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(vm.SelectedSingleViewId))
+                return false;
+            if (string.IsNullOrWhiteSpace(vm.Name)) return false; // name required
+            if (string.IsNullOrWhiteSpace(vm.Pattern) || !vm.Pattern.Contains("{SetName}")) return false; // pattern requirement
+            if (string.IsNullOrWhiteSpace(vm.Format)) vm.Format = "PNG"; // default format
+            if (string.IsNullOrWhiteSpace(vm.Resolution)) vm.Resolution = "Medium"; // resolution default
+
             var imageParams = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            JsonElement J(string? v)
+            {
+                using var d = JsonDocument.Parse("\"" + (v ?? string.Empty).Replace("\"", "\\\"") + "\"");
+                return d.RootElement.Clone();
+            }
             void SP(string k, string? v) { if (!string.IsNullOrWhiteSpace(v)) imageParams[k] = J(v); }
 
             // Normalize pattern to always include {SetName}
-            var pat = vm?.Pattern;
+            var pat = vm.Pattern;
             if (string.IsNullOrWhiteSpace(pat)) pat = "{SetName}";
             if (!pat.Contains("{SetName}")) pat = "{SetName}" + pat;
-
-            SP(ImageWorkflowKeys.imagePrintSetName, vm?.SelectedPrintSet);
             SP(ImageWorkflowKeys.fileNamePattern, pat);
 
-            var cropMode = vm?.CropMode;
-            if (!string.IsNullOrWhiteSpace(cropMode) && !string.Equals(cropMode, "Static", StringComparison.OrdinalIgnoreCase))
-                SP(ImageWorkflowKeys.cropMode, cropMode);
-
-            var cropOffset = vm?.CropOffset;
-            if (!string.IsNullOrWhiteSpace(cropOffset)) SP(ImageWorkflowKeys.cropOffset, cropOffset);
-
-            // Persist heuristic camera parameters if provided
-            var hf = vm?.HeuristicFov;
-            if (!string.IsNullOrWhiteSpace(hf)) SP(ImageWorkflowKeys.heuristicFovDeg, hf);
-            var hb = vm?.HeuristicBufferPct;
-            if (!string.IsNullOrWhiteSpace(hb)) SP(ImageWorkflowKeys.heuristicFovBufferPct, hb);
-
-            SP(ImageWorkflowKeys.resolutionPreset, vm?.Resolution);
-
-            var fmt = vm?.Format;
-            if (!string.IsNullOrWhiteSpace(fmt))
+            // Scope persistence
+            SP(ImageWorkflowKeys.exportScope, rawScope);
+            if (rawScope.Equals("SingleView", StringComparison.OrdinalIgnoreCase))
             {
-                var up = fmt.Trim().ToUpperInvariant();
-                if (up == "PNG" || up == "BMP" || up == "TIFF") SP(ImageWorkflowKeys.imageFormat, up);
+                SP(ImageWorkflowKeys.singleViewId, vm.SelectedSingleViewId);
+            }
+            else
+            {
+                SP(ImageWorkflowKeys.imagePrintSetName, vm.SelectedPrintSet);
             }
 
-            var scope = vm?.ExportScope ?? "PrintSet";
-            imageParams[ImageWorkflowKeys.exportScope] = J(scope);
-            if (string.Equals(scope, "SingleView", StringComparison.OrdinalIgnoreCase))
-            {
-                var svId = vm?.SelectedSingleViewId;
-                if (!string.IsNullOrWhiteSpace(svId)) imageParams[ImageWorkflowKeys.singleViewId] = J(svId);
-            }
+            // Crop settings
+            if (!string.IsNullOrWhiteSpace(vm.CropMode) && !vm.CropMode.Equals("Static", StringComparison.OrdinalIgnoreCase))
+                SP(ImageWorkflowKeys.cropMode, vm.CropMode);
+            SP(ImageWorkflowKeys.cropOffset, vm.CropOffset);
+
+            // Heuristic camera params
+            SP(ImageWorkflowKeys.heuristicFovDeg, vm.HeuristicFov);
+            SP(ImageWorkflowKeys.heuristicFovBufferPct, vm.HeuristicBufferPct);
+
+            // Resolution + format
+            SP(ImageWorkflowKeys.resolutionPreset, vm.Resolution);
+            var upFmt = (vm.Format ?? string.Empty).Trim().ToUpperInvariant();
+            if (upFmt is "PNG" or "BMP" or "TIFF") SP(ImageWorkflowKeys.imageFormat, upFmt); else SP(ImageWorkflowKeys.imageFormat, "PNG");
 
             existing.Parameters = imageParams;
             EnsureActionId(existing, "export-image");
+            return true;
         }
 
-        public void RefreshListsAfterSave()
+        private void RefreshListsAfterSave()
         {
             // Cache current selections to restore after refresh
             var pdfId = PdfWorkflow.SelectedWorkflowId;
