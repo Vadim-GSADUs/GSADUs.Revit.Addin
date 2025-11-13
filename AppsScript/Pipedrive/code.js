@@ -67,8 +67,9 @@ function cacheGetPersonId(email) {
   return store[e]?.id || null;
 }
 
-// Phone cache (persistent). Key = normalized phone string.
+// === Phone cache (persistent)
 const PERSONS_PHONE_CACHE_KEY = 'pd_persons_phone_cache_v1';
+
 function loadPhoneCache() {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(PERSONS_PHONE_CACHE_KEY) || '{}'); }
   catch (_) { return {}; }
@@ -346,10 +347,10 @@ function ensurePersonSmart(pd, parsed, runCache) {
     if (idFromPhone) { runCache[`tel:${phone}`] = idFromPhone; return idFromPhone; }
   }
 
-  // last resort: query-or-create
+  // last resort: query or create
   let personId = null;
   if (!SKIP_PERSON_SEARCH && email) {
-    const found = pd.searchPersonByEmail(email); // search is expensive; only by email
+    const found = pd.searchPersonByEmail(email);
     if (found?.id) personId = found.id;
   }
   if (!personId) {
@@ -384,51 +385,56 @@ function buildNote(parsed, msg){
   ].join('\n');
 }
 
-/* ===== 6-hour Persons cache sync =====
-   Schedule this at a low frequency (e.g., every 6 hours).
-   It refreshes a limited number of Persons pages to keep the local mirror current.
-*/
-function syncPersonsCache() {
-  // Obey any active backoff
-  const untilStr = PropertiesService.getScriptProperties().getProperty(PD_BACKOFF_PROP) || '0';
+// ===== SPARSE CACHE SYNC (production: time-driven or manual) =====
+const SYNC_CURSOR_PROP = 'pd_sync_cursor';
+const SYNC_LIMIT = 200;            // persons per page
+const SYNC_PAGES_PER_RUN = 3;      // cap work per invocation to conserve tokens
+
+function sparseSyncPersonsCache() {
+  const props = PropertiesService.getScriptProperties();
+  const untilStr = props.getProperty(PD_BACKOFF_PROP) || '0';
   const until = Number(untilStr);
-  if (until && Date.now() < until) return;
+  if (until && Date.now() < until) {
+    console.log(`Pipedrive backoff active; resumes at ${new Date(until).toISOString()}`);
+    return;
+  }
 
   const pd = new PipedriveClient();
+  let start = Number(props.getProperty(SYNC_CURSOR_PROP) || '0');
+  let processed = 0;
 
-  // Tune these limits to fit your org size
-  const PAGE_LIMIT = 200;   // Pipedrive page size (max varies by API)
-  const MAX_PAGES = 10;     // at most ~2000 persons per sync
-  let start = 0;
-
-  for (let page = 0; page < MAX_PAGES; page++) {
-    try {
-      const res = pd.listPersonsPage(start, PAGE_LIMIT);
+  try {
+    for (let i = 0; i < SYNC_PAGES_PER_RUN; i++) {
+      const res = pd.listPersonsPage(start, SYNC_LIMIT);
       const items = res?.data || [];
-      if (!items.length) break;
+      if (!items.length) { start = 0; break; }
 
       for (const p of items) {
         const emails = Array.isArray(p.email) ? p.email : [];
-        for (const e of emails) {
-          const addr = (e && e.value) ? String(e.value).trim() : '';
-          if (addr) cacheSetPerson(addr, p.id, p.name);
-        }
         const phones = Array.isArray(p.phone) ? p.phone : [];
+        for (const e of emails) {
+          const val = (e && e.value) ? String(e.value).trim().toLowerCase() : '';
+          if (val) cacheSetPerson(val, p.id, p.name);
+        }
         for (const ph of phones) {
           const val = (ph && ph.value) ? String(ph.value).trim() : '';
           if (val) cacheSetPhone(val, p.id);
         }
       }
 
-      if (res?.additional_data?.pagination?.more_items_in_collection) {
-        start = res.additional_data.pagination.next_start;
-      } else {
-        break;
-      }
-    } catch (e) {
-      if (isRateLimitError(e)) return; // respect backoff flow
-      console.log(`syncPersonsCache error: ${e && e.message}`);
-      return;
+      processed += items.length;
+      const more = res?.additional_data?.pagination?.more_items_in_collection;
+      if (more) start = res.additional_data.pagination.next_start; else { start = 0; break; }
     }
+  } catch (e) {
+    if (isRateLimitError(e)) {
+      console.log(`sparseSyncPersonsCache: halted due to rate limit. ${e && e.message}`);
+      // PD_BACKOFF_PROP already set by client on 429
+    } else {
+      console.log(`sparseSyncPersonsCache: error ${e && e.message}`);
+    }
+  } finally {
+    props.setProperty(SYNC_CURSOR_PROP, String(start));
+    console.log(`sparseSyncPersonsCache: processed=${processed} next_start=${start}`);
   }
 }
