@@ -6,8 +6,6 @@
 // ===== CONFIG =====
 const SALES_INBOX = 'Sales@gsadus.com';
 const LABEL_ACCEPT = '1 - SALES/NEW LEADS (AUTO)';
-const SUBJECT_REQUIRED_PHRASE = 'Request form Query';
-const SENDER_OK = ['office@gsadus.com', 'srv1247.main-hosting.eu']; // substring OR
 const LEAD_ADDRESS_FIELD_KEY = 'e76ad51def930fd350324b8057577be5bde93023'; // Lead custom field
 
 // Processing controls
@@ -127,7 +125,12 @@ function processInbox() {
     const { thread, msg, parsed } = item;
     try {
       const personId = ensurePersonSmart(pd, parsed, runPersonCache);
-      const leadTitle = parsed.name || parsed.email || parsed.phone || 'GSADUS Web Lead';
+      // If the parsed name is a known placeholder like "[username]", prefer email for title.
+      const isPlaceholderName = (n) => {
+        if (!n) return false; const t = n.trim().toLowerCase(); return t === '[username]';
+      };
+      const effectiveName = (parsed.name && !isPlaceholderName(parsed.name)) ? parsed.name : '';
+      const leadTitle = effectiveName || parsed.email || parsed.phone || 'GSADUS Web Lead';
 
       const payload = { title: leadTitle, person_id: personId };
       if (parsed.address) payload[LEAD_ADDRESS_FIELD_KEY] = parsed.address;
@@ -161,7 +164,7 @@ function processInbox() {
 function collectCandidates(threads, dedupe){
   const out = [];
   for (const thread of threads) {
-    // newest to oldest; choose first unprocessed valid message only
+    // newest to oldest; choose first unprocessed recognizable lead only
     const messages = thread.getMessages().slice().reverse();
     for (const msg of messages) {
       try {
@@ -169,15 +172,20 @@ function collectCandidates(threads, dedupe){
         const msgId = msg.getId();
         if (dedupe[msgId]) continue;
 
-        const subject = msg.getSubject() || '';
-        const fromHdr = msg.getFrom() || '';
-        const bodyText = stripHtml(msg.getBody());
+        // Use profile-based parser from EmailProfiles.js
+        const profParsed = parseLeadFromMessage(msg);
+        if (!profParsed) continue; // not a recognized lead email
 
-        if (!subject.includes(SUBJECT_REQUIRED_PHRASE)) continue;
-        if (!senderMatches(fromHdr)) continue;
-        if (!bodyLooksLikeForm(bodyText)) continue;
+        // Map to existing shape expected by downstream logic
+        const parsed = {
+          name: (profParsed.fullName || '').trim(),
+          email: (profParsed.email || '').trim(),
+          phone: (profParsed.mobilePhone || '').trim(),
+          address: (profParsed.address || '').trim(),
+          message: (profParsed.note || '').trim()
+        };
 
-        const parsed = parseWebForm(msg.getBody());
+        // Minimal validity: need at least email or phone
         if (!parsed.email && !parsed.phone) continue;
 
         out.push({ thread, msg, parsed });
@@ -210,18 +218,9 @@ function isRateLimitError(e){
   return s.includes('http 429') || s.includes('rate limit') || s.includes('budget exceeded') || (e && e.code === 429);
 }
 
-// ===== FILTER HELPERS =====
-function senderMatches(fromHdr) {
-  const f = fromHdr || '';
-  return SENDER_OK.some(s => f.includes(s));
-}
-function bodyLooksLikeForm(t) {
-  t = t || '';
-  const hasName = /Full Name\s*:/i.test(t);
-  const hasEmail = /Email Id\s*:/i.test(t);
-  const hasPhone = /Mobile\s*:/i.test(t);
-  return hasName && (hasEmail || hasPhone);
-}
+// ===== INTEGRATION NOTE =====
+// Candidate detection now relies solely on EmailProfiles.js via parseLeadFromMessage(msg).
+// Subject/sender heuristics have been removed to avoid brittleness.
 
 // ===== LABELS =====
 function getOrCreateNestedLabel(path) {
@@ -235,39 +234,7 @@ function getOrCreateNestedLabel(path) {
   return label;
 }
 
-// ===== PARSER =====
-function parseWebForm(htmlBody) {
-  const text = stripHtml(htmlBody);
-  const name = between(text, /Full Name\s*:\s*/i, /\s*Mobile\s*:/i);
-  const phoneRaw = between(text, /Mobile\s*:\s*/i, /\s*Email Id\s*:/i);
-  const email = between(text, /Email Id\s*:\s*/i, /\s*Full Address\s*:/i);
-  const address = between(text, /Full Address\s*:\s*/i, /\s*Message\s*:/i);
-  const message = between(text, /Message\s*:\s*/i, /\s*--\s*This is a notification|$/i);
-
-  return {
-    name: (name || '').trim(),
-    email: cleanEmail(email),
-    phone: normalizePhone(phoneRaw),
-    address: (address || '').trim(),
-    message: (message || '').trim()
-  };
-}
-function between(text, startRe, endRe) {
-  const s = text.search(startRe);
-  if (s === -1) return '';
-  const rest = text.slice(s).replace(startRe, '');
-  const e = rest.search(endRe);
-  return e === -1 ? rest : rest.slice(0, e);
-}
-function stripHtml(html) {
-  return html.replace(/<style[\s\S]*?<\/style>/gi,' ')
-             .replace(/<script[\s\S]*?<\/script>/gi,' ')
-             .replace(/<[^>]+>/g,' ')
-             .replace(/&nbsp;/g,' ')
-             .replace(/\s{2,}/g,' ')
-             .trim();
-}
-function cleanEmail(s){ const m=(s||'').match(/[^\s<>"']+@[^\s<>"']+/); return m?m[0].trim():''; }
+// ===== UTILS =====
 function normalizePhone(s){
   if(!s) return '';
   const t=s.trim();
