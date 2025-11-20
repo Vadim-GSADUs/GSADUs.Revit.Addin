@@ -4,12 +4,12 @@ const CONFIG = {
   ROOT_PROPOSAL_FOLDER_ID: '15SYRPedu-ToLpnHQDu8TfSolPwYqYNc6', // parent for all proposal folders
   TEMPLATE_PROPOSAL_FOLDER_ID: '1TLtfen9tF4VftHiIX6cMI3VLZuvWWTRK', // template folder to copy from
 
-  SHEET_DEALS: 'csvDeals',
+  SHEET_DEALS: 'Deals',
   SHEET_PROPOSALS: 'Proposals',
   SHEET_PARTIAL: 'PartialMatches',
   SHEET_LOGS: 'Logs',
 
-  // Columns in csvDeals
+  // Columns in Deals sheet (for mapping and geocoding)
   DEAL_COL: {
     ID: 'Deal - ID',
     TITLE: 'Deal - Title',
