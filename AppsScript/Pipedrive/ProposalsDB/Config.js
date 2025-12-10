@@ -3,9 +3,11 @@ const CONFIG = {
   // Drive / Sheets
   ROOT_PROPOSAL_FOLDER_ID: '15SYRPedu-ToLpnHQDu8TfSolPwYqYNc6', // parent for all proposal folders
   TEMPLATE_PROPOSAL_FOLDER_ID: '1TLtfen9tF4VftHiIX6cMI3VLZuvWWTRK', // template folder to copy from
+  ROOT_PROJECT_FOLDER_ID: '1FNrf_NBX_dncI5ptfUgNcgZ3a_3VWBzK', // parent for all project folders
 
   SHEET_DEALS: 'Deals',
   SHEET_PROPOSALS: 'Proposals',
+  SHEET_PROJECTS: 'Projects',
   SHEET_PARTIAL: 'PartialMatches',
   SHEET_LOGS: 'Logs',
 
@@ -26,6 +28,16 @@ const CONFIG = {
     URL: 'Folder URL',
     NAME: 'Folder Name',
     STREET: 'Street Only'
+  },
+
+  // Columns in Projects sheet
+  PROJ_COL: {
+    KEY: 'Key',
+    PROJECT: 'Project #',
+    URL: 'Folder URL',
+    NAME: 'Folder Name',
+    STREET: 'Street Only',
+    PROPOSAL: 'PP#'
   },
 
   // Pipedrive-related config (no secrets here)

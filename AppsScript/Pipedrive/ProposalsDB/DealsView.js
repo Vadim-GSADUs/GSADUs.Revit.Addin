@@ -171,6 +171,32 @@ function applyFieldFormatting_(sheet, headers, classMap) {
  * This is a snapshot of API_Deals at the time of last pull.
  * Should be called after each successful PullFromPipedrive() or PushToPipedrive().
  */
+function refreshShadowSheet() {
+  const ss = SpreadsheetApp.getActive();
+  const apiDealsSheet = ss.getSheetByName('API_Deals');
+  
+  if (!apiDealsSheet) {
+    Logger.log('API_Deals sheet not found, cannot create shadow.');
+    return;
+  }
+  
+  let shadowSheet = ss.getSheetByName('API_Deals_Shadow');
+  
+  // Delete existing shadow sheet if it exists
+  if (shadowSheet) {
+    ss.deleteSheet(shadowSheet);
+  }
+  
+  // Create fresh shadow as copy of API_Deals
+  shadowSheet = apiDealsSheet.copyTo(ss);
+  shadowSheet.setName('API_Deals_Shadow');
+  
+  // Hide the shadow sheet (it's for internal use only)
+  shadowSheet.hideSheet();
+  
+  Logger.log('API_Deals_Shadow refreshed successfully.');
+}
+
 /**
  * Add menu items for Deals sheet management.
  */
@@ -178,7 +204,7 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Pipedrive Sync')
     .addItem('Pull From Pipedrive', 'PullFromPipedrive')
-    .addItem('Pull From Drive', 'refreshProposalsFromDrive')
+    .addItem('Pull From Drive', 'refreshAllDriveFolders')
     .addItem('Refresh & Audit', 'refreshAndAudit')
     .addSeparator()
     .addItem('Detect Changes', 'detectAndShowChanges')
@@ -198,7 +224,7 @@ function refreshAndAudit() {
   ui.alert('Refresh & Audit', 'Starting full refresh and validation...', ui.ButtonSet.OK);
   
   try {
-    refreshProposalsFromDrive();
+    refreshAllDriveFolders();
     PullFromPipedrive();
     verifyFolderMappings();
   } catch (e) {

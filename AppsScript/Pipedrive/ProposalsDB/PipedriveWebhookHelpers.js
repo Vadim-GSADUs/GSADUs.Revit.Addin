@@ -260,9 +260,10 @@ function logEvent_(code, msg, detail) {
  * Run on time-based trigger (e.g., every 30 minutes).
  */
 function replenishPlaceholders() {
-  const TARGET_PLACEHOLDERS = 1;
+  const TARGET_PLACEHOLDERS = 3;
   
   Logger.log('replenishPlaceholders: Starting...');
+  logEvent_('REPLENISH_START', 'Placeholder replenishment started', 'Target: ' + TARGET_PLACEHOLDERS);
   
   // Refresh Proposals sheet from Drive first
   refreshProposalsFromDrive();
@@ -333,6 +334,7 @@ function replenishPlaceholders() {
   }
   
   Logger.log('replenishPlaceholders: Complete. Pool now has ' + (placeholderCount + needed) + ' placeholders');
+  logEvent_('REPLENISH_COMPLETE', 'Placeholder replenishment completed', 'Created: ' + needed + ', Total: ' + (placeholderCount + needed));
 }
 
 

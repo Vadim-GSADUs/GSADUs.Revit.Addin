@@ -212,8 +212,11 @@ function triggerAsyncReplenish_() {
       .timeBased()
       .after(1000)
       .create();
+    Logger.log('triggerAsyncReplenish_: Trigger created successfully (will execute in 1 second)');
+    logEvent_('ASYNC_REPLENISH_TRIGGER', 'Created trigger to replenish placeholder pool', 'Delay: 1 second');
   } catch (e) {
     Logger.log('triggerAsyncReplenish_: Failed to create trigger: ' + e.message);
+    logEvent_('ASYNC_REPLENISH_ERROR', 'Failed to create async replenish trigger', e.message);
   }
 }
 
@@ -246,5 +249,27 @@ function extractLabelIdsFromSnapshot_(snap) {
 
 function toPipedriveLabelValue_(idStr) {
   var n = Number(idStr);
-  return isNaN(n) ? idStr : n;
+  return isNaN(n) ? null : n;
+}
+
+/**
+ * Diagnostic function to check and clean up old replenishment triggers.
+ * Run manually from menu if triggers are accumulating.
+ */
+function cleanupReplenishmentTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  let cleaned = 0;
+  
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'replenishPlaceholders') {
+      ScriptApp.deleteTrigger(trigger);
+      cleaned++;
+    }
+  });
+  
+  Logger.log('Cleaned up ' + cleaned + ' replenishment triggers');
+  logEvent_('TRIGGER_CLEANUP', 'Cleaned up replenishment triggers', 'Count: ' + cleaned);
+  
+  const ui = SpreadsheetApp.getUi();
+  ui.alert('Trigger Cleanup', 'Removed ' + cleaned + ' old replenishment triggers.', ui.ButtonSet.OK);
 }

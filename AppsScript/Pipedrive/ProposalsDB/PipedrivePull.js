@@ -8,6 +8,14 @@
  */
 function PullFromPipedrive() {
   const ss = SpreadsheetApp.getActive();
+  
+  // Delete stale Detected_Changes sheet to prevent false change detection
+  const detectedChangesSheet = ss.getSheetByName('Detected_Changes');
+  if (detectedChangesSheet) {
+    ss.deleteSheet(detectedChangesSheet);
+    Logger.log('Deleted stale Detected_Changes sheet.');
+  }
+  
   const sheetName = 'API_Deals';
   let sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
