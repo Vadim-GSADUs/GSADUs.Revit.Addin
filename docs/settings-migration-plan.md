@@ -29,6 +29,7 @@ We use only two conceptual scopes:
 2. **Defaults**  
    - Hard-coded or template-based values used when a project setting has never been initialized.
    - Not per-user; just simple fallback behavior.
+   - Machine-specific folders (logs/temp) are derived at runtime per session and never persisted.
 
 We do **not** support per-user settings. Any behavior that used to be “per-user” is either:
 

@@ -1,14 +1,14 @@
 # Settings deep dive
 
 ## 1) AppSettings member classification
-- **LogDir (string?)** — user/machine-scoped; local log folder should stay personal.
+- **LogDir (string?)** — runtime-only machine path derived each session; no persistence once ES provider lands.
 - **DefaultOutputDir (string?)** — project-scoped; drives deliverable location shared by batch exports.
 - **DefaultRunAuditBeforeExport (bool)** — project-scoped default for batch operations.
 - **DefaultSaveBefore (bool)** — project-scoped; relates to project file safety.
 - **DefaultRecenterXY (bool)** — project-scoped geometry behavior for exports.
 - **DefaultOverwrite (bool)** — project-scoped default overwrite policy for shared deliverables.
 - **DefaultCleanup (bool)** — project-scoped cleanup toggle tied to model content.
-- **OpenOutputFolder (bool)** — user-scoped convenience UX.
+- **OpenOutputFolder (bool)** — runtime-only convenience toggle (no persisted per-user state going forward).
 - **ValidateStagingArea (bool)** — project-scoped staging validation behavior.
 - **SelectionSeedCategories (List<int>?)** — project-scoped selection strategy.
 - **SelectionProxyCategories (List<int>?)** — project-scoped selection strategy.
@@ -16,14 +16,14 @@
 - **CleanupBlacklistCategories (List<int>?)** — project-scoped content rules.
 - **ImageWhitelistCategoryIds (List<int>?)** — project-scoped visualization/export behavior.
 - **Version (int)** — project-scoped settings version marker.
-- **PreferredBatchLogColumns (List<string>?)** — user-scoped UI preference.
-- **PreferredActions (List<string>?)** — ambiguous; could be project defaults or personal shortcuts — need product decision.
+- **PreferredBatchLogColumns (List<string>?)** — runtime-only UI preference; should be derived from project defaults or in-memory state.
+- **PreferredActions (List<string>?)** — treat as project defaults if persisted; avoid per-user shortcuts.
 - **DeepAnnoStatus (bool)** — project-scoped model annotation behavior.
-- **DryrunDiagnostics (bool)** — user-scoped troubleshooting toggle.
+- **DryrunDiagnostics (bool)** — runtime troubleshooting flag; not persisted per-user.
 - **PurgeCompact (bool)** — project-scoped model maintenance behavior.
 - **ThumbnailViewName (string?)** — project-scoped document behavior.
-- **PerfDiagnostics (bool)** — user-scoped diagnostics toggle.
-- **DrawAmbiguousRectangles (bool)** — user-scoped visualization preference.
+- **PerfDiagnostics (bool)** — runtime diagnostics toggle; no per-user persistence.
+- **DrawAmbiguousRectangles (bool)** — runtime visualization toggle only.
 - **Workflows (List<WorkflowDefinition>?)** — project-scoped workflow catalog.
 - **SelectedWorkflowIds (List<string>?)** — project-scoped selection set for batch runs.
 - **CurrentSetParameterName (string?)** — project-scoped shared parameter choice.
