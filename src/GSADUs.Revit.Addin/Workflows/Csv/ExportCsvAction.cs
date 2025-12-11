@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using GSADUs.Revit.Addin.Abstractions;
 using GSADUs.Revit.Addin.Workflows.Csv;
 using System;
 using System.Collections.Generic;
@@ -13,6 +14,13 @@ namespace GSADUs.Revit.Addin.Workflows.Csv
 {
     internal sealed class ExportCsvAction : IExportAction
     {
+        private readonly IProjectSettingsProvider _projectSettingsProvider;
+
+        public ExportCsvAction(IProjectSettingsProvider projectSettingsProvider)
+        {
+            _projectSettingsProvider = projectSettingsProvider;
+        }
+
         public string Id => "export-csv";
         public int Order => 500;
         public bool RequiresExternalClone => false;
@@ -25,14 +33,14 @@ namespace GSADUs.Revit.Addin.Workflows.Csv
         public void Execute(UIApplication uiapp, Document sourceDoc, Document? outDoc, string setName, IList<string> preserveUids, bool isDryRun)
         {
             if (uiapp == null || sourceDoc == null) return;
-            var settings = AppSettingsStore.Load();
+            var settings = _projectSettingsProvider.Load();
             var selectedIds = new HashSet<string>(settings.SelectedWorkflowIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             var workflows = (settings.Workflows ?? new List<WorkflowDefinition>())
                 .Where(w => w.Output == OutputType.Csv && selectedIds.Contains(w.Id) && (w.ActionIds?.Any(a => string.Equals(a, Id, StringComparison.OrdinalIgnoreCase)) ?? false))
                 .ToList();
             if (workflows.Count == 0) return;
 
-            var outputDir = AppSettingsStore.GetEffectiveOutputDir(settings);
+            var outputDir = _projectSettingsProvider.GetEffectiveOutputDir(settings);
             try { Directory.CreateDirectory(outputDir); } catch { return; }
 
             var modelName = Path.GetFileNameWithoutExtension(sourceDoc.PathName) ?? "Model";

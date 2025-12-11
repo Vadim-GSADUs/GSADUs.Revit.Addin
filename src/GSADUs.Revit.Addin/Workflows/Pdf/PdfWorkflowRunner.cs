@@ -1,4 +1,5 @@
 using Autodesk.Revit.DB;
+using GSADUs.Revit.Addin.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -10,7 +11,14 @@ namespace GSADUs.Revit.Addin.Workflows.Pdf
 {
     internal sealed class PdfWorkflowRunner
     {
-        public IReadOnlyList<string> Run(Document doc, WorkflowDefinition wf, string displaySetName)
+        private readonly IProjectSettingsProvider _projectSettingsProvider;
+
+        public PdfWorkflowRunner(IProjectSettingsProvider projectSettingsProvider)
+        {
+            _projectSettingsProvider = projectSettingsProvider;
+        }
+
+        public IReadOnlyList<string> Run(Document doc, WorkflowDefinition wf, string displaySetName, AppSettings settings)
         {
             // Basic guards
             if (doc == null || doc.IsFamilyDocument) return Array.Empty<string>();
@@ -52,8 +60,7 @@ namespace GSADUs.Revit.Addin.Workflows.Pdf
             options.Combine = true; // always combine into single PDF
 
             // Output directory + overwrite policy
-            var settings = AppSettingsStore.Load();
-            var outputDir = settings.DefaultOutputDir ?? AppSettingsStore.FallbackOutputDir;
+            var outputDir = _projectSettingsProvider.GetEffectiveOutputDir(settings);
             try { Directory.CreateDirectory(outputDir); } catch { }
             if (!Directory.Exists(outputDir)) return Array.Empty<string>();
 

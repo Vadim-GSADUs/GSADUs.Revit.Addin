@@ -1,4 +1,6 @@
 using Autodesk.Revit.UI;
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel; // for ICollectionView & INotifyPropertyChanged
@@ -38,6 +40,7 @@ namespace GSADUs.Revit.Addin.UI
         // --- end singleton management ---
 
         private readonly UIDocument _uidoc;
+        private readonly IProjectSettingsProvider _settingsProvider;
         private AppSettings _settings;
         public BatchRunOptions? Result { get; private set; }
 
@@ -104,7 +107,9 @@ namespace GSADUs.Revit.Addin.UI
         {
             InitializeComponent();
             _uidoc = uidoc;
-            _settings = AppSettingsStore.Load();
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                               ?? new LegacyProjectSettingsProvider();
+            _settings = _settingsProvider.Load();
             RegisterInstance();
             this.Width = _prefs.WindowWidth > 0 ? _prefs.WindowWidth : this.Width;
             this.Height = _prefs.WindowHeight > 0 ? _prefs.WindowHeight : this.Height;
@@ -113,7 +118,7 @@ namespace GSADUs.Revit.Addin.UI
             LoadWorkflowsIntoList();
         }
 
-        public bool IsDryRun() => AppSettingsStore.Load().DryrunDiagnostics;
+        public bool IsDryRun() => _settings.DryrunDiagnostics;
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
@@ -174,14 +179,14 @@ namespace GSADUs.Revit.Addin.UI
             return DateTime.TryParse(iso, out var dt) ? dt.ToString("yy-MM-dd HH:mm") : iso!;
         }
 
-        private static string ResolveLogPath(UIDocument uidoc)
+        private string ResolveLogPath()
         {
-            if (uidoc?.Document == null) throw new InvalidOperationException("No active document.");
-            var settings = AppSettingsStore.Load();
-            var logDir = AppSettingsStore.GetEffectiveLogDir(settings);
+            var doc = _uidoc?.Document;
+            if (doc == null) throw new InvalidOperationException("No active document.");
+            var logDir = _settingsProvider.GetEffectiveLogDir(_settings);
             if (string.IsNullOrWhiteSpace(logDir)) throw new InvalidOperationException("Log directory is not configured.");
             System.IO.Directory.CreateDirectory(logDir);
-            var modelName = System.IO.Path.GetFileNameWithoutExtension(uidoc.Document.PathName) ?? "Model";
+            var modelName = System.IO.Path.GetFileNameWithoutExtension(doc.PathName) ?? "Model";
             return System.IO.Path.Combine(logDir, $"{modelName} Batch Export Log.csv");
         }
 
@@ -203,7 +208,7 @@ namespace GSADUs.Revit.Addin.UI
         {
             try
             {
-                var path = ResolveLogPath(_uidoc);
+                var path = ResolveLogPath();
                 var factory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory ?? new CsvBatchLogger();
                 var log = GSADUs.Revit.Addin.Logging.GuardedBatchLog.Wrap(factory.Load(path));
                 var headers = factory.ReadHeadersOrDefaults(path);
@@ -377,7 +382,18 @@ namespace GSADUs.Revit.Addin.UI
         }
 
         private void SaveSelectedWorkflowIds()
-        { try { var visibleSelected = (_workView != null ? _workView.Cast<WorkRow>() : _workRows).Where(w => w.IsSelected).Select(w => w.Id).ToList(); var s = AppSettingsStore.Load(); s.SelectedWorkflowIds = visibleSelected; AppSettingsStore.Save(s); _settings = s; } catch { } }
+        {
+            try
+            {
+                var visibleSelected = (_workView != null ? _workView.Cast<WorkRow>() : _workRows)
+                    .Where(w => w.IsSelected)
+                    .Select(w => w.Id)
+                    .ToList();
+                _settings.SelectedWorkflowIds = visibleSelected;
+                _settingsProvider.Save(_settings);
+            }
+            catch { }
+        }
 
         private void MainSplitter_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
         {
@@ -503,13 +519,19 @@ namespace GSADUs.Revit.Addin.UI
         }
 
         private void Settings_Click(object sender, RoutedEventArgs e)
-        { var win = new SettingsWindow(AppSettingsStore.Load(), _uidoc?.Document) { Owner = this }; try { win.ShowDialog(); } catch { } _settings = AppSettingsStore.Load(); LoadCsvIntoSetsList(); LoadWorkflowsIntoList(); }
+        {
+            var win = new SettingsWindow(_settings, _uidoc?.Document) { Owner = this };
+            try { win.ShowDialog(); } catch { }
+            _settings = _settingsProvider.Load();
+            LoadCsvIntoSetsList();
+            LoadWorkflowsIntoList();
+        }
 
         private void Audit_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var dlg = new SelectionSetManagerWindow(_uidoc?.Document) { Owner = this };
+                var dlg = new SelectionSetManagerWindow(_uidoc?.Document, _settings) { Owner = this };
                 dlg.ShowDialog();
                 if (dlg.SaveRequested)
                 {
@@ -559,7 +581,7 @@ namespace GSADUs.Revit.Addin.UI
                             {
                                 using (PerfLogger.Measure("Curate.Deferred.LogSync", applied ? "Applied" : "NoApply"))
                                 {
-                                    var path = ResolveLogPath(_uidoc);
+                                    var path = ResolveLogPath();
                                     var factory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory
                                                   ?? throw new InvalidOperationException("IBatchLogFactory not available.");
                                     var log = factory.Load(path);
@@ -665,7 +687,7 @@ namespace GSADUs.Revit.Addin.UI
                     {
                         using (PerfLogger.Measure("Curate.ZeroSelection.LogSync", plan?.AnyChanges == true ? "Applied" : "NoApply"))
                         {
-                            var path = ResolveLogPath(_uidoc);
+                            var path = ResolveLogPath();
                             var factory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory
                                               ?? new CsvBatchLogger();
                             var log = factory.Load(path);
@@ -706,7 +728,7 @@ namespace GSADUs.Revit.Addin.UI
                 sb.AppendLine();
 
                 sb.AppendLine("Output folder:");
-                sb.AppendLine(" " + (AppSettingsStore.GetEffectiveOutputDir(_settings) ?? string.Empty));
+                sb.AppendLine(" " + (_settingsProvider.GetEffectiveOutputDir(_settings) ?? string.Empty));
                 sb.AppendLine();
                 sb.AppendLine("Proceed with batch run?");
 
@@ -727,7 +749,7 @@ namespace GSADUs.Revit.Addin.UI
                     var doc = _uidoc?.Document;
                     if (doc != null)
                     {
-                        var globalSettings = AppSettingsStore.Load();
+                        var globalSettings = _settings;
                         if (globalSettings.DefaultRunAuditBeforeExport && !_curationAppliedFlag)
                         {
                             var view = _uidoc?.ActiveView as Autodesk.Revit.DB.View;
@@ -759,9 +781,9 @@ namespace GSADUs.Revit.Addin.UI
             {
                 SetIds = selectedIds,
                 SetNames = selectedNames,
-                OutputDir = AppSettingsStore.GetEffectiveOutputDir(_settings),
-                Overwrite = AppSettingsStore.Load().DefaultOverwrite,
-                SaveBefore = AppSettingsStore.Load().DefaultSaveBefore
+                OutputDir = _settingsProvider.GetEffectiveOutputDir(_settings),
+                Overwrite = _settings.DefaultOverwrite,
+                SaveBefore = _settings.DefaultSaveBefore
             };
             this.DialogResult = true;
         }
@@ -774,9 +796,9 @@ namespace GSADUs.Revit.Addin.UI
 
         private void ManageWorkflows_Click(object sender, RoutedEventArgs e)
         {
-            var win = new WorkflowManagerWindow(_uidoc?.Document, AppSettingsStore.Load()) { Owner = this };
+            var win = new WorkflowManagerWindow(_uidoc?.Document, _settings) { Owner = this };
             try { win.ShowDialog(); } catch { }
-            _settings = AppSettingsStore.Load();
+            _settings = _settingsProvider.Load();
             LoadWorkflowsIntoList();
         }
     }

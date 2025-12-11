@@ -1,4 +1,6 @@
 using Autodesk.Revit.UI;
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using GSADUs.Revit.Addin.Orchestration;
 using GSADUs.Revit.Addin.Workflows.Image;
 using GSADUs.Revit.Addin.Workflows.Pdf; // Updated namespace for ExportPdfAction
@@ -51,6 +53,7 @@ namespace GSADUs.Revit.Addin
 
             // Phase 2: settings persistence abstraction and catalog/presenter scaffolding
             services.AddSingleton<ISettingsPersistence, SettingsPersistence>();
+            services.AddSingleton<IProjectSettingsProvider, EsProjectSettingsProvider>();
             services.AddSingleton<WorkflowCatalogService>();
             services.AddSingleton<GSADUs.Revit.Addin.UI.WorkflowManagerPresenter>();
 

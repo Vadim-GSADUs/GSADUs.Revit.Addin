@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using GSADUs.Revit.Addin.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,6 +9,13 @@ namespace GSADUs.Revit.Addin.Workflows.Image
 {
     internal sealed class ExportImageAction : IExportAction
     {
+        private readonly IProjectSettingsProvider _projectSettingsProvider;
+
+        public ExportImageAction(IProjectSettingsProvider projectSettingsProvider)
+        {
+            _projectSettingsProvider = projectSettingsProvider;
+        }
+
         public string Id => "export-image"; // renamed from export-png (legacy id removed)
         public int Order => 600;
         public bool RequiresExternalClone => false;
@@ -67,6 +75,12 @@ namespace GSADUs.Revit.Addin.Workflows.Image
             };
         }
 
+        private static HashSet<int>? NormalizeWhitelist(ICollection<int>? raw)
+        {
+            if (raw == null || raw.Count == 0) return null;
+            return new HashSet<int>(raw);
+        }
+
         /// <summary>
         /// Builds sanitized base filename (no directory), aligned with rules:
         /// - Expands {SetName},{Date},{Time}
@@ -108,12 +122,10 @@ namespace GSADUs.Revit.Addin.Workflows.Image
         }
 
         // If list is non-empty only categories in it are considered for auto-crop.
-        private static List<BoundingBoxXYZ> CollectVisiblePlanElementBoxes(ViewPlan plan, Document doc, IEnumerable<ElementId> setIds)
+        private static List<BoundingBoxXYZ> CollectVisiblePlanElementBoxes(ViewPlan plan, Document doc, IEnumerable<ElementId> setIds, HashSet<int>? whitelist)
         {
             var boxes = new List<BoundingBoxXYZ>();
             if (plan == null || doc == null) return boxes;
-            List<int>? whitelist = null; try { whitelist = AppSettingsStore.Load()?.ImageWhitelistCategoryIds; } catch { }
-            if (whitelist != null && whitelist.Count == 0) whitelist = null; // empty -> include all
 
             HashSet<ElementId>? visible = null;
             try { visible = new HashSet<ElementId>(new FilteredElementCollector(doc, plan.Id).ToElementIds()); } catch { }
@@ -124,18 +136,12 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 Element? el = null; try { el = doc.GetElement(id); } catch { }
                 if (el == null) continue;
 
-                bool allowed = true;
-                try
+                if (whitelist != null)
                 {
-                    if (whitelist != null)
-                    {
-                        long raw = 0; try { raw = el.Category?.Id?.Value ?? 0; } catch { raw = 0; }
-                        int catId = raw >= int.MinValue && raw <= int.MaxValue ? (int)raw : 0;
-                        if (!whitelist.Contains(catId)) allowed = false;
-                    }
+                    long raw = 0; try { raw = el.Category?.Id?.Value ?? 0; } catch { raw = 0; }
+                    int catId = raw >= int.MinValue && raw <= int.MaxValue ? (int)raw : 0;
+                    if (!whitelist.Contains(catId)) continue;
                 }
-                catch { }
-                if (!allowed) continue;
 
                 BoundingBoxXYZ? bb = null; try { bb = el.get_BoundingBox(plan); } catch { }
                 if (bb == null || bb.Min == null || bb.Max == null) continue;
@@ -146,12 +152,10 @@ namespace GSADUs.Revit.Addin.Workflows.Image
         }
 
         // Collect bounding boxes for 3D views (respecting visibility in that view)
-        private static List<BoundingBoxXYZ> CollectVisible3DElementBoxes(View3D view3d, Document doc, IEnumerable<ElementId> setIds)
+        private static List<BoundingBoxXYZ> CollectVisible3DElementBoxes(View3D view3d, Document doc, IEnumerable<ElementId> setIds, HashSet<int>? whitelist)
         {
             var boxes = new List<BoundingBoxXYZ>();
             if (view3d == null || doc == null) return boxes;
-            List<int>? whitelist = null; try { whitelist = AppSettingsStore.Load()?.ImageWhitelistCategoryIds; } catch { }
-            if (whitelist != null && whitelist.Count == 0) whitelist = null;
 
             HashSet<ElementId>? visible = null;
             try { visible = new HashSet<ElementId>(new FilteredElementCollector(doc, view3d.Id).ToElementIds()); } catch { }
@@ -162,18 +166,12 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 Element? el = null; try { el = doc.GetElement(id); } catch { }
                 if (el == null) continue;
 
-                bool allowed = true;
-                try
+                if (whitelist != null)
                 {
-                    if (whitelist != null)
-                    {
-                        long raw = 0; try { raw = el.Category?.Id?.Value ?? 0; } catch { raw = 0; }
-                        int catId = raw >= int.MinValue && raw <= int.MaxValue ? (int)raw : 0;
-                        if (!whitelist.Contains(catId)) allowed = false;
-                    }
+                    long raw = 0; try { raw = el.Category?.Id?.Value ?? 0; } catch { raw = 0; }
+                    int catId = raw >= int.MinValue && raw <= int.MaxValue ? (int)raw : 0;
+                    if (!whitelist.Contains(catId)) continue;
                 }
-                catch { }
-                if (!allowed) continue;
 
                 BoundingBoxXYZ? bb = null; try { bb = el.get_BoundingBox(view3d); } catch { }
                 if (bb == null) { try { bb = el.get_BoundingBox(null); } catch { bb = null; } }
@@ -387,7 +385,7 @@ namespace GSADUs.Revit.Addin.Workflows.Image
 
         public void Execute(UIApplication uiapp, Document sourceDoc, Document? outDoc, string setName, IList<string> preserveUids, bool isDryRun)
         {
-            AppSettings app; try { app = AppSettingsStore.Load(); } catch { return; }
+            AppSettings app; try { app = _projectSettingsProvider.Load(); } catch { return; }
             if (app.Workflows == null || app.SelectedWorkflowIds == null) return;
 
             // One-time in-memory migration: replace legacy action id entries with the new id (no dual support kept)
@@ -408,12 +406,14 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                 }
                 catch { }
             }
-            if (migrated) { try { AppSettingsStore.Save(app); } catch { } }
+            if (migrated) { try { _projectSettingsProvider.Save(app); } catch { } }
 
             var selected = new HashSet<string>(app.SelectedWorkflowIds, StringComparer.OrdinalIgnoreCase);
             var imageWfs = app.Workflows.Where(w => w.Output == OutputType.Image && selected.Contains(w.Id) && (w.ActionIds?.Any(a => string.Equals(a, Id, StringComparison.OrdinalIgnoreCase)) ?? false)).ToList();
             if (imageWfs.Count == 0) return;
-            string outputDir = app.DefaultOutputDir; if (string.IsNullOrWhiteSpace(outputDir)) outputDir = AppSettingsStore.FallbackOutputDir; try { System.IO.Directory.CreateDirectory(outputDir); } catch { return; }
+            var outputDir = _projectSettingsProvider.GetEffectiveOutputDir(app);
+            try { System.IO.Directory.CreateDirectory(outputDir); } catch { return; }
+            var categoryWhitelist = NormalizeWhitelist(app.ImageWhitelistCategoryIds);
             foreach (var wf in imageWfs)
             {
                 if (wf.Parameters == null) continue;
@@ -569,7 +569,7 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                             var visibleSetIds = selectionIds.Where(visibleInView.Contains).ToList();
                             if (visibleSetIds.Count > 0)
                             {
-                                var boxes = CollectVisiblePlanElementBoxes(vp, sourceDoc, visibleSetIds);
+                                var boxes = CollectVisiblePlanElementBoxes(vp, sourceDoc, visibleSetIds, categoryWhitelist);
                                 if (boxes.Count > 0)
                                 {
                                     BoundingBoxXYZ existing; try { existing = vp.CropBox; } catch { existing = null; }
@@ -619,7 +619,7 @@ namespace GSADUs.Revit.Addin.Workflows.Image
                             var visibleSetIds = selectionIds.Where(visibleInView.Contains).ToList();
                             if (visibleSetIds.Count > 0)
                             {
-                                var boxes = CollectVisible3DElementBoxes(v3, sourceDoc, visibleSetIds);
+                                var boxes = CollectVisible3DElementBoxes(v3, sourceDoc, visibleSetIds, categoryWhitelist);
                                 if (boxes.Count > 0)
                                 {
                                     // merged box

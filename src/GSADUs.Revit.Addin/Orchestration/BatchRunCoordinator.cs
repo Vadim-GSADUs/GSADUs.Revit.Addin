@@ -1,5 +1,7 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using GSADUs.Revit.Addin.UI;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -94,9 +96,10 @@ namespace GSADUs.Revit.Addin.Orchestration
             var logFactory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory ?? new CsvBatchLogger();
             var allActions = ServiceBootstrap.Provider.GetServices<IExportAction>().ToList();
             var actionRegistry = ServiceBootstrap.Provider.GetService(typeof(IActionRegistry)) as IActionRegistry ?? new ActionRegistry();
+            var projectSettingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                                          ?? new LegacyProjectSettingsProvider();
 
             var doc = uidoc.Document;
-            var appSettings = AppSettingsStore.Load();
 
             var allSetsForWindow = SelectionSets.Get(doc);
             Trace.WriteLine($"COLLECT_SHEETS requested={allSetsForWindow.Count} corr={Logging.RunLog.CorrId}");
@@ -113,7 +116,7 @@ namespace GSADUs.Revit.Addin.Orchestration
 
             var isDryRun = win.IsDryRun();
 
-            appSettings = AppSettingsStore.Load();
+            var appSettings = projectSettingsProvider.Load();
             var uiOpts = win.Result!; // contains SetIds + SetNames
 
             // Build action ids list from selected workflows into settings DTO
@@ -250,7 +253,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                 if (appSettings.ValidateStagingArea && !isCsvEntireProject)
                 {
                     Trace.WriteLine("Validating staging area...");
-                    if (!EnsureStagingAreaClear(doc, appSettings, dialogs))
+                    if (!EnsureStagingAreaClear(doc, appSettings, dialogs, projectSettingsProvider))
                     {
                         Trace.WriteLine("Staging area validation failed.");
                         return RunOutcome.CanceledBeforeStart;
@@ -259,18 +262,18 @@ namespace GSADUs.Revit.Addin.Orchestration
                 }
             }
 
-            var appOutDir = AppSettingsStore.GetEffectiveLogDir(appSettings);
+            var logDir = projectSettingsProvider.GetEffectiveLogDir(appSettings);
             var modelName = System.IO.Path.GetFileNameWithoutExtension(doc.PathName) ?? "Model";
             var csvName = San($"{modelName} Batch Export Log.csv");
-            var logPath = System.IO.Path.Combine(appOutDir, csvName);
+            var logPath = System.IO.Path.Combine(logDir, csvName);
             var log = logFactory.Load(logPath);
 
             if (request.SaveBefore && doc.IsModified) doc.Save();
 
-            Directory.CreateDirectory(AppSettingsStore.FallbackLogDir);
+            Directory.CreateDirectory(logDir);
             var modelNameSan = System.IO.Path.GetFileNameWithoutExtension(doc.PathName) ?? "Model";
             var csvNameSan = San($"{modelNameSan} Batch Export Log.csv");
-            var logPathSan = System.IO.Path.Combine(AppSettingsStore.GetEffectiveLogDir(appSettings), csvNameSan);
+            var logPathSan = System.IO.Path.Combine(logDir, csvNameSan);
             var logSan = GSADUs.Revit.Addin.Logging.GuardedBatchLog.Wrap(logFactory.Load(logPathSan));
 
             // Pre-compute member element unique ids per setId
@@ -363,7 +366,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                 }
 
                 // --- PDF success baseline capture (directory snapshot before actions) ---
-                var pdfOutDir = appSettings.DefaultOutputDir ?? AppSettingsStore.FallbackOutputDir;
+                var pdfOutDir = projectSettingsProvider.GetEffectiveOutputDir(appSettings);
                 HashSet<string> pdfBefore = new HashSet<string>(
                     Directory.Exists(pdfOutDir) ? Directory.GetFiles(pdfOutDir, "*.pdf", SearchOption.TopDirectoryOnly) : Array.Empty<string>(),
                     StringComparer.OrdinalIgnoreCase);
@@ -465,38 +468,35 @@ namespace GSADUs.Revit.Addin.Orchestration
             // New: optionally open output folder after completion
             try
             {
-                if (!isDryRun)
+                if (!isDryRun && appSettings.OpenOutputFolder)
                 {
-                    var settingsLatest = AppSettingsStore.Load();
-                    if (settingsLatest.OpenOutputFolder)
+                    var outDir = projectSettingsProvider.GetEffectiveOutputDir(appSettings);
+                    if (System.IO.Directory.Exists(outDir))
                     {
-                        var outDir = AppSettingsStore.GetEffectiveOutputDir(settingsLatest);
-                        if (System.IO.Directory.Exists(outDir))
+                        // Check if an explorer window for this path is already open (best-effort via process arguments)
+                        bool alreadyOpen = false;
+                        try
                         {
-                            // Check if an explorer window for this path is already open (best-effort via process arguments)
-                            bool alreadyOpen = false;
-                            try
+                            var explorerProcs = System.Diagnostics.Process.GetProcessesByName("explorer");
+                            foreach (var p in explorerProcs)
                             {
-                                var explorerProcs = System.Diagnostics.Process.GetProcessesByName("explorer");
-                                foreach (var p in explorerProcs)
+                                try
                                 {
-                                    try
+                                    // CommandLine access requires some permissions; ignore failures
+                                    var cl = p.MainWindowTitle ?? string.Empty;
+                                    if (!string.IsNullOrWhiteSpace(cl) && cl.IndexOf(System.IO.Path.GetFileName(outDir), StringComparison.OrdinalIgnoreCase) >= 0)
                                     {
-                                        // CommandLine access requires some permissions; ignore failures
-                                        var cl = p.MainWindowTitle ?? string.Empty;
-                                        if (!string.IsNullOrWhiteSpace(cl) && cl.IndexOf(System.IO.Path.GetFileName(outDir), StringComparison.OrdinalIgnoreCase) >= 0)
-                                        {
-                                            alreadyOpen = true; break;
-                                        }
+                                        alreadyOpen = true;
+                                        break;
                                     }
-                                    catch { }
                                 }
+                                catch { }
                             }
-                            catch { }
-                            if (!alreadyOpen)
-                            {
-                                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = outDir, UseShellExecute = true }); } catch { }
-                            }
+                        }
+                        catch { }
+                        if (!alreadyOpen)
+                        {
+                            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = outDir, UseShellExecute = true }); } catch { }
                         }
                     }
                 }
@@ -627,7 +627,7 @@ namespace GSADUs.Revit.Addin.Orchestration
             return name;
         }
 
-        private static bool EnsureStagingAreaClear(Document doc, AppSettings settings, IDialogService dialogs)
+        private static bool EnsureStagingAreaClear(Document doc, AppSettings settings, IDialogService dialogs, IProjectSettingsProvider projectSettingsProvider)
         {
             using (PerfLogger.Measure("Staging.Validate", $"W={settings.StagingWidth};H={settings.StagingHeight};B={settings.StagingBuffer}"))
             {
@@ -709,7 +709,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                                     var merged = new HashSet<string>(settings.StagingAuthorizedUids ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
                                     foreach (var u in chosen) merged.Add(u);
                                     settings.StagingAuthorizedUids = merged.ToList();
-                                    AppSettingsStore.Save(settings);
+                                    projectSettingsProvider.Save(settings);
                                     continue; // re-check
                                 }
                                 else { continue; }
@@ -732,7 +732,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                                     }
                                     catch { }
                                 }
-                                var dlg = new CategoriesPickerWindow(seedIds, doc, initialScope: 3) { Owner = null };
+                                var dlg = new CategoriesPickerWindow(seedIds, doc, initialScope: 3, settings: settings) { Owner = null };
                                 if (dlg.ShowDialog() == true)
                                 {
                                     // Map picked ids back to names and merge
@@ -749,7 +749,7 @@ namespace GSADUs.Revit.Addin.Orchestration
                                         catch { }
                                     }
                                     settings.StagingAuthorizedCategoryNames = newNames.ToList();
-                                    AppSettingsStore.Save(settings);
+                                    projectSettingsProvider.Save(settings);
                                     continue; // re-check
                                 }
                                 else { continue; }

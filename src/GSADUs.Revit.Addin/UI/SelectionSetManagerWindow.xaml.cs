@@ -1,4 +1,6 @@
 using Autodesk.Revit.DB;
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -64,13 +66,19 @@ namespace GSADUs.Revit.Addin.UI
             private void OnPropertyChanged(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
         }
 
-        public SelectionSetManagerWindow(Document? doc)
+        private readonly IProjectSettingsProvider _settingsProvider;
+        private readonly AppSettings _settings;
+
+        public SelectionSetManagerWindow(Document? doc, AppSettings? settings = null)
         {
             System.Windows.Application.LoadComponent(this, new Uri("/GSADUs.Revit.Addin;component/UI/SelectionSetManagerWindow.xaml", UriKind.Relative));
             RegisterInstance();
             _doc = doc;
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
             _logFactory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory ?? new CsvBatchLogger();
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                                ?? new LegacyProjectSettingsProvider();
+            _settings = settings ?? _settingsProvider.Load();
 
             // Minimal VM hookup (not used by XAML yet; no behavior change)
             try { this.DataContext = new SelectionSetManagerViewModel(); } catch { }
@@ -230,7 +238,7 @@ namespace GSADUs.Revit.Addin.UI
                 return;
             }
 
-            // Refresh ID lists (defensive) – still needed for downstream log sync in BatchExportWindow
+            // Refresh ID lists (defensive) â€“ still needed for downstream log sync in BatchExportWindow
             try
             {
                 IgnoredSetIds = _plan.IgnoredSets
@@ -468,8 +476,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private string GetLogPath()
         {
-            var appSettings = AppSettingsStore.Load();
-            var logDir = AppSettingsStore.GetEffectiveLogDir(appSettings);
+            var logDir = _settingsProvider.GetEffectiveLogDir(_settings);
             var modelName = System.IO.Path.GetFileNameWithoutExtension(_doc?.PathName) ?? "Model";
             return System.IO.Path.Combine(logDir, San($"{modelName} Batch Export Log.csv"));
         }

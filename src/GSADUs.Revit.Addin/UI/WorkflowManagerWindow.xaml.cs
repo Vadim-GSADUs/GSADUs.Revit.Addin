@@ -1,4 +1,6 @@
 using Autodesk.Revit.DB;
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using GSADUs.Revit.Addin.Workflows.Image;
 using GSADUs.Revit.Addin.Workflows.Pdf;
 using System;
@@ -45,7 +47,7 @@ namespace GSADUs.Revit.Addin.UI
 
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
             _catalog = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogService)) as WorkflowCatalogService
-                       ?? new WorkflowCatalogService(new SettingsPersistence());
+                       ?? new WorkflowCatalogService(new LegacyProjectSettingsProvider());
             _presenter = ServiceBootstrap.Provider.GetService(typeof(WorkflowManagerPresenter)) as WorkflowManagerPresenter
                          ?? new WorkflowManagerPresenter(_catalog, _dialogs);
             _vm = new WorkflowManagerViewModel(_catalog, _presenter);

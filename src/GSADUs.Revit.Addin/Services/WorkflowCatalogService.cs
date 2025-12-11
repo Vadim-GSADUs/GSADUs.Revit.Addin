@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using GSADUs.Revit.Addin.Abstractions;
 
 namespace GSADUs.Revit.Addin
 {
@@ -12,16 +13,16 @@ namespace GSADUs.Revit.Addin
     /// </summary>
     internal sealed class WorkflowCatalogService
     {
-        private readonly ISettingsPersistence _persistence;
+        private readonly IProjectSettingsProvider _projectSettingsProvider;
         private AppSettings _settings;
 
         public ObservableCollection<WorkflowDefinition> Workflows { get; } = new();
         public ObservableCollection<string> SavedWorkflowNames { get; } = new();
 
-        public WorkflowCatalogService(ISettingsPersistence persistence)
+        public WorkflowCatalogService(IProjectSettingsProvider projectSettingsProvider)
         {
-            _persistence = persistence;
-            _settings = _persistence.Load();
+            _projectSettingsProvider = projectSettingsProvider;
+            _settings = _projectSettingsProvider.Load();
             RefreshCaches();
         }
 
@@ -101,7 +102,7 @@ namespace GSADUs.Revit.Addin
 
         public void Save()
         {
-            _persistence.Save(_settings);
+            _projectSettingsProvider.Save(_settings);
         }
 
         public void SaveAndRefresh()

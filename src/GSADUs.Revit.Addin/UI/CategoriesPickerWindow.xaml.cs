@@ -1,4 +1,6 @@
 using Autodesk.Revit.DB;
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -32,11 +34,16 @@ namespace GSADUs.Revit.Addin.UI
         private ListCollectionView? _view;
         private readonly Document? _doc;
 
-        public CategoriesPickerWindow(IEnumerable<int>? preselected = null, Document? doc = null, int? initialScope = null)
+        private readonly AppSettings _settings;
+
+        public CategoriesPickerWindow(IEnumerable<int>? preselected = null, Document? doc = null, int? initialScope = null, AppSettings? settings = null)
         {
             InitializeComponent();
             RegisterInstance();
             _doc = doc;
+            var provider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                           ?? new LegacyProjectSettingsProvider();
+            _settings = settings ?? provider.Load();
             try
             {
                 // Defaults
@@ -101,10 +108,9 @@ namespace GSADUs.Revit.Addin.UI
                 else if (scope == 3 && _doc != null)
                 {
                     // Staging area categories only: based on elements inside the defined staging outline
-                    var s = AppSettingsStore.Load();
-                    double w = System.Math.Max(1.0, s.StagingWidth);
-                    double h = System.Math.Max(1.0, s.StagingHeight);
-                    double buffer = System.Math.Max(0.0, s.StagingBuffer);
+                    double w = System.Math.Max(1.0, _settings.StagingWidth);
+                    double h = System.Math.Max(1.0, _settings.StagingHeight);
+                    double buffer = System.Math.Max(0.0, _settings.StagingBuffer);
                     double halfW = w * 0.5 + buffer;
                     double halfH = h * 0.5 + buffer;
 

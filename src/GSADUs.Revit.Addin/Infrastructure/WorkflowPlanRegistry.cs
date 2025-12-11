@@ -1,3 +1,5 @@
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -5,14 +7,25 @@ namespace GSADUs.Revit.Addin
 {
     internal sealed class WorkflowPlanRegistry : IWorkflowPlanRegistry
     {
+        private readonly IProjectSettingsProvider _settingsProvider;
         private readonly AppSettings _settings;
-        public WorkflowPlanRegistry() : this(AppSettingsStore.Load()) { }
-        public WorkflowPlanRegistry(AppSettings settings) { _settings = settings; }
+
+        public WorkflowPlanRegistry()
+            : this(ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                   ?? new LegacyProjectSettingsProvider())
+        {
+        }
+
+        public WorkflowPlanRegistry(IProjectSettingsProvider settingsProvider)
+        {
+            _settingsProvider = settingsProvider;
+            _settings = _settingsProvider.Load();
+        }
 
         public IEnumerable<WorkflowDefinition> All()
         {
-            var s = _settings ?? AppSettingsStore.Load();
-            return (s.Workflows ?? new List<WorkflowDefinition>()).OrderBy(w => w.Output).ThenBy(w => w.Order).ThenBy(w => w.Name);
+            var workflows = _settings.Workflows ?? new List<WorkflowDefinition>();
+            return workflows.OrderBy(w => w.Output).ThenBy(w => w.Order).ThenBy(w => w.Name);
         }
 
         public IEnumerable<WorkflowDefinition> Selected(AppSettings settings)

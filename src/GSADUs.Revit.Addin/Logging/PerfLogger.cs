@@ -1,3 +1,5 @@
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using System;
 using System.Diagnostics;
 using System.Globalization;
@@ -8,6 +10,34 @@ namespace GSADUs.Revit.Addin
 {
     internal static class PerfLogger
     {
+        private static readonly IProjectSettingsProvider _settingsProvider;
+        private static AppSettings? _settings;
+
+        static PerfLogger()
+        {
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                               ?? new LegacyProjectSettingsProvider();
+            TryRefreshSettings();
+        }
+
+        private static AppSettings Settings
+        {
+            get
+            {
+                if (_settings == null)
+                {
+                    TryRefreshSettings();
+                }
+                return _settings ?? new AppSettings();
+            }
+        }
+
+        private static void TryRefreshSettings()
+        {
+            try { _settings = _settingsProvider.Load(); }
+            catch { _settings = new AppSettings(); }
+        }
+
         public sealed class Scope : IDisposable
         {
             private readonly string _phase;
@@ -33,17 +63,17 @@ namespace GSADUs.Revit.Addin
 
         public static Scope Measure(string phase, string context)
         {
-            var s = AppSettingsStore.Load();
+            var s = Settings;
             return new Scope(phase, context, s.PerfDiagnostics);
         }
 
         public static void Write(string phase, string context, TimeSpan elapsed)
         {
-            var s = AppSettingsStore.Load();
+            var s = Settings;
             if (!s.PerfDiagnostics) return;
             try
             {
-                var logDir = AppSettingsStore.GetEffectiveLogDir(s);
+                var logDir = _settingsProvider.GetEffectiveLogDir(s);
                 Directory.CreateDirectory(logDir);
                 var path = Path.Combine(logDir, "Performance Log.csv");
                 bool newFile = !File.Exists(path);

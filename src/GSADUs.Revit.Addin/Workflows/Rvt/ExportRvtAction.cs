@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using GSADUs.Revit.Addin.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,6 +9,13 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
 {
     internal sealed class ExportRvtAction : IExportAction
     {
+        private readonly IProjectSettingsProvider _projectSettingsProvider;
+
+        public ExportRvtAction(IProjectSettingsProvider projectSettingsProvider)
+        {
+            _projectSettingsProvider = projectSettingsProvider;
+        }
+
         public string Id => "export-rvt";
         public int Order => 300;
         public bool RequiresExternalClone => false; // single-action prototype manages its own document lifecycle
@@ -33,7 +41,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
         {
             if (uiapp == null || sourceDoc == null) return;
             var dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
-            var settings = AppSettingsStore.Load();
+            var settings = _projectSettingsProvider.Load();
             var selectedIds = new HashSet<string>(settings.SelectedWorkflowIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             var workflows = (settings.Workflows ?? new List<WorkflowDefinition>())
                 .Where(w => w.Output == OutputType.Rvt && selectedIds.Contains(w.Id) && (w.ActionIds?.Any(a => string.Equals(a, Id, StringComparison.OrdinalIgnoreCase)) ?? false))
@@ -320,7 +328,7 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                     var fileSafe = San(setName);
                     if (string.IsNullOrWhiteSpace(fileSafe)) fileSafe = "export";
 
-                    var outDir = AppSettingsStore.GetEffectiveOutputDir(settings);
+                    var outDir = _projectSettingsProvider.GetEffectiveOutputDir(settings);
                     try { System.IO.Directory.CreateDirectory(outDir); } catch { }
                     var fullPath = System.IO.Path.Combine(outDir, fileSafe + ".rvt");
 

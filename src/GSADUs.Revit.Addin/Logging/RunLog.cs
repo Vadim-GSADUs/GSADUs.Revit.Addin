@@ -1,3 +1,5 @@
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -10,17 +12,44 @@ namespace GSADUs.Revit.Addin.Logging
         public static string CorrId { get; private set; }
         public static string FilePath { get; private set; }
         static bool _inited;
+        private static readonly IProjectSettingsProvider _settingsProvider;
+        private static AppSettings? _settings;
+
+        static RunLog()
+        {
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                               ?? new LegacyProjectSettingsProvider();
+            TryRefreshSettings();
+        }
+
+        private static AppSettings Settings
+        {
+            get
+            {
+                if (_settings == null)
+                {
+                    TryRefreshSettings();
+                }
+                return _settings ?? new AppSettings();
+            }
+        }
+
+        private static void TryRefreshSettings()
+        {
+            try { _settings = _settingsProvider.Load(); }
+            catch { _settings = new AppSettings(); }
+        }
 
         private static string ResolveLogDir()
         {
             try
             {
-                var settings = AppSettingsStore.Load();
-                var cfg = settings?.LogDir;
-                if (!string.IsNullOrWhiteSpace(cfg))
+                var settings = Settings;
+                var dir = _settingsProvider.GetEffectiveLogDir(settings);
+                if (!string.IsNullOrWhiteSpace(dir))
                 {
-                    Directory.CreateDirectory(cfg);
-                    return cfg;
+                    Directory.CreateDirectory(dir);
+                    return dir;
                 }
             }
             catch { }

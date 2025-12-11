@@ -1,4 +1,6 @@
 using Autodesk.Revit.DB;
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -31,6 +33,7 @@ namespace GSADUs.Revit.Addin.UI
         }
         // --- end singleton management ---
 
+        private readonly IProjectSettingsProvider _settingsProvider;
         private AppSettings _settings;
         private readonly Document? _doc; // optional for CategoryType resolution
 
@@ -42,37 +45,33 @@ namespace GSADUs.Revit.Addin.UI
         private List<int> _stageWhitelistCatIds = new();
         private List<string> _stageWhitelistUids = new();
 
-        public SettingsWindow() : this(new AppSettings(), null) { }
-        public SettingsWindow(AppSettings settings) : this(settings, null) { }
-        public SettingsWindow(AppSettings settings, Document? doc)
+        public SettingsWindow() : this(null, null) { }
+        public SettingsWindow(AppSettings? settings) : this(settings, null) { }
+        public SettingsWindow(AppSettings? settings, Document? doc)
         {
             InitializeComponent();
 
             RegisterInstance();
 
-            _settings = settings;
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                               ?? new LegacyProjectSettingsProvider();
+            _settings = settings ?? _settingsProvider.Load();
             _doc = doc;
 
-            LogDirBox.Text = string.IsNullOrWhiteSpace(settings.LogDir) ? AppSettingsStore.FallbackLogDir : settings.LogDir;
-            OutDirBox.Text = string.IsNullOrWhiteSpace(settings.DefaultOutputDir) ? AppSettingsStore.FallbackOutputDir : settings.DefaultOutputDir;
-            RunAuditBox.IsChecked = settings.DefaultRunAuditBeforeExport;
-            SaveBeforeBox.IsChecked = settings.DefaultSaveBefore;
-            OverwriteBox.IsChecked = settings.DefaultOverwrite;
-            DeepAnnoBox.IsChecked = settings.DeepAnnoStatus;
-            DryrunDiagBox.IsChecked = settings.DryrunDiagnostics;
-            PerfDiagBox.IsChecked = settings.PerfDiagnostics;
-            OpenOutputFolderBox.IsChecked = settings.OpenOutputFolder; // unchanged
-            ValidateStagingBox.IsChecked = settings.ValidateStagingArea; // now on Staging tab
-            ChkDrawAmbiguousRectangles.IsChecked = settings.DrawAmbiguousRectangles; // new checkbox
+            LogDirBox.Text = string.IsNullOrWhiteSpace(_settings.LogDir) ? _settingsProvider.GetEffectiveLogDir(_settings) : _settings.LogDir;
+            OutDirBox.Text = string.IsNullOrWhiteSpace(_settings.DefaultOutputDir) ? _settingsProvider.GetEffectiveOutputDir(_settings) : _settings.DefaultOutputDir;
+            RunAuditBox.IsChecked = _settings.DefaultRunAuditBeforeExport;
+            SaveBeforeBox.IsChecked = _settings.DefaultSaveBefore;
+            OverwriteBox.IsChecked = _settings.DefaultOverwrite;
+            DeepAnnoBox.IsChecked = _settings.DeepAnnoStatus;
+            DryrunDiagBox.IsChecked = _settings.DryrunDiagnostics;
+            PerfDiagBox.IsChecked = _settings.PerfDiagnostics;
+            OpenOutputFolderBox.IsChecked = _settings.OpenOutputFolder; // unchanged
+            ValidateStagingBox.IsChecked = _settings.ValidateStagingArea; // now on Staging tab
+            ChkDrawAmbiguousRectangles.IsChecked = _settings.DrawAmbiguousRectangles; // new checkbox
 
-            // Display-only paths
-            try
-            {
-                var baseDir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "GSADUs", "Revit", "Addin");
-                var defaultSettingsPath = System.IO.Path.Combine(baseDir, "settings.json");
-                SettingsPathBox.Text = defaultSettingsPath;
-            }
-            catch { }
+            // Informational path now reflects ES storage instead of local file
+            SettingsPathBox.Text = "Stored inside project (Extensible Storage)";
             try
             {
                 string shared = string.Empty;
@@ -156,7 +155,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void PickSeed_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new CategoriesPickerWindow(_seedIds, _doc, initialScope: 2) { Owner = this }; // Selection Set scope by default
+            var dlg = new CategoriesPickerWindow(_seedIds, _doc, initialScope: 2, settings: _settings) { Owner = this }; // Selection Set scope by default
             if (dlg.ShowDialog() == true)
             {
                 _seedIds = dlg.ResultIds.ToList();
@@ -165,7 +164,7 @@ namespace GSADUs.Revit.Addin.UI
         }
         private void PickProxy_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new CategoriesPickerWindow(_proxyIds, _doc, initialScope: 2) { Owner = this }; // Selection Set scope by default
+            var dlg = new CategoriesPickerWindow(_proxyIds, _doc, initialScope: 2, settings: _settings) { Owner = this }; // Selection Set scope by default
             if (dlg.ShowDialog() == true)
             {
                 _proxyIds = dlg.ResultIds.ToList();
@@ -174,7 +173,7 @@ namespace GSADUs.Revit.Addin.UI
         }
         private void PickCleanupBlacklist_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new CategoriesPickerWindow(_cleanupBlacklistIds, _doc, initialScope: 1) { Owner = this }; // Current File scope by default
+            var dlg = new CategoriesPickerWindow(_cleanupBlacklistIds, _doc, initialScope: 1, settings: _settings) { Owner = this }; // Current File scope by default
             if (dlg.ShowDialog() == true)
             {
                 _cleanupBlacklistIds = dlg.ResultIds.ToList();
@@ -184,7 +183,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void PickStageWhitelistCategories_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new CategoriesPickerWindow(_stageWhitelistCatIds, _doc, initialScope: 3) { Owner = this }; // Staging Area scope
+            var dlg = new CategoriesPickerWindow(_stageWhitelistCatIds, _doc, initialScope: 3, settings: _settings) { Owner = this }; // Staging Area scope
             if (dlg.ShowDialog() == true)
             {
                 _stageWhitelistCatIds = dlg.ResultIds.ToList();
@@ -223,7 +222,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private void ManageWorkflowsBtn_Click(object sender, RoutedEventArgs e)
         {
-            var win = new WorkflowManagerWindow(_doc, AppSettingsStore.Load()) { Owner = this };
+            var win = new WorkflowManagerWindow(_doc, _settingsProvider.Load()) { Owner = this };
             try { win.ShowDialog(); } catch { }
         }
 
@@ -265,7 +264,7 @@ namespace GSADUs.Revit.Addin.UI
                 .ToList();
             _settings.StagingAuthorizedUids = _stageWhitelistUids.Distinct(System.StringComparer.OrdinalIgnoreCase).ToList();
 
-            AppSettingsStore.Save(_settings);
+            _settingsProvider.Save(_settings);
             DialogResult = true;
         }
     }
