@@ -97,7 +97,7 @@ namespace GSADUs.Revit.Addin.Orchestration
             var allActions = ServiceBootstrap.Provider.GetServices<IExportAction>().ToList();
             var actionRegistry = ServiceBootstrap.Provider.GetService(typeof(IActionRegistry)) as IActionRegistry ?? new ActionRegistry();
             var projectSettingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                                          ?? new LegacyProjectSettingsProvider();
+                                          ?? new EsProjectSettingsProvider();
 
             var doc = uidoc.Document;
 

@@ -4,7 +4,9 @@ using GSADUs.Revit.Addin.Infrastructure;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Windows;
 
 namespace GSADUs.Revit.Addin.UI
@@ -53,11 +55,18 @@ namespace GSADUs.Revit.Addin.UI
 
             RegisterInstance();
 
-            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                               ?? new LegacyProjectSettingsProvider();
-            _settings = settings ?? _settingsProvider.Load();
             _doc = doc;
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                               ?? new EsProjectSettingsProvider(() => _doc ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
+            _settings = settings ?? _settingsProvider.Load();
 
+            StageMoveModeCombo.ItemsSource = new[] { "CentroidToOrigin", "MinToOrigin" };
+
+            ApplySettingsToUi();
+        }
+
+        private void ApplySettingsToUi()
+        {
             LogDirBox.Text = string.IsNullOrWhiteSpace(_settings.LogDir) ? _settingsProvider.GetEffectiveLogDir(_settings) : _settings.LogDir;
             OutDirBox.Text = string.IsNullOrWhiteSpace(_settings.DefaultOutputDir) ? _settingsProvider.GetEffectiveOutputDir(_settings) : _settings.DefaultOutputDir;
             RunAuditBox.IsChecked = _settings.DefaultRunAuditBeforeExport;
@@ -66,11 +75,10 @@ namespace GSADUs.Revit.Addin.UI
             DeepAnnoBox.IsChecked = _settings.DeepAnnoStatus;
             DryrunDiagBox.IsChecked = _settings.DryrunDiagnostics;
             PerfDiagBox.IsChecked = _settings.PerfDiagnostics;
-            OpenOutputFolderBox.IsChecked = _settings.OpenOutputFolder; // unchanged
-            ValidateStagingBox.IsChecked = _settings.ValidateStagingArea; // now on Staging tab
-            ChkDrawAmbiguousRectangles.IsChecked = _settings.DrawAmbiguousRectangles; // new checkbox
+            OpenOutputFolderBox.IsChecked = _settings.OpenOutputFolder;
+            ValidateStagingBox.IsChecked = _settings.ValidateStagingArea;
+            ChkDrawAmbiguousRectangles.IsChecked = _settings.DrawAmbiguousRectangles;
 
-            // Informational path now reflects ES storage instead of local file
             SettingsPathBox.Text = "Stored inside project (Extensible Storage)";
             try
             {
@@ -81,7 +89,6 @@ namespace GSADUs.Revit.Addin.UI
             }
             catch { }
 
-            // Selection tab init
             _seedIds = new List<int>(_settings.SelectionSeedCategories ?? new List<int> { (int)BuiltInCategory.OST_Walls, (int)BuiltInCategory.OST_Floors, (int)BuiltInCategory.OST_Roofs });
             _proxyIds = new List<int>(_settings.SelectionProxyCategories ?? new List<int>());
             _cleanupBlacklistIds = new List<int>(_settings.CleanupBlacklistCategories ?? new List<int>());
@@ -90,12 +97,10 @@ namespace GSADUs.Revit.Addin.UI
             UpdateProxySummary();
             UpdateCleanupBlacklistSummary();
 
-            // Staging tab init
             StageParamNameBox.Text = _settings.CurrentSetParameterName ?? "CurrentSet";
             StageWidthBox.Text = _settings.StagingWidth.ToString(System.Globalization.CultureInfo.InvariantCulture);
             StageHeightBox.Text = _settings.StagingHeight.ToString(System.Globalization.CultureInfo.InvariantCulture);
             StageBufferBox.Text = _settings.StagingBuffer.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            StageMoveModeCombo.ItemsSource = new[] { "CentroidToOrigin", "MinToOrigin" };
             StageMoveModeCombo.SelectedItem = string.IsNullOrWhiteSpace(_settings.StageMoveMode) ? "CentroidToOrigin" : _settings.StageMoveMode;
 
             _stageWhitelistCatIds = new List<int>((_settings.StagingAuthorizedCategoryNames ?? new List<string>()).Select(n => TryResolveBuiltInCategoryId(n, _doc)).Where(id => id != 0));
@@ -217,6 +222,63 @@ namespace GSADUs.Revit.Addin.UI
             {
                 var dir = System.IO.Path.GetDirectoryName(dlg.FileName);
                 if (!string.IsNullOrEmpty(dir)) OutDirBox.Text = dir;
+            }
+        }
+
+        private void ExportSettings_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dlg = new SaveFileDialog
+                {
+                    FileName = "ProjectSettings.json",
+                    Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*",
+                    Title = "Export Project Settings"
+                };
+
+                if (dlg.ShowDialog(this) != true)
+                    return;
+
+                var latest = _settingsProvider.Load();
+                var json = JsonSerializer.Serialize(latest, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(dlg.FileName, json);
+                MessageBox.Show(this, "Settings exported successfully.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Export failed:\n{ex.Message}", "Settings", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ImportSettings_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dlg = new OpenFileDialog
+                {
+                    Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*",
+                    Title = "Import Project Settings"
+                };
+
+                if (dlg.ShowDialog(this) != true)
+                    return;
+
+                var json = File.ReadAllText(dlg.FileName);
+                var imported = JsonSerializer.Deserialize<AppSettings>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (imported == null)
+                {
+                    MessageBox.Show(this, "Unable to read settings from the selected file.", "Settings", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                _settingsProvider.Save(imported);
+                _settings = _settingsProvider.Load();
+                ApplySettingsToUi();
+                MessageBox.Show(this, "Settings imported successfully.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Import failed:\n{ex.Message}", "Settings", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

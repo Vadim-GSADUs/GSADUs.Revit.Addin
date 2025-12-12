@@ -12,7 +12,7 @@ namespace GSADUs.Revit.Addin
 
         public WorkflowPlanRegistry()
             : this(ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                   ?? new LegacyProjectSettingsProvider())
+                   ?? new EsProjectSettingsProvider())
         {
         }
 

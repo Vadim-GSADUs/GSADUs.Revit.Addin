@@ -42,7 +42,7 @@ namespace GSADUs.Revit.Addin.UI
             RegisterInstance();
             _doc = doc;
             var provider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                           ?? new LegacyProjectSettingsProvider();
+                           ?? new EsProjectSettingsProvider(() => _doc ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
             _settings = settings ?? provider.Load();
             try
             {

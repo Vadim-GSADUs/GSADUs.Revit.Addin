@@ -27,18 +27,17 @@ namespace GSADUs.Revit.Addin.Infrastructure
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
+        private const string DefaultSharedDrivePath = @"G:\\Shared drives\\GSADUs Projects\\Our Models\\0 - CATALOG\\Output";
         private readonly Func<Document?> _documentResolver;
-        private readonly LegacyProjectSettingsProvider _legacyProvider;
 
         public EsProjectSettingsProvider()
-            : this(() => RevitUiContext.Current?.ActiveUIDocument?.Document, new LegacyProjectSettingsProvider())
+            : this(() => RevitUiContext.Current?.ActiveUIDocument?.Document)
         {
         }
 
-        public EsProjectSettingsProvider(Func<Document?>? documentResolver, LegacyProjectSettingsProvider? legacyProvider)
+        public EsProjectSettingsProvider(Func<Document?>? documentResolver)
         {
             _documentResolver = documentResolver ?? (() => RevitUiContext.Current?.ActiveUIDocument?.Document);
-            _legacyProvider = legacyProvider ?? new LegacyProjectSettingsProvider();
         }
 
         public AppSettings Load()
@@ -46,7 +45,7 @@ namespace GSADUs.Revit.Addin.Infrastructure
             var doc = GetDocument();
             if (doc == null)
             {
-                var fallbackSettings = _legacyProvider.Load();
+                var fallbackSettings = CreateDefaultAppSettings();
                 RunStandardMigrations(fallbackSettings);
                 return fallbackSettings;
             }
@@ -54,7 +53,7 @@ namespace GSADUs.Revit.Addin.Infrastructure
             var anchor = doc.ProjectInformation;
             if (anchor == null)
             {
-                var fallbackSettings = _legacyProvider.Load();
+                var fallbackSettings = CreateDefaultAppSettings();
                 RunStandardMigrations(fallbackSettings);
                 return fallbackSettings;
             }
@@ -81,14 +80,14 @@ namespace GSADUs.Revit.Addin.Infrastructure
                 }
                 catch
                 {
-                    // Swallow errors and fall back to legacy provider.
+                    // Swallow errors and fall back to in-memory defaults for this session.
                 }
             }
 
-            var legacySettings = _legacyProvider.Load();
-            RunStandardMigrations(legacySettings);
-            TrySeedSettings(doc, anchor, schema, legacySettings);
-            return legacySettings;
+            var defaultSettings = CreateDefaultAppSettings();
+            RunStandardMigrations(defaultSettings);
+            TrySeedSettings(doc, anchor, schema, defaultSettings);
+            return defaultSettings;
         }
 
         public void Save(AppSettings settings)
@@ -102,7 +101,6 @@ namespace GSADUs.Revit.Addin.Infrastructure
             var anchor = doc?.ProjectInformation;
             if (doc == null || anchor == null || doc.IsReadOnly)
             {
-                _legacyProvider.Save(settings);
                 return;
             }
 
@@ -111,7 +109,6 @@ namespace GSADUs.Revit.Addin.Infrastructure
             var versionField = schema.GetField(FieldSettingsVersion);
             if (jsonField == null || versionField == null)
             {
-                _legacyProvider.Save(settings);
                 return;
             }
 
@@ -142,26 +139,37 @@ namespace GSADUs.Revit.Addin.Infrastructure
 
             if (!esSucceeded)
             {
-                // Ensure legacy storage still receives the latest settings when ES write fails.
-                _legacyProvider.Save(settings);
                 return;
             }
-
-            // Mirror to legacy file to keep rollback path in sync.
-            _legacyProvider.Save(settings);
         }
 
         public string GetEffectiveOutputDir(AppSettings settings)
         {
-            // Preserve existing fallback behavior.
-            return _legacyProvider.GetEffectiveOutputDir(settings);
+            if (settings == null)
+            {
+                return DefaultSharedDrivePath;
+            }
+
+            var dir = string.IsNullOrWhiteSpace(settings.DefaultOutputDir)
+                ? DefaultSharedDrivePath
+                : settings.DefaultOutputDir!;
+            return dir;
         }
 
         public string GetEffectiveLogDir(AppSettings settings)
         {
-            // Preserve existing fallback behavior.
-            return _legacyProvider.GetEffectiveLogDir(settings);
+            if (settings == null)
+            {
+                return DefaultSharedDrivePath;
+            }
+
+            var dir = string.IsNullOrWhiteSpace(settings.LogDir)
+                ? DefaultSharedDrivePath
+                : settings.LogDir!;
+            return dir;
         }
+
+        private static AppSettings CreateDefaultAppSettings() => new AppSettings();
 
         private static Schema EnsureSchema()
         {
@@ -316,7 +324,7 @@ namespace GSADUs.Revit.Addin.Infrastructure
             }
             catch
             {
-                // Ignore seeding failures; legacy storage remains authoritative.
+                // Ignore seeding failures; defaults will be recreated on next load attempt.
             }
         }
 

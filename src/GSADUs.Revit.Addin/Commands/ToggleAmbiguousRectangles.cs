@@ -11,7 +11,7 @@ namespace GSADUs.Revit.Addin.Commands
         public Result Execute(ExternalCommandData data, ref string message, ElementSet elements)
         {
             var provider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                            ?? new LegacyProjectSettingsProvider();
+                            ?? new EsProjectSettingsProvider();
             var settings = provider.Load();
             settings.DrawAmbiguousRectangles = !settings.DrawAmbiguousRectangles;
             provider.Save(settings);

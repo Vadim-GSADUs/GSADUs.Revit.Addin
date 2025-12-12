@@ -89,11 +89,11 @@ namespace GSADUs.Revit.Addin.UI
         private void RenameSelected()
         {
             if (SelectedWorkflow == null) return;
-            var current = SelectedWorkflow.Name ?? string.Empty;
-            var newName = string.IsNullOrWhiteSpace(current) ? "Workflow" : current + " (Renamed)";
-            _catalog.Rename(SelectedWorkflow.Id, newName);
-            // Refresh selection to updated object
-            SelectedWorkflow = _catalog.Find(SelectedWorkflow.Id);
+            var renamed = _presenter.RenameWorkflow(SelectedWorkflow);
+            if (renamed != null)
+            {
+                SelectedWorkflow = renamed;
+            }
         }
 
         private void DeleteSelected()

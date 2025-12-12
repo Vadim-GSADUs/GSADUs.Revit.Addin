@@ -1,13 +1,14 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using System;
-using System.Linq;
 using System.Collections.Generic;
-using System.Text.Json;
-using GSADUs.Revit.Addin.Workflows.Pdf;
-using GSADUs.Revit.Addin.Workflows.Image;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
+using System.Text.Json;
+using System.Windows;
+using GSADUs.Revit.Addin.Workflows.Pdf;
+using GSADUs.Revit.Addin.Workflows.Image;
 
 namespace GSADUs.Revit.Addin.UI
 {
@@ -106,6 +107,41 @@ namespace GSADUs.Revit.Addin.UI
                 CsvWorkflow.SelectedWorkflowId = null;
                 CsvWorkflow.Reset();
             }
+        }
+
+        public WorkflowDefinition? RenameWorkflow(WorkflowDefinition? workflow)
+        {
+            if (workflow == null) return null;
+
+            var owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
+            var dialog = new RenameWorkflowDialog(workflow.Name ?? string.Empty)
+            {
+                Owner = owner
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return null;
+            }
+
+            var newName = dialog.ResultName?.Trim();
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                _dialogs.Info("Rename Workflow", "Name cannot be empty.");
+                return null;
+            }
+
+            bool duplicate = _catalog.Workflows.Any(w => !string.Equals(w.Id, workflow.Id, StringComparison.OrdinalIgnoreCase)
+                                                         && string.Equals(w.Name, newName, StringComparison.OrdinalIgnoreCase));
+            if (duplicate)
+            {
+                _dialogs.Info("Rename Workflow", "A workflow with that name already exists.");
+                return null;
+            }
+
+            _catalog.Rename(workflow.Id, newName);
+            PopulateSavedLists();
+            return _catalog.Workflows.FirstOrDefault(w => string.Equals(w.Id, workflow.Id, StringComparison.OrdinalIgnoreCase));
         }
 
         private void SaveCurrentPdf()

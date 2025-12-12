@@ -18,7 +18,7 @@ namespace GSADUs.Revit.Addin.Logging
         static RunLog()
         {
             _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                               ?? new LegacyProjectSettingsProvider();
+                               ?? new EsProjectSettingsProvider();
             TryRefreshSettings();
         }
 

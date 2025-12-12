@@ -77,7 +77,7 @@ namespace GSADUs.Revit.Addin.UI
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
             _logFactory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory ?? new CsvBatchLogger();
             _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                                ?? new LegacyProjectSettingsProvider();
+                                ?? new EsProjectSettingsProvider(() => _doc ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
             _settings = settings ?? _settingsProvider.Load();
 
             // Minimal VM hookup (not used by XAML yet; no behavior change)

@@ -108,7 +108,7 @@ namespace GSADUs.Revit.Addin.UI
             InitializeComponent();
             _uidoc = uidoc;
             _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                               ?? new LegacyProjectSettingsProvider();
+                               ?? new EsProjectSettingsProvider(() => _uidoc?.Document ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
             _settings = _settingsProvider.Load();
             RegisterInstance();
             this.Width = _prefs.WindowWidth > 0 ? _prefs.WindowWidth : this.Width;

@@ -4,7 +4,7 @@ namespace GSADUs.Revit.Addin
 {
     /// <summary>
     /// Abstraction over settings persistence to enable debouncing and testability.
-    /// Phase 2: simple sync wrapper over AppSettingsStore; can evolve later.
+    /// Phase 4: thin wrapper over the ES-backed IProjectSettingsProvider.
     /// </summary>
     public interface ISettingsPersistence
     {

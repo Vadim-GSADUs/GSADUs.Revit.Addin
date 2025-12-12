@@ -166,6 +166,8 @@
 
         <!-- Global Save/Cancel buttons anchored bottom-right -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,12,12">
+            <Button Width="110" Margin="0,0,8,0" Content="Export..." Click="ExportSettings_Click"/>
+            <Button Width="110" Margin="0,0,8,0" Content="Import..." Click="ImportSettings_Click"/>
             <Button Width="90" Margin="0,0,8,0" Content="Save" IsDefault="True" Click="OK_Click"/>
             <Button Width="90" Content="Cancel" IsCancel="True"/>
         </StackPanel>

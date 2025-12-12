@@ -1,5 +1,7 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,7 +53,9 @@ namespace GSADUs.Revit.Addin
                     return new CuratePlan { ValidSets = Array.Empty<string>(), IgnoredSets = Array.Empty<string>(), AmbiguousSets = Array.Empty<string>(), Deltas = Array.Empty<SetDelta>() };
             }
 
-            var settings = AppSettingsStore.Load();
+            var provider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                           ?? new EsProjectSettingsProvider(() => doc);
+            var settings = provider.Load();
             var proxyDistance = settings.SelectionProxyDistance;
             if (proxyDistance < 0) proxyDistance = 0;
             options.BbInflationOffset = proxyDistance;

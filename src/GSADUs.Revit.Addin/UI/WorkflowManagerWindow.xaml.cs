@@ -18,6 +18,8 @@ namespace GSADUs.Revit.Addin.UI
     public partial class WorkflowManagerWindow : Window
     {
         private static WorkflowManagerWindow? _activeInstance;
+        private GridViewColumnHeader? _workflowsLastHeader;
+        private ListSortDirection _workflowsLastDirection = ListSortDirection.Ascending;
         public static bool TryActivateExisting()
         {
             if (_activeInstance == null) return false;
@@ -46,15 +48,14 @@ namespace GSADUs.Revit.Addin.UI
             RegisterInstance();
 
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
-            _catalog = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogService)) as WorkflowCatalogService
-                       ?? new WorkflowCatalogService(new LegacyProjectSettingsProvider());
-            _presenter = ServiceBootstrap.Provider.GetService(typeof(WorkflowManagerPresenter)) as WorkflowManagerPresenter
-                         ?? new WorkflowManagerPresenter(_catalog, _dialogs);
+            _catalog = CreateCatalog(doc);
+            _presenter = new WorkflowManagerPresenter(_catalog, _dialogs);
             _vm = new WorkflowManagerViewModel(_catalog, _presenter);
             _settings = _catalog.Settings;
             _doc = doc;
 
             DataContext = _vm;
+            InitializeWorkflowsListSorting();
 
             if (DataContext is WorkflowManagerViewModel vm)
                 System.Diagnostics.Trace.WriteLine($"[Window] DataContext.Image VM instance: {vm.Image.GetHashCode()}");
@@ -79,6 +80,22 @@ namespace GSADUs.Revit.Addin.UI
             this.Loaded += WorkflowManagerWindow_Loaded;
 
             // CSV wiring now handled inside presenter.WireCsv(), invoked by presenter ctor
+        }
+
+        private WorkflowCatalogService CreateCatalog(Document? doc)
+        {
+            if (doc != null)
+            {
+                return new WorkflowCatalogService(new EsProjectSettingsProvider(() => doc));
+            }
+
+            var resolved = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogService)) as WorkflowCatalogService;
+            if (resolved != null)
+            {
+                return resolved;
+            }
+
+            return new WorkflowCatalogService(new EsProjectSettingsProvider(() => RevitUiContext.Current?.ActiveUIDocument?.Document));
         }
 
         // Helper to require named element lookups
@@ -114,6 +131,48 @@ namespace GSADUs.Revit.Addin.UI
         {
             _presenter.SaveSettings();
             this.Close();
+        }
+
+        private void InitializeWorkflowsListSorting()
+        {
+            try
+            {
+                var list = GetRequired<ListView>("WorkflowsList");
+                list.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(WorkflowsListHeader_Click));
+            }
+            catch { }
+        }
+
+        private void WorkflowsListHeader_Click(object sender, RoutedEventArgs e)
+        {
+            if (e.OriginalSource is not GridViewColumnHeader header || header.Tag == null)
+                return;
+
+            var sortBy = header.Tag.ToString();
+            if (string.IsNullOrWhiteSpace(sortBy)) return;
+
+            var direction = (_workflowsLastHeader == header && _workflowsLastDirection == ListSortDirection.Ascending)
+                ? ListSortDirection.Descending
+                : ListSortDirection.Ascending;
+
+            ApplyWorkflowSort(sortBy, direction);
+            _workflowsLastHeader = header;
+            _workflowsLastDirection = direction;
+        }
+
+        private void ApplyWorkflowSort(string sortBy, ListSortDirection direction)
+        {
+            try
+            {
+                var list = GetRequired<ListView>("WorkflowsList");
+                var view = CollectionViewSource.GetDefaultView(list.ItemsSource);
+                if (view == null) return;
+
+                view.SortDescriptions.Clear();
+                view.SortDescriptions.Add(new SortDescription(sortBy, direction));
+                view.Refresh();
+            }
+            catch { }
         }
     }
 }

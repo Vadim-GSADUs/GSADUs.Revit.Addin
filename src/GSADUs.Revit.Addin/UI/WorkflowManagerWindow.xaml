@@ -57,10 +57,26 @@
                         </ListView.InputBindings>
                         <ListView.View>
                             <GridView>
-                                <GridViewColumn Width="220" Header="Name" DisplayMemberBinding="{Binding Name}"/>
-                                <GridViewColumn Width="90" Header="Output" DisplayMemberBinding="{Binding Output}"/>
-                                <GridViewColumn Width="200" Header="Scope" DisplayMemberBinding="{Binding Scope}"/>
-                                <GridViewColumn Width="360" Header="Description" DisplayMemberBinding="{Binding Description}"/>
+                                <GridViewColumn Width="220" DisplayMemberBinding="{Binding Name}">
+                                    <GridViewColumn.Header>
+                                        <GridViewColumnHeader Content="Name" Tag="Name"/>
+                                    </GridViewColumn.Header>
+                                </GridViewColumn>
+                                <GridViewColumn Width="90" DisplayMemberBinding="{Binding Output}">
+                                    <GridViewColumn.Header>
+                                        <GridViewColumnHeader Content="Output" Tag="Output"/>
+                                    </GridViewColumn.Header>
+                                </GridViewColumn>
+                                <GridViewColumn Width="200" DisplayMemberBinding="{Binding Scope}">
+                                    <GridViewColumn.Header>
+                                        <GridViewColumnHeader Content="Scope" Tag="Scope"/>
+                                    </GridViewColumn.Header>
+                                </GridViewColumn>
+                                <GridViewColumn Width="360" DisplayMemberBinding="{Binding Description}">
+                                    <GridViewColumn.Header>
+                                        <GridViewColumnHeader Content="Description" Tag="Description"/>
+                                    </GridViewColumn.Header>
+                                </GridViewColumn>
                             </GridView>
                         </ListView.View>
                     </ListView>
