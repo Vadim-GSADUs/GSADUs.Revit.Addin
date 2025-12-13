@@ -1,115 +1,115 @@
-# Revit Add-in Refactor Plan (grounded in current code)
+# Revit Add-in Refactor Plan
 
 ## 1) Target architecture (per Revit Document)
 
 **Ownership model**
-- **Catalog (source of truth):** One `WorkflowCatalogService` per Revit `Document`. This instance owns the authoritative `AppSettings` and supplies read-only projections; presenters/windows never keep private `_settings` copies.
-- **ES provider:** One `EsProjectSettingsProvider` per `Document`, resolved through the document scope and supplied to the catalog/orchestrator. Provider remains stateless.
-- **Save orchestrator:** One `ProjectSettingsSaveExternalEvent` (or successor) per document that owns the ExternalEvent, coalesces/gates requests, executes on the Revit API thread, and drives a strict `save -> reload-from-ES -> notify` sequence.
-- **Notifier/Event stream:** One `WorkflowCatalogChangeNotifier` per document that only fires after the catalog reloads from ES, so all windows re-query the shared catalog rather than relying on cached snapshots.
-- **Windows/Presenters:** Resolve the document-scoped catalog, orchestrator, and notifier; do not construct them ad-hoc. UI binds to projections and issues `RequestSave` through the orchestrator.
+- **Catalog (source of truth):** Single `WorkflowCatalogService` instance keyed by `Document`. Holds authoritative `AppSettings` and exposes immutable/read-only projections to windows.
+- **ES provider:** Stateless `EsProjectSettingsProvider` resolved per document; invoked only via orchestrated save/load.
+- **Save orchestrator:** Single `ProjectSettingsSaveExternalEvent` (or successor) per document that queues/coalesces save requests, executes on Revit API thread, enforces in-flight gating, and publishes completion with persisted version.
+- **Notifier/Event stream:** Single `WorkflowCatalogChangeNotifier` per document. Emits post-save events **after** catalog reload from ES; consumers re-query catalog instead of holding private snapshots.
+- **Windows/Presenters:** Consume catalog projections; never store private `_settings`. All mutations go through catalog; persistence goes through orchestrator; refresh uses notifier-driven reload.
 
 **Lifecycle & scoping**
-- Maintain a `DocumentId`/`Document.UniqueId` keyed container that supplies catalog, ES provider, save orchestrator, and notifier. Dispose entries on `DocumentClosed` (unsubscribe notifiers, clear queues, dispose ExternalEvent if needed).
+- Instances keyed by `DocumentId` in a map or DI scoped to document. Dispose orchestrator/notifier/catalog when document closes (unsubscribe, clear queues).
 
 **Diagram**
 ```
 [Window / Presenter]
-    | (projections + RequestSave)
+    |  (read/write via projections)
     v
-[Catalog (per Doc)] <---- reload after save ----
-    |                                   ^
-    v                                   |
+[Catalog (per Doc, source of truth)]
+    |    ^
+    |    | reload-after-save
+    v    |
 [Save Orchestrator (ExternalEvent queue)]
     |
     v
-[ES Provider] -> Extensible Storage
+[ES Provider (stateless)]
+    |
+    v
+[Extensible Storage]
 
-[Notifier/Event Stream] --post-reload--> windows re-query
+[Notifier/Event Stream] <------ post-save after reload ------^
+       ^                                                    |
+       |------------------- listeners re-query -------------|
 ```
 
 ## 2) Primary refactor plan
 
 ### Tier 0 (1–3 days): Stop the bleeding
-- **Goal:** Enforce document-scoped ownership, serialize saves with coalescing and deterministic completion, and eliminate ad-hoc construction/timer closes once sequencing is correct.
+- **Goal:** Enforce document-scoped singletons for catalog/notifier/save orchestrator; serialize saves with coalescing and reload-before-notify.
 - **Changes:**
-  - Introduce a document-scoped container (map or DI scope) that returns the single catalog, notifier, ES provider, and save orchestrator for that document. Replace `new WorkflowCatalogService(new EsProjectSettingsProvider(...))` and `new WorkflowCatalogChangeNotifier()` paths in `WorkflowManagerWindow.CreateCatalog` with scoped resolution; drop the private `_settings` cache in the window/presenter.
-  - Move `ProjectSettingsSaveExternalEvent` to the document scope. Add in-flight gating and request coalescing; ensure `Execute` performs `catalog.Save` then `catalog.ReloadFromEs` (or equivalent) before invoking `WorkflowCatalogChangeNotifier.NotifyChanged` and callbacks. Prevent concurrent `ExternalEvent.Raise` overlap.
-  - Update presenter/window save flow to await orchestrator completion instead of relying on the `DispatcherTimer` fallback; remove the timer only after deterministic completion is wired.
-  - Align DI with the document scope: current `Startup.cs` registers `WorkflowCatalogService`, `WorkflowCatalogChangeNotifier`, `EsProjectSettingsProvider`, and `WorkflowManagerPresenter` as singletons, but windows bypass DI and create ad-hoc instances. Adjust registrations (e.g., factory that resolves per-document instances via the scoped container) and update consumers accordingly.
+  - Replace ad-hoc `new WorkflowCatalogService`/`new WorkflowCatalogChangeNotifier` with document-scoped resolver (map or DI scope). Remove window-owned `_settings` caches.
+  - Centralize `ProjectSettingsSaveExternalEvent` per document; add in-flight flag + coalescing queue; ensure `Execute` loads from ES, updates catalog, then notifies.
+  - Adjust save callbacks to await orchestrator completion; disable `DispatcherTimer` close fallback once deterministic completion path exists.
 - **Acceptance criteria:**
-  - Multiple windows for the same document see a single shared catalog/notifier/orchestrator; saves in one window surface in others after reload.
-  - Rapid save requests for the same document coalesce into one ES write per flush; callbacks fire once per flush and only after reload+notify.
-  - Save & Close waits for orchestrator completion; no premature closes from timers; UI observes the post-save state.
-- **Risk:** Medium (threading and ExternalEvent sequencing changes).
+  - Opening multiple windows for same document shows shared data; saves from one are visible in others after reload.
+  - Rapid consecutive saves produce one ES write per flush; callbacks fire once per flush in order.
+  - Notifications always follow reload; no stale UI snapshots; close waits on actual completion (no timer fire).
+- **Risk:** Low-medium (scoping refactor touches window creation; ExternalEvent queue changes thread-sensitive).
 - **Effort:** 1–3 days.
-- **Rollback plan:** Keep current ad-hoc construction and timer path behind a flag; retain the existing ExternalEvent class (without coalescing) in a branch for quick revert.
+- **Rollback:** Reintroduce per-window instances and timer fallback behind feature flags; keep existing ExternalEvent queue implementation in branch for quick revert.
 
 ### Tier 1 (1–2 weeks): Make it reliable
-- **Goal:** Stabilize UI bindings, tracking, and error visibility.
+- **Goal:** Stabilize bindings and dirty/version tracking; remove silent failures.
 - **Changes:**
-  - Replace destructive `ObservableCollection.Clear()/rebuild` patterns with diff/apply or read-only projections to prevent selection loss and `InvalidOperationException` during binding refresh.
-  - Move dirty/version tracking into the catalog with deterministic increments and `Saving/Saved` states that align with orchestrator callbacks; presenters read state instead of inferring from UI.
-  - Centralize error/logging; replace silent catches (`catch { }` in window load, list wiring, validation handlers) with logged errors surfaced through dialogs/notifier.
+  - Replace destructive `ObservableCollection.Clear()/rebuild` with diff-based updates or read-only projections; preserve selection.
+  - Move dirty/version tracking into catalog with deterministic increments and `Saving/Saved` status.
+  - Centralize logging/error handling; remove `catch { }` swallowing; surface failures through notifier/UI.
 - **Acceptance criteria:**
-  - No WPF binding exceptions during refresh; selections persist across updates.
-  - Dirty/version state matches persisted catalog state and resets only after reload from ES.
-  - Save failures surface to logs and user dialogs; no swallowed exceptions in the save/notify path.
-- **Risk:** Medium (binding adjustments may expose latent UI assumptions).
+  - No WPF `InvalidOperationException` from collection refresh during typical operations.
+  - Dirty state reflects catalog version and resets only after persisted reload.
+  - Errors propagate to logs/user notification; no silent failures in save/notify pipeline.
+- **Risk:** Medium (binding changes may expose latent UI assumptions).
 - **Effort:** 1–2 weeks.
-- **Rollback plan:** Keep legacy clear/rebuild helpers and local dirty flags behind switches for temporary fallback.
+- **Rollback:** Keep old refresh method and dirty flags behind toggles; can revert to Clear/rebuild if blocking issues arise (with known selection loss).
 
 ### Tier 2 (longer): Make it clean
-- **Goal:** Simplify model boundaries and window coordination after stability.
+- **Goal:** Simplify model boundaries and window coordination.
 - **Changes:**
-  - Split read models (immutable projections) from draft write models to isolate UI edits from the shared catalog state.
-  - Add a window manager that prevents duplicate `WorkflowManagerWindow` instances per document and routes focus to the active window.
-  - Remove legacy registries/commands that are unused once verified; clean DI registrations accordingly.
+  - Split read models (immutable projections) from draft write models (mutable copy merged by catalog) to decouple UI grids from domain state.
+  - Add lightweight window manager preventing duplicate windows per document and coordinating refresh/focus.
+  - Remove unused legacy registry/commands after confirmation; clean DI registrations.
 - **Acceptance criteria:**
-  - UI binds to read-only projections; edits commit via catalog/orchestrator apply operations.
-  - Attempting to open a second window for the same document reuses/focuses the existing one.
-  - Unused legacy components removed without breaking ribbon command entrypoints.
-- **Risk:** Medium-high.
+  - UI binds to read-only projections; edits occur on draft and apply commits through catalog.
+  - Attempting to open duplicate window reuses existing instance or focuses it.
+  - Unused legacy components removed without breaking ribbon commands.
+- **Risk:** Medium-high (touches UX flows, potential command wiring impacts).
 - **Effort:** Longer-term/iterative.
-- **Rollback plan:** Retain existing window creation and legacy registry wiring in branch; feature-flag draft/commit mode if needed.
+- **Rollback:** Retain current window creation paths and legacy registrations in branch; feature-flag draft/commit if needed.
 
 ## 3) Secondary plans (optional directions)
 
 ### Option A: Saveless autosave
-- **Prerequisites:** Tier 0 document-scoped orchestrator with coalescing and reload-before-notify; stable projections.
-- **Approach:** Trigger throttled/coalesced saves on mutations; show a "Saving…" state driven by orchestrator progress; keep manual Save as explicit flush if desired.
-- **Tradeoffs:** Simpler UX and consistent state; increased ES writes mitigated by coalescing; depends on reliable error surfacing.
+- **Prerequisites:** Tier 0 coalescing save orchestrator and reload-before-notify contract; stable catalog projections.
+- **Approach:** Every mutation triggers throttled/coalesced save; UI shows "Saving…" status until orchestrator completes; remove explicit Save buttons or demote to manual flush.
+- **Tradeoffs:** Simpler UX; consistent state across windows; potential increased ES writes mitigated by coalescing. Requires reliable failure surfacing.
 
 ### Option B: Draft/commit
-- **Prerequisites:** Catalog supports draft models and versioning (Tier 1); window manager prevents duplicate windows for confusion-free drafts.
-- **Approach:** Edit on draft copies; `Apply` routes through orchestrator (save -> reload -> notify); `Cancel` discards drafts. Display pending-change badges per tab.
-- **Tradeoffs:** Clearer intent and isolation; more model plumbing and UX polish required.
+- **Prerequisites:** Catalog supports draft models and versioning; deterministic dirty tracking (Tier 1).
+- **Approach:** Edits occur on draft copy; Apply commits through save orchestrator (reload then notify); Cancel discards draft. Windows show pending changes badge.
+- **Tradeoffs:** Strong isolation between windows; clearer user intent; more code to manage drafts and conflict checks.
 
 ## 4) Deletion list (legacy/noise removal)
-- **Delete after Tier 0:**
-  - `DispatcherTimer` fallback in `SaveCloseBtn_Click` (WorkflowManagerWindow) once Save & Close awaits orchestrator completion.
-  - Ad-hoc constructors in `WorkflowManagerWindow.CreateCatalog` (`new WorkflowCatalogService(...)`, `new WorkflowCatalogChangeNotifier()`) once document-scoped resolution is in place.
-  - Presenter-owned `ProjectSettingsSaveExternalEvent` instantiation; move to document scope.
-- **Needs confirmation:**
-  - Legacy workflow registry/command wiring (`IWorkflow`, `IWorkflowRegistry` singletons in `Startup`) — verify ribbon entrypoints before removal.
-  - Trace-listener bootstrap in `WorkflowManagerPresenter` constructor — centralize or remove if redundant.
-- **Delete now (safe):** None confirmed.
+- **Delete after Tier 0:** `DispatcherTimer` fallback in Save & Close once orchestrator completion is reliable and awaited.
+- **Needs confirmation:** Legacy `IWorkflow`/`IWorkflowRegistry` registrations (remove if no ribbon commands rely on them); trace-listener bootstrapping per presenter (centralize or remove if unused); ad-hoc `EsProjectSettingsProvider` instantiations (replace with scoped resolver once scoping proven safe); exception-swallowing in `ProjectSettingsSaveExternalEvent` (replace with surfaced errors).
+- **Delete now (safe):** None identified without confirming usage.
 
-## 5) Concrete implementation notes (aligned with current code)
-- **Document scoping:** Introduce a `DocumentServices` map keyed by `DocumentId`/`Document.UniqueId` that creates/reuses `WorkflowCatalogService`, `EsProjectSettingsProvider`, `WorkflowCatalogChangeNotifier`, and `ProjectSettingsSaveExternalEvent`. Register a factory in `Startup` to resolve through this map instead of global singletons.
-- **Class touch points:**
-  - `Startup.cs`: change singleton registrations to factories that pull from the document scope; remove presenter registration as a singleton so windows obtain presenter instances bound to the scoped services.
-  - `WorkflowManagerWindow`: replace `CreateCatalog` ad-hoc construction with resolution from the document scope; obtain notifier and orchestrator from the same scope; stop caching `_settings`.
-  - `WorkflowManagerPresenter`: accept the scoped orchestrator via constructor; remove `new ProjectSettingsSaveExternalEvent` inside; request saves through `ISaveOrchestrator.RequestSave`.
-  - `ProjectSettingsSaveExternalEvent`: add coalescing/in-flight gating; on `Execute`, perform `catalog.Save`, then `catalog.Load`/`RefreshCaches`, then invoke `WorkflowCatalogChangeNotifier.NotifyChanged`, then callbacks. Ensure dispatcher callbacks surface exceptions.
+## 5) Concrete implementation notes
+- **Scoping/keys:** Use `DocumentId`-keyed dictionary or DI scope keyed by `Document` to provide catalog, notifier, save orchestrator, and ES provider. Dispose entries on `DocumentClosed` (unsubscribe notifiers, clear queues).
+- **Interfaces/boundaries:**
+  - `IWorkflowCatalog` exposes read-only projections, mutation methods, `Version`, `IsDirty`, `Saving` status, and `RequestSave(reason)` delegating to orchestrator.
+  - `ISaveOrchestrator` handles `RequestSave(reason, continuation)`; coalesces requests; raises ExternalEvent; on execute performs `LoadFromES -> SaveToES -> Catalog.Reload(version) -> Notifier.Notify(version)`.
+  - `INotifier` publishes `CatalogChanged(DocumentId, version)` events; listeners re-query catalog.
 - **Key methods/events:**
-  - `RequestSave(reason, onCompleted)`: queues/coalesces; only one in-flight execution per document.
-  - `OnPersisted(version)` (or equivalent) invoked after reload to clear dirty state, update UI, and allow window close.
-- **Disposal:** On `DocumentClosed`, dispose the document scope: clear ExternalEvent queues, unsubscribe notifier listeners, and drop catalog/provider instances.
-- **Refresh pattern:** Replace direct `ObservableCollection.Clear()/Add` rebuilds with diff/apply helpers or `ReadOnlyObservableCollection` projections backed by immutable snapshots to preserve selection.
+  - `RequestSave(reason)` from presenters; `OnPersisted(version)` callback invoked after reload to update UI state/close windows.
+  - `Catalog.ReloadFromEs()` invoked only inside orchestrator post-save to ensure source-of-truth alignment.
+- **Threading:** Save orchestrator owns ExternalEvent; ensures single in-flight execution with queue depth >1 coalesced. UI callbacks use dispatcher with explicit exception logging.
+- **Window creation:** Windows resolve catalog/notifier/orchestrator from document scope; no ad-hoc `new` when DI fails—fail fast with clear error.
+- **Refresh pattern:** Replace `ObservableCollection` clears with diff/apply helpers or expose `ReadOnlyObservableCollection` backed by immutable snapshots; presenters update selections via stable IDs.
 
-## Evidence
-- **DI registrations (singleton):** `WorkflowCatalogService`, `WorkflowCatalogChangeNotifier`, `EsProjectSettingsProvider`, and `WorkflowManagerPresenter` are registered as singletons in `Startup.ConfigureServices` lines 45–59; windows currently bypass these by constructing new instances when DI resolution fails.【F:src/GSADUs.Revit.Addin/Infrastructure/DI/Startup.cs†L45-L59】
-- **Ad-hoc catalog/notifier construction & timer fallback:** `WorkflowManagerWindow` constructs new catalog/provider/notifier instances in `CreateCatalog` and window ctor, caches `_settings`, and uses a `DispatcherTimer` fallback to close after two seconds regardless of persistence outcome (`SaveCloseBtn_Click`).【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L51-L102】【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L133-L172】
-- **ExternalEvent orchestrator:** `ProjectSettingsSaveExternalEvent` is presenter-owned, per-window, lacks coalescing/in-flight gating, performs only `catalog.Save(force: true)` without reload-before-notify, and dispatches callbacks on completion.【F:src/GSADUs.Revit.Addin/UI/ProjectSettingsSaveExternalEvent.cs†L9-L84】
-- **Presenter wiring:** `WorkflowManagerPresenter` creates its own `ProjectSettingsSaveExternalEvent` and notifies via `WorkflowCatalogChangeNotifier` before any reload step; this reinforces the need for document-scoped orchestration and reload-before-notify sequencing.【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L18-L87】【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L740-L772】
+## Evidence references
+- Multiple catalog/notifier instances and window-owned ExternalEvent queues: architecture review and discovery findings.【F:docs/architecture-review.md†L5-L87】【F:docs/discovery-pass.md†L5-L60】
+- Save pipeline issues (no coalescing, reload gap, timer fallback, exception swallowing): review/discovery sections.【F:docs/architecture-review.md†L14-L63】【F:docs/discovery-pass.md†L17-L55】
+- Binding refresh and exception swallowing risks: review findings.【F:docs/architecture-review.md†L23-L35】【F:docs/architecture-review.md†L61-L74】
+- Legacy candidates and confirmation list: discovery findings.【F:docs/discovery-pass.md†L55-L89】
