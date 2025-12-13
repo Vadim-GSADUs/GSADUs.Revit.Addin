@@ -1,112 +1,81 @@
-# Targeted refactor plan (Revit add-in, WPF/ExternalEvent)
+# Revit Add-in Architecture Assessment
 
-## Probing Questions (max 12)
-1) How many `WorkflowCatalogService` instances are created per Revit document?
-   - Verifies: whether windows spin up separate catalogs, causing divergent `_settings` snapshots.
-   - Search: constructors/usages of `WorkflowCatalogService`, especially in `WorkflowManagerWindow`, `BatchExportWindow`, commands.
-   - Plan change: if only one instance exists already, skip DI scoping work and focus on cache refresh.
-2) Do presenters/viewmodels hold long-lived `_settings` or clone collections instead of re-querying the catalog?
-   - Verifies: stale snapshot usage leading to overwrite/dirty glitches.
-   - Search: fields named `_settings`, `AppSettings`, or cached `ObservableCollection` copies in presenters/viewmodels.
-   - Plan change: if they already re-query, prioritize save-queue and binding stability instead.
-3) How does `ProjectSettingsSaveExternalEvent` queue saves—does it coalesce or allow reentrancy?
-   - Verifies: risk of overlapping ES writes and out-of-order callbacks.
-   - Search: `RequestSave`, `_pendingCallbacks`, `_saveInProgress`, or similar flags in save external event class.
-   - Plan change: if coalescing already exists, tighten post-save reload/notifications instead of queue redesign.
-4) Are bound collections cleared/rebuilt (e.g., `RefreshCaches`) or updated incrementally?
-   - Verifies: source of selection loss and WPF instability.
-   - Search: `ObservableCollection.Clear`, `RefreshCaches`, or `new ObservableCollection` assignments on bound properties.
-   - Plan change: if incremental updates exist, focus on immutable read models rather than collection diffing.
-5) Where are dispatcher hops/timers used around Save & Close or catalog notifications?
-   - Verifies: sequencing hacks masking API-thread timing issues.
-   - Search: `DispatcherTimer`, `BeginInvoke`, `InvokeAsync` in windows/presenters around save/close, notifier handlers.
-   - Plan change: if minimal, keep UI flow; otherwise, replace with explicit save pipeline callbacks.
-6) How are errors handled for ES saves/loads?
-   - Verifies: silent failures via `catch { }` that hide state corruption.
-   - Search: `catch { }`, logging calls, or empty catch blocks around ES provider and save external event.
-   - Plan change: if logging exists, focus on user notification; if not, add structured error surface in Tier 0.
-7) Does the save pipeline reload from ES before notifying other windows?
-   - Verifies: whether listeners operate on stale caches after save.
-   - Search: post-save callbacks in presenter/notifier, calls to `Load`/`Refresh` after `Save`.
-   - Plan change: if reload already happens, concentrate on single-source catalog access.
-8) How are dirty flags computed and reset?
-   - Verifies: inconsistent button enabling due to ad-hoc dirty tracking.
-   - Search: `SetDirty`, `_isDirty`, `IsDirty`, manual event detaches around mutations.
-   - Plan change: if centralized, deprioritize dirty refactor; otherwise, add versioned tracking in Tier 1.
-9) Are modeless windows prevented from opening multiple instances or mutating while commands execute?
-   - Verifies: window coordination and shared state safety.
-   - Search: static window instances/sentinels in window classes or external commands launching windows.
-   - Plan change: if window manager already exists, skip and focus on catalog/saves; else add coordination in Tier 2.
-10) Are Batch Export reads read-only projections or mutable shared collections?
-    - Verifies: whether Batch Export can mutate shared state or overwrite Workflow Manager changes.
-    - Search: Batch Export viewmodel bindings to catalog collections and any setters/mutations.
-    - Plan change: if read-only projections already used, reduce scope of read model work.
+## Observed structural smells
 
-## Minimum evidence to paste
-- Constructors/usages of `WorkflowCatalogService` (windows, presenters, external commands) showing scope/lifecycle.
-- `ProjectSettingsSaveExternalEvent` implementation: queue flags, callback management, error handling.
-- Any `RefreshCaches` or collection clearing in catalog/presenters (with bindings).
-- Save/close flow in `WorkflowManagerWindow` (timers/dispatchers) and notifier handlers in other windows.
-- Dirty tracking implementation (`IsDirty`/`SetDirty` or equivalents) in presenters/catalog.
+- **Multiple workflow catalog instances**: `WorkflowManagerWindow` creates a new `WorkflowCatalogService` per window when a `Document` is passed and otherwise falls back to DI or a new instance. This allows multiple in-memory catalogs pointing at the same Extensible Storage without coordination, leading to stale data and divergent `ObservableCollection` instances across windows.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L37-L102】
+- **Mutable backing state exposed directly to UI**: `WorkflowCatalogService` keeps a mutable `AppSettings` reference and repopulates `ObservableCollection` caches by clearing and re-adding items on every change. Any other view model bound to the collections sees destructive refreshes and selection loss, and the service mixes state, cache, and persistence concerns in one class.【F:src/GSADUs.Revit.Addin/Services/WorkflowCatalogService.cs†L14-L128】
+- **Event-notify without source-of-truth refresh**: `WorkflowManagerPresenter` notifies other windows after asynchronous saves via `WorkflowCatalogChangeNotifier`, but those windows rely on cached `_settings` loaded at construction and only refresh via ad-hoc handlers (e.g., `BatchExportWindow` queues a UI dispatcher call). There is no authoritative re-load from ES after saves, so subscribers operate on stale in-memory snapshots.【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L747-L758】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L43-L134】
+- **ExternalEvent used as persistence queue without back-pressure**: `ProjectSettingsSaveExternalEvent` simply enqueues callbacks and raises the ExternalEvent every request. There is no coalescing, throttling, or guarding against reentrancy while a save is in-flight, so repeated UI changes can queue redundant writes and out-of-order callback execution. Callbacks are replayed on the WPF dispatcher asynchronously, making button enable/disable and close flows racy.【F:src/GSADUs.Revit.Addin/UI/ProjectSettingsSaveExternalEvent.cs†L17-L83】
+- **Overlapping dirty/refresh logic**: The presenter manually detaches/re-attaches `PropertyChanged` handlers around every list mutation and uses `RefreshCaches` (which clears collections) followed by selection restoration. This pattern appears in multiple places and indicates the ViewModels are tightly coupled to the catalog’s collection implementation rather than a stable domain model, encouraging stale selections and double event firing.【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L216-L249】【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L669-L739】
+- **UI flow depends on timers and dispatcher hops**: `WorkflowManagerWindow`’s Save & Close uses a fallback `DispatcherTimer` to close the window if the save callback lags, masking threading/persistence uncertainty instead of fixing sequencing. Modeless windows combined with dispatcher hops make state transitions brittle.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L133-L172】
 
-## Primary refactor plan (Tier 0/1/2)
+## Crash/instability risks
+
+- **Concurrent ExternalEvent raises** causing overlapping ES transactions and callback reentrancy; failure paths swallow exceptions and continue UI closing, so state loss is silent.【F:src/GSADUs.Revit.Addin/UI/ProjectSettingsSaveExternalEvent.cs†L24-L80】【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L140-L170】
+- **Collection clearing while bound**: Clearing and repopulating `ObservableCollection` instances (via `RefreshCaches`) while views are bound risks `InvalidOperationException` in WPF if enumerated during updates, and it forces selection resets observed as “stale” or “dirty” toggling.【F:src/GSADUs.Revit.Addin/Services/WorkflowCatalogService.cs†L33-L43】【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L216-L249】
+- **Multiple catalogs per document**: Batch Export and Workflow Manager each load settings independently at construction and keep their own `_settings` snapshots. If one window saves while the other mutates its cached copy, later saves overwrite the first without merge, leading to data corruption and “lost” changes.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L52-L102】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L43-L134】
+- **Dispatcher exception swallowing**: Numerous `catch { }` blocks wrap dispatcher invokes and collection operations, hiding binding/serialization errors that could leave ViewModels partially updated and commands disabled unpredictably.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L112-L120】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L117-L134】
+
+## Data flow and ownership (target model)
+
+- **Workflow Manager window**: binds to a single `WorkflowCatalogService` instance injected from a DI container. The presenter reads/writes workflows through that service but does not own settings; it requests persistence via a save orchestrator.
+- **Batch Export window**: consumes read-only projections from the same catalog service (or a read-through query service) and registers as a listener for persisted changes. It should not maintain its own `_settings` copy; instead, it should request a fresh snapshot from the catalog when notified.
+- **Workflow catalog service**: single source of truth per Revit document. Owns the in-memory `AppSettings` and exposes immutable read models to UI (or change-tracked collections). Responsible for coordinating persistence via a single save queue.
+- **ES provider/writer**: stateless component that serializes/deserializes `AppSettings` from Extensible Storage. Should not be cached per window; invoked by the catalog to load/update state atomically.
+
+Data flow sketch:
+
+```
+UI Window (Workflow Manager / Batch Export)
+    -> Presenter/ViewModel -> Catalog Service (singleton per document)
+        -> ES Provider (load/save) on Revit API thread via single save queue
+    <- Catalog change notifications (post-save) used to re-query catalog for fresh snapshot
+```
+
+## Refactor plan
+
 ### Tier 0: Stop the bleeding (1–3 days)
-- **Single catalog per document, injected everywhere**
-  - Impact: eliminates divergent `_settings` and overwrites; ensures one source of truth.
-  - Risk: low (scoping/DI wiring), Effort: low.
-  - Acceptance: all windows/commands resolve the same catalog instance for a given `Document`; new instances only when document changes.
-- **Serialize + coalesce saves through one pipeline**
-  - Impact: prevents overlapping ES writes and stale callbacks; removes need for timer-based close.
-  - Risk: low-medium (threading), Effort: low-medium.
-  - Acceptance: `RequestSave` is idempotent while in-flight; saves execute sequentially; completion raises once per flush.
-- **Post-save reload before notifying**
-  - Impact: listeners always see authoritative state; fixes dirty/refresh inconsistencies.
-  - Risk: low, Effort: low.
-  - Acceptance: after each persisted save, catalog reloads from ES and then emits change event consumed by windows.
-- **Expose/save failure visibly**
-  - Impact: surfaces hidden corruption; aids support.
-  - Risk: low, Effort: low.
-  - Acceptance: no empty catch blocks around ES load/save; errors logged and shown once to UI.
+- **Enforce single catalog instance per document**: Remove per-window construction and resolve a scoped/singleton catalog through DI; reload settings from ES on notifier events instead of sharing stale copies. Impact: prevents divergent state and overwrite; Effort: low; Risk: low because it centralizes existing logic.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L88-L102】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L43-L134】
+- **Serialize saves with coalescing**: Gate `ProjectSettingsSaveExternalEvent.RequestSave` to drop/merge duplicate requests while one is running; invoke a single completion per flush. Impact: avoids race conditions and silent failures; Effort: low-medium; Risk: low since logic is localized.【F:src/GSADUs.Revit.Addin/UI/ProjectSettingsSaveExternalEvent.cs†L24-L80】
+- **Load-after-save contract**: After a successful save, force the catalog to reload from ES before notifying listeners, and have listeners refresh their view models from the catalog rather than mutating cached `_settings`. Impact: addresses stale UI and dirty flags; Effort: medium; Risk: low.【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L747-L758】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L117-L134】
 
 ### Tier 1: Make it reliable (1–2 weeks)
-- **Stable read models & incremental updates**
-  - Impact: stops selection loss and WPF binding churn.
-  - Risk: medium (binding changes), Effort: medium.
-  - Acceptance: bound collections aren’t cleared; updates are diffed or provided as immutable snapshots.
-- **Deterministic dirty/version tracking in catalog**
-  - Impact: consistent button enablement and Save visibility.
-  - Risk: low-medium, Effort: medium.
-  - Acceptance: a version/dirty token increments on mutation; UIs bind to it instead of manual handler toggles.
-- **Unified save orchestrator (API-thread sequencing)**
-  - Impact: removes dispatcher timers; predictable close flow.
-  - Risk: medium, Effort: medium.
-  - Acceptance: save pipeline steps are ordered: enqueue → API-thread ES write → reload catalog → notify → UI closes without timers.
+- **Introduce change-tracked domain model**: Replace `ObservableCollection` clearing with a change-tracked collection (e.g., `ReadOnlyObservableCollection` + diff updates) so bindings remain stable and selections persist. Impact: stabilizes UI state; Effort: medium; Risk: medium due to binding changes.【F:src/GSADUs.Revit.Addin/Services/WorkflowCatalogService.cs†L33-L76】
+- **Deterministic dirty state**: Move dirty tracking into the catalog with explicit version/timestamp increments and expose to view models; remove ad-hoc `SetDirty(false)` and handler detaches. Impact: consistent button enablement; Effort: medium; Risk: low-medium.【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L252-L292】【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L669-L739】
+- **Unify notifier/persistence pipeline**: Replace manual dispatcher timers and notifier patterns with a single save pipeline that (a) queues save requests, (b) performs ES writes on API thread, (c) reloads catalog, (d) raises a strongly-typed event. Impact: predictable sequencing between UI actions and Revit API; Effort: medium; Risk: medium.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L133-L172】【F:src/GSADUs.Revit.Addin/UI/ProjectSettingsSaveExternalEvent.cs†L24-L80】
 
 ### Tier 2: Make it clean (longer-term)
-- **Read/write separation with draft objects**
-  - Impact: isolates UI editing from live store; simplifies rollback.
-  - Risk: medium, Effort: high.
-  - Acceptance: UI edits apply to draft model; commit merges via catalog; read models are immutable.
-- **Window coordination service for modeless windows**
-  - Impact: prevents multiple instances and state conflicts during commands.
-  - Risk: low-medium, Effort: medium.
-  - Acceptance: single instance per window type per document; commands respect window state before running.
-- **Centralized telemetry/logging policy**
-  - Impact: quicker diagnosis, fewer silent failures.
-  - Risk: low, Effort: medium.
-  - Acceptance: all save/load/notification paths log structured errors and surface user-friendly alerts.
+- **Separate read models from write models**: Presenters/ViewModels consume immutable DTOs; edits happen against a detached draft that’s merged by the catalog. Impact: eliminates cross-tab coupling and refresh churn; Effort: high; Risk: medium.
+- **Modeless window coordination**: Introduce a lightweight window manager service to prevent multiple instances and to coordinate focus/refresh without static fields. Impact: removes singleton static hacks; Effort: medium; Risk: low-medium.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L21-L36】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L21-L41】
+- **Central error/logging policy**: Replace `catch { }` with structured logging and user-facing error channels; failures should not silently continue. Impact: faster diagnostics and fewer hidden corruptions; Effort: medium; Risk: low.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L112-L120】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L117-L134】
 
-## Secondary options (A/B)
-- **Option A: Saveless auto-save with “Saving…” state**
-  - Prerequisites: coalescing save queue; post-save reload contract; UI indicator binding to save in-flight flag.
-  - Removes: explicit Save & Close flow and dispatcher timers; reduces manual dirty toggles.
-- **Option B: Draft/commit model**
-  - Prerequisites: stable read models; catalog-managed drafts; merge/apply pipeline on API thread.
-  - Removes: cross-window overwrite risk and ad-hoc dirty tracking by isolating uncommitted edits.
+## Save/close vs. saveless
+
+Given settings live in ES and the catalog can own change-tracking, a **saveless model** is appropriate:
+- **Requirements**: single save queue (ExternalEvent) with coalescing/throttling; every mutation enqueues a save and applies in-memory immediately; post-save reload refreshes bindings; UI exposes a “saving…” indicator rather than a modal close flow.
+- **Rationale**: avoids timing hacks (DispatcherTimer), keeps modeless windows consistent, and leverages the single-user assumption—no need for explicit “Save & Close” once atomic queued saves are reliable.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L133-L172】【F:src/GSADUs.Revit.Addin/UI/ProjectSettingsSaveExternalEvent.cs†L24-L80】
+
+## Concrete inspection checklist
+
+- Locate all `ObservableCollection` usages and confirm whether items are mutated or collections are replaced/cleared (`WorkflowCatalogService.RefreshCaches`, presenter refresh routines).【F:src/GSADUs.Revit.Addin/Services/WorkflowCatalogService.cs†L33-L43】【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L216-L249】
+- Trace dispatcher usage, especially `DispatcherTimer` and `BeginInvoke` around save/close flows and catalog change handling.【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L133-L172】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L117-L134】
+- Identify every catalog service instantiation to ensure only one per document (Workflow Manager, Batch Export, any commands/utilities).【F:src/GSADUs.Revit.Addin/UI/WorkflowManagerWindow.xaml.cs†L88-L102】【F:src/GSADUs.Revit.Addin/UI/BatchExportWindow.xaml.cs†L109-L134】
+- Catalog refresh callers: find `RefreshCaches` invocations and redundant refresh/selection restore cycles; decide where a re-load from ES should occur instead.【F:src/GSADUs.Revit.Addin/Services/WorkflowCatalogService.cs†L33-L76】【F:src/GSADUs.Revit.Addin/UI/Presenters/WorkflowManagerPresenter.cs†L669-L739】
+- ES writes: confirm error handling/logging around `EsProjectSettingsProvider.Save` and `ProjectSettingsSaveExternalEvent`; ensure failures bubble to UI instead of silent catch-all.【F:src/GSADUs.Revit.Addin/Infrastructure/EsProjectSettingsProvider.cs†L69-L153】【F:src/GSADUs.Revit.Addin/UI/ProjectSettingsSaveExternalEvent.cs†L37-L83】
+- Window modality/modelessness: review static singleton patterns and how ExternalCommand execution launches windows, ensuring commands don’t run while modeless windows mutate shared state.
+
+## Top 5 highest ROI changes
+
+1. Make `WorkflowCatalogService` a single scoped instance per document and force all windows to use it (no per-window `_settings`).
+2. Add a coalescing save queue (single ExternalEvent) that reloads settings from ES before firing change notifications.
+3. Replace collection clears with incremental updates or stable read models to keep bindings and dirty flags consistent.
+4. Centralize dirty/version tracking in the catalog and expose a deterministic “saving/saved” status instead of timers.
+5. Remove silent catches; route errors through a shared logger and user notifier so persistence issues aren’t hidden.
 
 ## Top 5 traps to avoid
-1. Spawning new `WorkflowCatalogService` per window or command.
-2. Clearing/replacing bound `ObservableCollection` instances instead of diffing.
-3. Raising `ExternalEvent` repeatedly without coalescing/back-pressure.
-4. Using dispatcher timers to mask save sequencing issues.
-5. Swallowing exceptions around ES reads/writes or dispatcher callbacks.
+
+1. Creating new `WorkflowCatalogService` instances per window—causes divergent state and overwrites.
+2. Clearing/replacing bound `ObservableCollection` instances—breaks selection and triggers binding errors.
+3. Raising ExternalEvent repeatedly without throttling—can interleave transactions and callbacks unpredictably.
+4. Using dispatcher timers to mask save sequencing—hides real race conditions and risks silent data loss.
+5. Swallowing exceptions in dispatchers/binding handlers—leads to undiagnosed crashes and disabled commands.
