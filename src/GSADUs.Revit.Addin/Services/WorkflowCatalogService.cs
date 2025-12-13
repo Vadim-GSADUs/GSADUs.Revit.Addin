@@ -15,6 +15,7 @@ namespace GSADUs.Revit.Addin
     {
         private readonly IProjectSettingsProvider _projectSettingsProvider;
         private AppSettings _settings;
+        private bool _hasPendingChanges;
 
         public ObservableCollection<WorkflowDefinition> Workflows { get; } = new();
         public ObservableCollection<string> SavedWorkflowNames { get; } = new();
@@ -27,6 +28,7 @@ namespace GSADUs.Revit.Addin
         }
 
         public AppSettings Settings => _settings;
+        public bool HasPendingChanges => _hasPendingChanges;
 
         public void RefreshCaches()
         {
@@ -52,8 +54,7 @@ namespace GSADUs.Revit.Addin
             };
             _settings.Workflows ??= new List<WorkflowDefinition>();
             _settings.Workflows.Add(wf);
-            Save();
-            RefreshCaches();
+            MarkDirtyAndRefresh();
             return wf;
         }
 
@@ -62,17 +63,17 @@ namespace GSADUs.Revit.Addin
             var wf = Find(id);
             if (wf == null) return;
             wf.Name = newName;
-            SaveAndRefresh();
+            MarkDirtyAndRefresh();
         }
 
         public bool Delete(string id)
         {
             if (_settings.Workflows == null) return false;
-            int before = _settings.Workflows.Count;
-            _settings.Workflows.RemoveAll(w => w.Id == id);
+            int removed = _settings.Workflows.RemoveAll(w => w.Id == id);
+            if (removed == 0) return false;
             _settings.SelectedWorkflowIds?.RemoveAll(x => _settings.Workflows.All(w => w.Id != x));
-            SaveAndRefresh();
-            return _settings.Workflows.Count < before;
+            MarkDirtyAndRefresh();
+            return true;
         }
 
         public WorkflowDefinition? Duplicate(string id, string? newName = null)
@@ -94,20 +95,34 @@ namespace GSADUs.Revit.Addin
             };
             _settings.Workflows ??= new List<WorkflowDefinition>();
             _settings.Workflows.Add(clone);
-            SaveAndRefresh();
+            MarkDirtyAndRefresh();
             return clone;
         }
 
         public WorkflowDefinition? Find(string id) => _settings.Workflows?.FirstOrDefault(w => w.Id == id);
 
-        public void Save()
+        public bool Save() => Save(force: false);
+
+        public bool Save(bool force)
         {
+            if (!force && !_hasPendingChanges) return false;
             _projectSettingsProvider.Save(_settings);
+            _hasPendingChanges = false;
+            return true;
         }
 
-        public void SaveAndRefresh()
+        public bool SaveAndRefresh()
         {
-            Save();
+            var hadChanges = _hasPendingChanges;
+            var persisted = Save();
+            if (hadChanges)
+                RefreshCaches();
+            return persisted;
+        }
+
+        private void MarkDirtyAndRefresh()
+        {
+            _hasPendingChanges = true;
             RefreshCaches();
         }
     }

@@ -42,6 +42,7 @@ namespace GSADUs.Revit.Addin
             // Settings-driven workflow plan registry
             services.AddSingleton<IWorkflowPlanRegistry, WorkflowPlanRegistry>();
 
+            services.AddSingleton<WorkflowCatalogChangeNotifier>();
             // Actions registry (UI picks from here)
             services.AddSingleton<IActionRegistry, ActionRegistry>();
 

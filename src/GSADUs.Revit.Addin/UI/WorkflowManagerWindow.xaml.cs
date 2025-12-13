@@ -12,6 +12,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Diagnostics;
+using System.Windows.Threading;
 
 namespace GSADUs.Revit.Addin.UI
 {
@@ -49,7 +50,9 @@ namespace GSADUs.Revit.Addin.UI
 
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
             _catalog = CreateCatalog(doc);
-            _presenter = new WorkflowManagerPresenter(_catalog, _dialogs);
+            var notifier = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogChangeNotifier)) as WorkflowCatalogChangeNotifier
+                           ?? new WorkflowCatalogChangeNotifier();
+            _presenter = new WorkflowManagerPresenter(_catalog, _dialogs, notifier);
             _vm = new WorkflowManagerViewModel(_catalog, _presenter);
             _settings = _catalog.Settings;
             _doc = doc;
@@ -129,8 +132,43 @@ namespace GSADUs.Revit.Addin.UI
 
         private void SaveCloseBtn_Click(object sender, RoutedEventArgs e)
         {
-            _presenter.SaveSettings();
-            this.Close();
+            if (sender is Button btn)
+            {
+                btn.IsEnabled = false;
+            }
+
+            var dispatcher = Dispatcher;
+            var fallbackTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2)
+            };
+
+            void CompleteClose(bool success)
+            {
+                fallbackTimer.Stop();
+                if (sender is Button sourceBtn)
+                {
+                    sourceBtn.IsEnabled = true;
+                }
+
+                if (!success)
+                {
+                    _dialogs.Info("Save Workflows", "Unable to persist workflow changes. See log for details.");
+                }
+
+                Close();
+            }
+
+            fallbackTimer.Tick += (_, _) =>
+            {
+                dispatcher?.BeginInvoke(new Action(() => CompleteClose(success: true)));
+            };
+            fallbackTimer.Start();
+
+            _presenter.SaveSettings(success =>
+            {
+                dispatcher?.BeginInvoke(new Action(() => CompleteClose(success)));
+            });
         }
 
         private void InitializeWorkflowsListSorting()

@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 using ListView = System.Windows.Controls.ListView;
 // Aliases
 using TextBox = System.Windows.Controls.TextBox;
@@ -43,6 +44,8 @@ namespace GSADUs.Revit.Addin.UI
         private readonly IProjectSettingsProvider _settingsProvider;
         private AppSettings _settings;
         public BatchRunOptions? Result { get; private set; }
+        private readonly WorkflowCatalogChangeNotifier? _catalogNotifier;
+        private IDisposable? _catalogSubscription;
 
         private BatchExportPrefs _prefs = BatchExportPrefs.Load();
         private bool _curationAppliedFlag; // tracks if SSM Save&Log occurred this session and deferred apply executed
@@ -110,6 +113,18 @@ namespace GSADUs.Revit.Addin.UI
             _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
                                ?? new EsProjectSettingsProvider(() => _uidoc?.Document ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
             _settings = _settingsProvider.Load();
+            _catalogNotifier = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogChangeNotifier)) as WorkflowCatalogChangeNotifier;
+            if (_catalogNotifier != null)
+            {
+                _catalogSubscription = _catalogNotifier.Subscribe((_, __) =>
+                {
+                    try
+                    {
+                        Dispatcher.BeginInvoke(new Action(OnCatalogChanged), DispatcherPriority.Background);
+                    }
+                    catch { }
+                });
+            }
             RegisterInstance();
             this.Width = _prefs.WindowWidth > 0 ? _prefs.WindowWidth : this.Width;
             this.Height = _prefs.WindowHeight > 0 ? _prefs.WindowHeight : this.Height;
@@ -148,6 +163,9 @@ namespace GSADUs.Revit.Addin.UI
                 BatchExportPrefs.Save(_prefs);
             }
             catch { }
+
+            _catalogSubscription?.Dispose();
+            _catalogSubscription = null;
         }
 
         private static void SaveColumnOrder(ListView lv, List<string> target, bool skipFirst)
@@ -202,6 +220,16 @@ namespace GSADUs.Revit.Addin.UI
             var existing = new HashSet<string>(_setRows.Select(r => r.Key), StringComparer.OrdinalIgnoreCase);
             var toRemove = _selectedSetIds.Where(k => !existing.Contains(k)).ToList();
             foreach (var k in toRemove) _selectedSetIds.Remove(k);
+        }
+
+        private void OnCatalogChanged()
+        {
+            try
+            {
+                _settings = _settingsProvider.Load();
+                LoadWorkflowsIntoList();
+            }
+            catch { }
         }
 
         private void LoadCsvIntoSetsList()

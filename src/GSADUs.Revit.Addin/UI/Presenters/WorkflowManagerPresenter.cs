@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Threading;
 using GSADUs.Revit.Addin.Workflows.Pdf;
 using GSADUs.Revit.Addin.Workflows.Image;
 
@@ -16,13 +17,16 @@ namespace GSADUs.Revit.Addin.UI
     {
         private readonly WorkflowCatalogService _catalog;
         private readonly IDialogService _dialogs;
+        private readonly ProjectSettingsSaveExternalEvent _settingsSaver;
+        private readonly WorkflowCatalogChangeNotifier _catalogNotifier;
 
         public PdfWorkflowTabViewModel PdfWorkflow { get; } = new PdfWorkflowTabViewModel();
         public ImageWorkflowTabViewModel ImageWorkflow { get; } = new ImageWorkflowTabViewModel();
 
         public WorkflowManagerPresenter(
             WorkflowCatalogService catalog,
-            IDialogService dialogs)
+            IDialogService dialogs,
+            WorkflowCatalogChangeNotifier catalogNotifier)
         {
             // File-based Trace listener setup
             try
@@ -45,6 +49,10 @@ namespace GSADUs.Revit.Addin.UI
 
             _catalog = catalog;
             _dialogs = dialogs;
+            _catalogNotifier = catalogNotifier ?? throw new ArgumentNullException(nameof(catalogNotifier));
+
+            var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+            _settingsSaver = new ProjectSettingsSaveExternalEvent(_catalog, dispatcher);
 
             // Initialize scope options: PDF/Image are SelectionSet only
             var scopesPdfImg = new[] { "SelectionSet" };
@@ -367,7 +375,13 @@ namespace GSADUs.Revit.Addin.UI
                 if (dlg.ShowDialog() == true)
                 {
                     Settings.ImageWhitelistCategoryIds = dlg.ResultIds?.Distinct().ToList() ?? new List<int>();
-                    try { _catalog.Save(); } catch (Exception ex) { Debug.WriteLine(ex); throw; }
+                    RequestCatalogSave(success =>
+                    {
+                        if (!success)
+                        {
+                            _dialogs.Info("Image Whitelist", "Failed to persist whitelist changes. Please try again.");
+                        }
+                    });
                     // Update summary immediately after selection
                     var summary = ComputeImageWhitelistSummary();
                     ImageWorkflow.WhitelistSummary = summary;
@@ -666,7 +680,7 @@ namespace GSADUs.Revit.Addin.UI
                 ImageWorkflow.PropertyChanged -= VmOnPropertyChanged;
                 CsvWorkflow.PropertyChanged -= VmOnPropertyChanged;
 
-                _catalog.SaveAndRefresh();
+                _catalog.RefreshCaches();
                 PopulateSavedLists();
 
                 // Restore selection for PDF tab after save
@@ -715,11 +729,39 @@ namespace GSADUs.Revit.Addin.UI
                 CsvWorkflow.PropertyChanged -= VmOnPropertyChanged;
                 CsvWorkflow.PropertyChanged += VmOnPropertyChanged;
             }
+
+            RequestCatalogSave(success =>
+            {
+                if (!success)
+                {
+                    _dialogs.Info("Save Workflow", "Failed to persist workflow changes. Please try again.");
+                }
+            });
         }
 
-        public void SaveSettings()
+        public void SaveSettings(Action<bool>? onCompleted = null)
         {
-            _catalog.Save();
+            RequestCatalogSave(onCompleted);
+        }
+
+        private void RequestCatalogSave(Action<bool>? continuation)
+        {
+            try
+            {
+                _settingsSaver.RequestSave(success =>
+                {
+                    if (success)
+                    {
+                        try { _catalogNotifier.NotifyChanged(); } catch (Exception ex) { Trace.WriteLine(ex); }
+                    }
+                    continuation?.Invoke(success);
+                });
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(ex);
+                continuation?.Invoke(false);
+            }
         }
 
         private void ImageWorkflow_PropertyChanged(object sender, PropertyChangedEventArgs e)
