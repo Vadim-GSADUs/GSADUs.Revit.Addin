@@ -376,7 +376,7 @@ namespace GSADUs.Revit.Addin.UI
                 }
             });
 
-            DialogResult = true;
+            Close();
         }
     }
 }

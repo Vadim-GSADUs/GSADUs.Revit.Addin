@@ -560,11 +560,11 @@ namespace GSADUs.Revit.Addin.UI
 
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
-            var win = new SettingsWindow(_settings, _uidoc?.Document) { Owner = this };
-            try { win.ShowDialog(); } catch { }
-            _settings = _settingsProvider.Load();
-            LoadCsvIntoSetsList();
-            LoadWorkflowsIntoList();
+            try
+            {
+                SettingsWindowHost.ShowOrActivate(_uidoc?.Document, this);
+            }
+            catch { }
         }
 
         private void Audit_Click(object sender, RoutedEventArgs e)
