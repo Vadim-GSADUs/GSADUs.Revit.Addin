@@ -1,6 +1,5 @@
 using Autodesk.Revit.UI;
 using GSADUs.Revit.Addin.Abstractions;
-using GSADUs.Revit.Addin.Infrastructure;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel; // for ICollectionView & INotifyPropertyChanged
@@ -837,10 +836,11 @@ namespace GSADUs.Revit.Addin.UI
 
         private void ManageWorkflows_Click(object sender, RoutedEventArgs e)
         {
-            var win = new WorkflowManagerWindow(_uidoc?.Document, _settings) { Owner = this };
-            try { win.ShowDialog(); } catch { }
-            _settings = _settingsProvider.Load();
-            LoadWorkflowsIntoList();
+            try
+            {
+                WorkflowManagerWindowHost.ShowOrActivate(_uidoc?.Document, this);
+            }
+            catch { }
         }
     }
 }

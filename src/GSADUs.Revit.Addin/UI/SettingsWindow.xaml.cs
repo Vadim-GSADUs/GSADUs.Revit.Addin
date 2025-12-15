@@ -314,8 +314,11 @@ namespace GSADUs.Revit.Addin.UI
 
         private void ManageWorkflowsBtn_Click(object sender, RoutedEventArgs e)
         {
-            var win = new WorkflowManagerWindow(_doc, _settingsProvider.Load()) { Owner = this };
-            try { win.ShowDialog(); } catch { }
+            try
+            {
+                WorkflowManagerWindowHost.ShowOrActivate(_doc, this);
+            }
+            catch { }
         }
 
         private void OK_Click(object sender, RoutedEventArgs e)
