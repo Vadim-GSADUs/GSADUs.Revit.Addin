@@ -40,9 +40,10 @@ namespace GSADUs.Revit.Addin.UI
         // --- end singleton management ---
 
         private readonly UIDocument _uidoc;
+        private readonly Autodesk.Revit.DB.Document? _doc;
         private readonly IProjectSettingsProvider _settingsProvider;
         private AppSettings _settings;
-        public BatchRunOptions? Result { get; private set; }
+        public event Action<BatchRunOptions>? RunRequested;
         private readonly WorkflowCatalogChangeNotifier? _catalogNotifier;
         private IDisposable? _catalogSubscription;
 
@@ -110,6 +111,7 @@ namespace GSADUs.Revit.Addin.UI
         {
             InitializeComponent();
             _uidoc = uidoc;
+            _doc = uidoc?.Document;
 
             _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider;
             if (_settingsProvider == null)
@@ -211,7 +213,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private string ResolveLogPath()
         {
-            var doc = _uidoc?.Document;
+            var doc = _doc;
             if (doc == null) throw new InvalidOperationException("No active document.");
             var logDir = _settingsProvider.GetEffectiveLogDir(_settings);
             if (string.IsNullOrWhiteSpace(logDir)) throw new InvalidOperationException("Log directory is not configured.");
@@ -560,11 +562,26 @@ namespace GSADUs.Revit.Addin.UI
 
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
+            System.Diagnostics.Trace.WriteLine("Settings_Click invoked");
+            if (_doc == null)
+            {
+                ShowShortError("No active document; cannot open Settings.");
+                return;
+            }
+
             try
             {
-                SettingsWindowHost.ShowOrActivate(_uidoc?.Document, this);
+                SettingsWindowHost.ShowOrActivate(_doc, this);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                try
+                {
+                    System.Diagnostics.Trace.WriteLine(ex.ToString());
+                    MessageBox.Show(this, ex.ToString(), "Open Settings failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch { }
+            }
         }
 
         private void Audit_Click(object sender, RoutedEventArgs e)
@@ -817,7 +834,7 @@ namespace GSADUs.Revit.Addin.UI
             }
             catch { }
 
-            Result = new BatchRunOptions
+            var options = new BatchRunOptions
             {
                 SetIds = selectedIds,
                 SetNames = selectedNames,
@@ -825,7 +842,15 @@ namespace GSADUs.Revit.Addin.UI
                 Overwrite = _settings.DefaultOverwrite,
                 SaveBefore = _settings.DefaultSaveBefore
             };
-            this.DialogResult = true;
+
+            try
+            {
+                System.Diagnostics.Trace.WriteLine("RunRequested raised");
+                RunRequested?.Invoke(options);
+            }
+            catch { }
+
+            Close();
         }
 
         private void ShowShortError(string message)
@@ -836,11 +861,26 @@ namespace GSADUs.Revit.Addin.UI
 
         private void ManageWorkflows_Click(object sender, RoutedEventArgs e)
         {
+            System.Diagnostics.Trace.WriteLine("ManageWorkflows_Click invoked");
+            if (_doc == null)
+            {
+                ShowShortError("No active document; cannot open Workflow Manager.");
+                return;
+            }
+
             try
             {
-                WorkflowManagerWindowHost.ShowOrActivate(_uidoc?.Document, this);
+                WorkflowManagerWindowHost.ShowOrActivate(_doc, this);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                try
+                {
+                    System.Diagnostics.Trace.WriteLine(ex.ToString());
+                    MessageBox.Show(this, ex.ToString(), "Open Workflows failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch { }
+            }
         }
     }
 }

@@ -8,7 +8,7 @@ namespace GSADUs.Revit.Addin.UI
     {
         private static readonly Dictionary<string, WorkflowManagerWindow> _windows = new();
 
-        public static void ShowOrActivate(Document? doc, Window? owner = null)
+        public static WorkflowManagerWindow ShowOrActivate(Document? doc, Window? owner = null)
         {
             var key = GetKey(doc);
             if (_windows.TryGetValue(key, out var existing))
@@ -18,16 +18,30 @@ namespace GSADUs.Revit.Addin.UI
                     try
                     {
                         if (!existing.IsVisible) existing.Show();
-                        existing.Topmost = true;
                         existing.Activate();
+                        existing.Topmost = true;
                         existing.Topmost = false;
-                        return;
+                        return existing;
                     }
                     catch { }
                 }
             }
 
-            var win = new WorkflowManagerWindow(doc, null);
+            WorkflowManagerWindow win;
+            try
+            {
+                win = new WorkflowManagerWindow(doc, null);
+            }
+            catch (System.Exception ex)
+            {
+                try
+                {
+                    System.Diagnostics.Trace.WriteLine(ex.ToString());
+                    MessageBox.Show(ex.ToString(), "WorkflowManagerWindowHost failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch { }
+                throw;
+            }
             if (owner != null)
             {
                 try { win.Owner = owner; } catch { }
@@ -42,8 +56,16 @@ namespace GSADUs.Revit.Addin.UI
                 }
                 catch { }
             };
-
             win.Show();
+            try
+            {
+                win.Activate();
+                win.Topmost = true;
+                win.Topmost = false;
+            }
+            catch { }
+
+            return win;
         }
 
         private static string GetKey(Document? doc)

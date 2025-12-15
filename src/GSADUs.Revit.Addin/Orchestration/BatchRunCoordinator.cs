@@ -30,24 +30,14 @@ namespace GSADUs.Revit.Addin.Orchestration
             var allSetsInitial = SelectionSets.Get(doc);
             Trace.WriteLine($"COLLECT_SHEETS initial={allSetsInitial.Count} corr={Logging.RunLog.CorrId}");
 
-            bool anyCompleted = false;
-            while (true)
+            // Modeless flow: open or activate BatchExportWindow and let it drive runs via callback.
+            var win = BatchExportWindowHost.ShowOrActivate(uidoc, owner: null);
+            if (win != null)
             {
-                var outcome = RunOnce(uiapp, uidoc);
-                if (outcome == RunOutcome.Completed)
-                {
-                    anyCompleted = true;
-                    continue;
-                }
-                else if (outcome == RunOutcome.CancelledDuringRun)
-                {
-                    return Result.Cancelled;
-                }
-                else
-                {
-                    return anyCompleted ? Result.Succeeded : Result.Cancelled;
-                }
+                win.RunRequested -= uiOpts => { };
+                win.RunRequested += uiOpts => OnRunRequested(uiapp, uidoc, uiOpts);
             }
+            return Result.Succeeded;
         }
 
         public static Result Run(ExternalCommandData commandData)
@@ -56,24 +46,13 @@ namespace GSADUs.Revit.Addin.Orchestration
             var uidoc = uiapp?.ActiveUIDocument;
             if (uidoc == null) return Result.Cancelled;
 
-            bool anyCompleted = false;
-            while (true)
+            var win = BatchExportWindowHost.ShowOrActivate(uidoc, owner: null);
+            if (win != null)
             {
-                var outcome = RunOnce(uiapp, uidoc);
-                if (outcome == RunOutcome.Completed)
-                {
-                    anyCompleted = true;
-                    continue;
-                }
-                else if (outcome == RunOutcome.CancelledDuringRun)
-                {
-                    return Result.Cancelled;
-                }
-                else
-                {
-                    return anyCompleted ? Result.Succeeded : Result.Cancelled;
-                }
+                win.RunRequested -= uiOpts => { };
+                win.RunRequested += uiOpts => OnRunRequested(uiapp, uidoc, uiOpts);
             }
+            return Result.Succeeded;
         }
 
         private static bool IsCsvEntireProjectSelected(AppSettings appSettings)
@@ -105,19 +84,48 @@ namespace GSADUs.Revit.Addin.Orchestration
             Trace.WriteLine($"COLLECT_SHEETS requested={allSetsForWindow.Count} corr={Logging.RunLog.CorrId}");
 
             // Allow dialog even when zero filters exist; window may allow CSV EntireProject runs.
-            var win = new UI.BatchExportWindow(allSetsForWindow.Select(s => s.Name), uidoc) { Owner = null };
-            Trace.WriteLine("OPEN WorkflowManagerWindow corr=" + Logging.RunLog.CorrId);
-
-            if (win.ShowDialog() != true)
+            var win = BatchExportWindowHost.ShowOrActivate(uidoc, owner: null);
+            if (win != null)
             {
-                Trace.WriteLine("SKIP user-cancel corr=" + Logging.RunLog.CorrId);
-                return RunOutcome.CanceledBeforeStart;
+                win.RunRequested -= uiOpts => { };
+                win.RunRequested += uiOpts => OnRunRequested(uiapp, uidoc, uiOpts);
             }
 
-            var isDryRun = win.IsDryRun();
+            return RunOutcome.Completed;
+        }
+
+        private static void OnRunRequested(UIApplication uiapp, UIDocument uidoc, BatchRunOptions uiOpts)
+        {
+            try
+            {
+                Trace.WriteLine("RunRequested received");
+                Trace.WriteLine("Starting batch execution");
+            }
+            catch { }
+
+            try
+            {
+                var projectSettingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                                              ?? new EsProjectSettingsProvider();
+                var logFactory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory ?? new CsvBatchLogger();
+                var actionRegistry = ServiceBootstrap.Provider.GetService(typeof(IActionRegistry)) as IActionRegistry ?? new ActionRegistry();
+                var allActions = ServiceBootstrap.Provider.GetServices<IExportAction>().ToList();
+
+                _ = ExecuteRun(uiapp, uidoc, projectSettingsProvider, logFactory, actionRegistry, allActions, uiOpts);
+            }
+            catch (Exception ex)
+            {
+                try { Trace.WriteLine(ex); } catch { }
+            }
+        }
+
+        private static RunOutcome ExecuteRun(UIApplication uiapp, UIDocument uidoc, IProjectSettingsProvider projectSettingsProvider, IBatchLogFactory logFactory, IActionRegistry actionRegistry, List<IExportAction> allActions, BatchRunOptions uiOpts)
+        {
+            var dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
+            var doc = uidoc.Document;
 
             var appSettings = projectSettingsProvider.Load();
-            var uiOpts = win.Result!; // contains SetIds + SetNames
+            var isDryRun = appSettings.DryrunDiagnostics;
 
             // Build action ids list from selected workflows into settings DTO
             var selectedWorkflowIds = new HashSet<string>(appSettings.SelectedWorkflowIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
