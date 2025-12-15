@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Default Revit 2026 installation path; can be overridden via REVIT_2026_PATH environment variable -->
+    <Revit2026Path Condition="'$(Revit2026Path)' == ''">$(REVIT_2026_PATH)</Revit2026Path>
+    <Revit2026Path Condition="'$(Revit2026Path)' == ''">C:\Program Files\Autodesk\Revit 2026\</Revit2026Path>
+  </PropertyGroup>
+</Project>

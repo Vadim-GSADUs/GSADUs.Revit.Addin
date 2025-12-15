@@ -27,7 +27,8 @@ namespace GSADUs.Revit.Addin.UI
         public WorkflowManagerPresenter(
             WorkflowCatalogService catalog,
             IDialogService dialogs,
-            WorkflowCatalogChangeNotifier catalogNotifier)
+            WorkflowCatalogChangeNotifier catalogNotifier,
+            ProjectSettingsSaveExternalEvent settingsSaver)
         {
             // File-based Trace listener setup
             try
@@ -52,8 +53,7 @@ namespace GSADUs.Revit.Addin.UI
             _dialogs = dialogs;
             _catalogNotifier = catalogNotifier ?? throw new ArgumentNullException(nameof(catalogNotifier));
 
-            var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
-            _settingsSaver = new ProjectSettingsSaveExternalEvent(_catalog, dispatcher);
+            _settingsSaver = settingsSaver ?? throw new ArgumentNullException(nameof(settingsSaver));
 
             // Initialize scope options: PDF/Image are SelectionSet only
             var scopesPdfImg = new[] { "SelectionSet" };

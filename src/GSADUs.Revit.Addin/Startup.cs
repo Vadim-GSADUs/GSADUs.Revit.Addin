@@ -20,9 +20,6 @@ namespace GSADUs.Revit.Addin
 
         public Result OnStartup(UIControlledApplication app)
         {
-            // Initialize DI container early
-            _ = ServiceBootstrap.Provider;
-
             var panel = app.GetRibbonPanels(Tab.AddIns).FirstOrDefault(p => p.Name == "GSADUs")
                      ?? app.CreateRibbonPanel(Tab.AddIns, "GSADUs");
 

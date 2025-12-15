@@ -14,9 +14,33 @@ namespace GSADUs.Revit.Addin
     internal static class ServiceBootstrap
     {
         private static ServiceProvider? _provider;
-        public static ServiceProvider Provider => _provider ??= ConfigureServices();
+		private static readonly object _sync = new();
 
-        private static ServiceProvider ConfigureServices()
+		public static ServiceProvider Provider
+		{
+			get
+			{
+				if (_provider == null)
+				{
+					throw new InvalidOperationException("ServiceBootstrap not initialized.");
+				}
+				return _provider;
+			}
+		}
+
+		public static void InitializeOrThrow(UIApplication uiapp)
+		{
+			if (_provider != null) return;
+			if (uiapp == null) throw new ArgumentNullException(nameof(uiapp));
+			lock (_sync)
+			{
+				if (_provider != null) return;
+				_provider = ConfigureServices();
+				System.Diagnostics.Trace.WriteLine("ServiceBootstrap initialized");
+			}
+		}
+
+		private static ServiceProvider ConfigureServices()
         {
             var services = new ServiceCollection();
 
@@ -55,6 +79,17 @@ namespace GSADUs.Revit.Addin
             // Phase 2: settings persistence abstraction and catalog/presenter scaffolding
             services.AddSingleton<ISettingsPersistence, SettingsPersistence>();
             services.AddSingleton<IProjectSettingsProvider, EsProjectSettingsProvider>();
+
+            // Project settings save external event: create once in valid Revit API context
+            services.AddSingleton<GSADUs.Revit.Addin.UI.ProjectSettingsSaveExternalEvent>(sp =>
+            {
+                var catalog = sp.GetRequiredService<WorkflowCatalogService>();
+                var dispatcher = System.Windows.Application.Current?.Dispatcher
+                                 ?? System.Windows.Threading.Dispatcher.CurrentDispatcher;
+                // ExternalEvent.Create will run here during startup, under a valid UIApplication context
+                return new GSADUs.Revit.Addin.UI.ProjectSettingsSaveExternalEvent(catalog, dispatcher);
+            });
+
             services.AddSingleton<IProjectSettingsSaveService, ProjectSettingsSaveService>();
             services.AddSingleton<WorkflowCatalogService>();
             services.AddSingleton<GSADUs.Revit.Addin.UI.WorkflowManagerPresenter>();
@@ -68,6 +103,7 @@ namespace GSADUs.Revit.Addin
         public Result Run(UIApplication uiapp, UIDocument uidoc)
         {
             // Persist current UIApplication for UI usage (PostCommand etc.)
+			ServiceBootstrap.InitializeOrThrow(uiapp);
             RevitUiContext.Current = uiapp;
             return BatchRunCoordinator.RunCore(uiapp, uidoc);
         }

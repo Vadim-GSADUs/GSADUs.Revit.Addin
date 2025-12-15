@@ -56,7 +56,19 @@ namespace GSADUs.Revit.Addin.UI
             var notifier = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogChangeNotifier)) as WorkflowCatalogChangeNotifier
                            ?? throw new InvalidOperationException("WorkflowCatalogChangeNotifier is not registered in DI.");
 
-            _presenter = new WorkflowManagerPresenter(_catalog, _dialogs, notifier);
+            var saver = ServiceBootstrap.Provider.GetService(typeof(ProjectSettingsSaveExternalEvent)) as ProjectSettingsSaveExternalEvent;
+            if (saver == null)
+            {
+                MessageBox.Show(this,
+                    "Settings save service is not available. Please restart Revit or reinstall the add-in.",
+                    "Workflow Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                IsEnabled = false;
+                return;
+            }
+
+            _presenter = new WorkflowManagerPresenter(_catalog, _dialogs, notifier, saver);
             _vm = new WorkflowManagerViewModel(_catalog, _presenter);
             _settings = _catalog.Settings;
             _doc = doc;

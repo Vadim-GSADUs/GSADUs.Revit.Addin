@@ -29,11 +29,10 @@ namespace GSADUs.Revit.Addin
         private readonly WorkflowCatalogService _catalog;
         private readonly UI.ProjectSettingsSaveExternalEvent _saver;
 
-        public ProjectSettingsSaveService(WorkflowCatalogService catalog)
+        public ProjectSettingsSaveService(WorkflowCatalogService catalog, UI.ProjectSettingsSaveExternalEvent saver)
         {
             _catalog = catalog ?? throw new System.ArgumentNullException(nameof(catalog));
-            var dispatcher = System.Windows.Application.Current?.Dispatcher ?? System.Windows.Threading.Dispatcher.CurrentDispatcher;
-            _saver = new UI.ProjectSettingsSaveExternalEvent(_catalog, dispatcher);
+            _saver = saver ?? throw new System.ArgumentNullException(nameof(saver));
         }
 
         public void RequestSave(AppSettings newSettings, System.Action<bool>? onCompleted = null)
