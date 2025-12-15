@@ -56,8 +56,17 @@ namespace GSADUs.Revit.Addin.UI
             RegisterInstance();
 
             _doc = doc;
-            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                               ?? new EsProjectSettingsProvider(() => _doc ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider;
+            if (_settingsProvider == null)
+            {
+                MessageBox.Show(this,
+                    "Settings persistence is not available. Please restart Revit or reinstall the add-in.",
+                    "Settings",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                IsEnabled = false;
+                return;
+            }
             _settings = settings ?? _settingsProvider.Load();
 
             StageMoveModeCombo.ItemsSource = new[] { "CentroidToOrigin", "MinToOrigin" };

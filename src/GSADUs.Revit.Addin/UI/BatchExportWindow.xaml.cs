@@ -49,6 +49,7 @@ namespace GSADUs.Revit.Addin.UI
 
         private BatchExportPrefs _prefs = BatchExportPrefs.Load();
         private bool _curationAppliedFlag; // tracks if SSM Save&Log occurred this session and deferred apply executed
+        private bool _workflowSelectionDirty; // tracks if SelectedWorkflowIds changed and need persistence
 
         // Persist currently selected SetIds across grid refresh / external dialog re-entry
         private readonly HashSet<string> _selectedSetIds = new(StringComparer.OrdinalIgnoreCase);
@@ -110,9 +111,21 @@ namespace GSADUs.Revit.Addin.UI
         {
             InitializeComponent();
             _uidoc = uidoc;
-            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                               ?? new EsProjectSettingsProvider(() => _uidoc?.Document ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
+
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider;
+            if (_settingsProvider == null)
+            {
+                MessageBox.Show(this,
+                    "Settings persistence is not available. Please restart Revit or reinstall the add-in.",
+                    "Batch Export",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                IsEnabled = false;
+                return;
+            }
+
             _settings = _settingsProvider.Load();
+
             _catalogNotifier = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogChangeNotifier)) as WorkflowCatalogChangeNotifier;
             if (_catalogNotifier != null)
             {
@@ -418,7 +431,7 @@ namespace GSADUs.Revit.Addin.UI
                     .Select(w => w.Id)
                     .ToList();
                 _settings.SelectedWorkflowIds = visibleSelected;
-                _settingsProvider.Save(_settings);
+                _workflowSelectionDirty = true;
             }
             catch { }
         }

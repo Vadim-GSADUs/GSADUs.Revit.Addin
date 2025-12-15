@@ -49,9 +49,13 @@ namespace GSADUs.Revit.Addin.UI
             RegisterInstance();
 
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
-            _catalog = CreateCatalog(doc);
+
+            _catalog = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogService)) as WorkflowCatalogService
+                       ?? throw new InvalidOperationException("WorkflowCatalogService is not registered in DI.");
+
             var notifier = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogChangeNotifier)) as WorkflowCatalogChangeNotifier
-                           ?? new WorkflowCatalogChangeNotifier();
+                           ?? throw new InvalidOperationException("WorkflowCatalogChangeNotifier is not registered in DI.");
+
             _presenter = new WorkflowManagerPresenter(_catalog, _dialogs, notifier);
             _vm = new WorkflowManagerViewModel(_catalog, _presenter);
             _settings = _catalog.Settings;
@@ -83,22 +87,6 @@ namespace GSADUs.Revit.Addin.UI
             this.Loaded += WorkflowManagerWindow_Loaded;
 
             // CSV wiring now handled inside presenter.WireCsv(), invoked by presenter ctor
-        }
-
-        private WorkflowCatalogService CreateCatalog(Document? doc)
-        {
-            if (doc != null)
-            {
-                return new WorkflowCatalogService(new EsProjectSettingsProvider(() => doc));
-            }
-
-            var resolved = ServiceBootstrap.Provider.GetService(typeof(WorkflowCatalogService)) as WorkflowCatalogService;
-            if (resolved != null)
-            {
-                return resolved;
-            }
-
-            return new WorkflowCatalogService(new EsProjectSettingsProvider(() => RevitUiContext.Current?.ActiveUIDocument?.Document));
         }
 
         // Helper to require named element lookups
@@ -137,38 +125,24 @@ namespace GSADUs.Revit.Addin.UI
                 btn.IsEnabled = false;
             }
 
-            var dispatcher = Dispatcher;
-            var fallbackTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(2)
-            };
-
-            void CompleteClose(bool success)
-            {
-                fallbackTimer.Stop();
-                if (sender is Button sourceBtn)
-                {
-                    sourceBtn.IsEnabled = true;
-                }
-
-                if (!success)
-                {
-                    _dialogs.Info("Save Workflows", "Unable to persist workflow changes. See log for details.");
-                }
-
-                Close();
-            }
-
-            fallbackTimer.Tick += (_, _) =>
-            {
-                dispatcher?.BeginInvoke(new Action(() => CompleteClose(success: true)));
-            };
-            fallbackTimer.Start();
-
+            // Fire-and-forget save; do not block window close on ExternalEvent completion.
             _presenter.SaveSettings(success =>
             {
-                dispatcher?.BeginInvoke(new Action(() => CompleteClose(success)));
+                try
+                {
+                    if (!success)
+                    {
+                        _dialogs.Info("Save Workflows", "Unable to persist workflow changes. See log for details.");
+                    }
+                }
+                catch
+                {
+                    // Swallow UI notification errors; window may already be closed.
+                }
             });
+
+            // Close immediately after requesting save; callback is purely informational.
+            Close();
         }
 
         private void InitializeWorkflowsListSorting()

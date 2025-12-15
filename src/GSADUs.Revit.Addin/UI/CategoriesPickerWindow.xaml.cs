@@ -41,8 +41,19 @@ namespace GSADUs.Revit.Addin.UI
             InitializeComponent();
             RegisterInstance();
             _doc = doc;
-            var provider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                           ?? new EsProjectSettingsProvider(() => _doc ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
+
+            var provider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider;
+            if (provider == null)
+            {
+                MessageBox.Show(this,
+                    "Settings persistence is not available. Please restart Revit or reinstall the add-in.",
+                    "Category Picker",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                IsEnabled = false;
+                return;
+            }
+
             _settings = settings ?? provider.Load();
             try
             {

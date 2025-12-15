@@ -76,8 +76,19 @@ namespace GSADUs.Revit.Addin.UI
             _doc = doc;
             _dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
             _logFactory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory ?? new CsvBatchLogger();
-            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                                ?? new EsProjectSettingsProvider(() => _doc ?? RevitUiContext.Current?.ActiveUIDocument?.Document);
+
+            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider;
+            if (_settingsProvider == null)
+            {
+                MessageBox.Show(this,
+                    "Settings persistence is not available. Please restart Revit or reinstall the add-in.",
+                    "Selection Set Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                IsEnabled = false;
+                return;
+            }
+
             _settings = settings ?? _settingsProvider.Load();
 
             // Minimal VM hookup (not used by XAML yet; no behavior change)
