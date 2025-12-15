@@ -19,6 +19,7 @@ namespace GSADUs.Revit.Addin.UI
         private readonly IDialogService _dialogs;
         private readonly ProjectSettingsSaveExternalEvent _settingsSaver;
         private readonly WorkflowCatalogChangeNotifier _catalogNotifier;
+        private bool _isDirty; // tracks unsaved catalog/settings changes
 
         public PdfWorkflowTabViewModel PdfWorkflow { get; } = new PdfWorkflowTabViewModel();
         public ImageWorkflowTabViewModel ImageWorkflow { get; } = new ImageWorkflowTabViewModel();
@@ -172,7 +173,15 @@ namespace GSADUs.Revit.Addin.UI
             existing.Name = nameVal; existing.Scope = "SelectionSet"; existing.Description = descVal;
             if (!SavePdfWorkflow(existing)) return;
             vm.SetDirty(false);
-            RefreshListsAfterSave();
+            _isDirty = true;
+            RefreshLists();
+            PersistChanges(success =>
+            {
+                if (!success)
+                {
+                    _dialogs.Info("Save Workflow", "Failed to persist workflow changes. Please try again.");
+                }
+            });
         }
 
         private void SaveCurrentImage()
@@ -195,7 +204,15 @@ namespace GSADUs.Revit.Addin.UI
             existing.Name = nameVal; existing.Scope = "SelectionSet"; existing.Description = descVal;
             if (!SaveImageWorkflowInternal(existing)) return; // abort if validation fails
             vm.SetDirty(false);
-            RefreshListsAfterSave();
+            _isDirty = true;
+            RefreshLists();
+            PersistChanges(success =>
+            {
+                if (!success)
+                {
+                    _dialogs.Info("Save Workflow", "Failed to persist workflow changes. Please try again.");
+                }
+            });
         }
 
         private void ExecuteManagePdfSetup()
@@ -375,14 +392,9 @@ namespace GSADUs.Revit.Addin.UI
                 if (dlg.ShowDialog() == true)
                 {
                     Settings.ImageWhitelistCategoryIds = dlg.ResultIds?.Distinct().ToList() ?? new List<int>();
-                    RequestCatalogSave(success =>
-                    {
-                        if (!success)
-                        {
-                            _dialogs.Info("Image Whitelist", "Failed to persist whitelist changes. Please try again.");
-                        }
-                    });
-                    // Update summary immediately after selection
+                    _isDirty = true;
+
+                    // Update summary immediately after selection (in-memory only; persistence waits for explicit Save).
                     var summary = ComputeImageWhitelistSummary();
                     ImageWorkflow.WhitelistSummary = summary;
                 }
@@ -666,7 +678,7 @@ namespace GSADUs.Revit.Addin.UI
             return true;
         }
 
-        private void RefreshListsAfterSave()
+        private void RefreshLists()
         {
             // Cache current selections to restore after refresh
             var pdfId = PdfWorkflow.SelectedWorkflowId;
@@ -729,29 +741,40 @@ namespace GSADUs.Revit.Addin.UI
                 CsvWorkflow.PropertyChanged -= VmOnPropertyChanged;
                 CsvWorkflow.PropertyChanged += VmOnPropertyChanged;
             }
+        }
 
+        private void PersistChanges(Action<bool>? onCompleted)
+        {
             RequestCatalogSave(success =>
             {
-                if (!success)
+                if (success)
                 {
-                    _dialogs.Info("Save Workflow", "Failed to persist workflow changes. Please try again.");
+                    _isDirty = false;
                 }
+                onCompleted?.Invoke(success);
             });
         }
 
         public void SaveSettings(Action<bool>? onCompleted = null)
         {
-            RequestCatalogSave(onCompleted);
+            PersistChanges(onCompleted ?? (_ => { }));
         }
 
         private void RequestCatalogSave(Action<bool>? continuation)
         {
             try
             {
+                if (!_isDirty)
+                {
+                    continuation?.Invoke(true);
+                    return;
+                }
+
                 _settingsSaver.RequestSave(success =>
                 {
                     if (success)
                     {
+                        _isDirty = false;
                         try { _catalogNotifier.NotifyChanged(); } catch (Exception ex) { Trace.WriteLine(ex); }
                     }
                     continuation?.Invoke(success);

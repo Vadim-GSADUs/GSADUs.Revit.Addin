@@ -45,7 +45,15 @@ namespace GSADUs.Revit.Addin.UI
             existing.Name = nameVal; existing.Scope = scopeVal; existing.Description = descVal;
             SaveCsvWorkflow(existing);
             vm.SetDirty(false);
-            RefreshListsAfterSave();
+            _isDirty = true;
+            RefreshLists();
+            PersistChanges(success =>
+            {
+                if (!success)
+                {
+                    _dialogs.Info("Save Workflow", "Failed to persist workflow changes. Please try again.");
+                }
+            });
         }
 
         private void SaveCsvWorkflow(WorkflowDefinition existing)

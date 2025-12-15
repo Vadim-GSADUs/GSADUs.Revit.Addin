@@ -38,6 +38,7 @@ namespace GSADUs.Revit.Addin.UI
         private readonly IProjectSettingsProvider _settingsProvider;
         private AppSettings _settings;
         private readonly Document? _doc; // optional for CategoryType resolution
+        private readonly WorkflowManagerPresenter? _settingsSaver; // reuse ExternalEvent-backed save pipeline
 
         private List<int> _seedIds = new();
         private List<int> _proxyIds = new();
@@ -68,6 +69,10 @@ namespace GSADUs.Revit.Addin.UI
                 return;
             }
             _settings = settings ?? _settingsProvider.Load();
+
+            // Try to resolve the shared WorkflowManagerPresenter to reuse its ExternalEvent save pipeline.
+            // If unavailable, settings changes will remain in-memory only for this session.
+            _settingsSaver = ServiceBootstrap.Provider.GetService(typeof(WorkflowManagerPresenter)) as WorkflowManagerPresenter;
 
             StageMoveModeCombo.ItemsSource = new[] { "CentroidToOrigin", "MinToOrigin" };
 
@@ -280,9 +285,26 @@ namespace GSADUs.Revit.Addin.UI
                     return;
                 }
 
-                _settingsProvider.Save(imported);
-                _settings = _settingsProvider.Load();
+                // Apply imported settings in-memory and request persistence via ExternalEvent pipeline.
+                _settings = imported;
                 ApplySettingsToUi();
+
+                try
+                {
+                    _settingsSaver?.SaveSettings(success =>
+                    {
+                        if (!success)
+                        {
+                            try
+                            {
+                                MessageBox.Show(this, "Failed to persist imported settings. See log for details.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+                            }
+                            catch { }
+                        }
+                    });
+                }
+                catch { }
+
                 MessageBox.Show(this, "Settings imported successfully.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -335,7 +357,23 @@ namespace GSADUs.Revit.Addin.UI
                 .ToList();
             _settings.StagingAuthorizedUids = _stageWhitelistUids.Distinct(System.StringComparer.OrdinalIgnoreCase).ToList();
 
-            _settingsProvider.Save(_settings);
+            // Fire-and-forget persistence via ExternalEvent-backed pipeline when available.
+            try
+            {
+                _settingsSaver?.SaveSettings(success =>
+                {
+                    if (!success)
+                    {
+                        try
+                        {
+                            MessageBox.Show(this, "Failed to persist settings. See log for details.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
+                        catch { }
+                    }
+                });
+            }
+            catch { }
+
             DialogResult = true;
         }
     }
