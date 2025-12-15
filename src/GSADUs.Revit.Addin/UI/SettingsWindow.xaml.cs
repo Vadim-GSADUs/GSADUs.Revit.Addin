@@ -38,7 +38,7 @@ namespace GSADUs.Revit.Addin.UI
         private readonly IProjectSettingsProvider _settingsProvider;
         private AppSettings _settings;
         private readonly Document? _doc; // optional for CategoryType resolution
-        private readonly WorkflowManagerPresenter? _settingsSaver; // reuse ExternalEvent-backed save pipeline
+        private readonly IProjectSettingsSaveService _saveService;
 
         private List<int> _seedIds = new();
         private List<int> _proxyIds = new();
@@ -70,9 +70,8 @@ namespace GSADUs.Revit.Addin.UI
             }
             _settings = settings ?? _settingsProvider.Load();
 
-            // Try to resolve the shared WorkflowManagerPresenter to reuse its ExternalEvent save pipeline.
-            // If unavailable, settings changes will remain in-memory only for this session.
-            _settingsSaver = ServiceBootstrap.Provider.GetService(typeof(WorkflowManagerPresenter)) as WorkflowManagerPresenter;
+            _saveService = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsSaveService)) as IProjectSettingsSaveService
+                           ?? throw new InvalidOperationException("IProjectSettingsSaveService is not registered in DI.");
 
             StageMoveModeCombo.ItemsSource = new[] { "CentroidToOrigin", "MinToOrigin" };
 
@@ -285,25 +284,25 @@ namespace GSADUs.Revit.Addin.UI
                     return;
                 }
 
-                // Apply imported settings in-memory and request persistence via ExternalEvent pipeline.
+                // Apply imported settings in-memory and request persistence via ExternalEvent-backed save service.
                 _settings = imported;
                 ApplySettingsToUi();
 
-                try
+                _saveService.RequestSave(_settings, success =>
                 {
-                    _settingsSaver?.SaveSettings(success =>
+                    if (!success)
                     {
-                        if (!success)
+                        try
                         {
-                            try
-                            {
-                                MessageBox.Show(this, "Failed to persist imported settings. See log for details.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
-                            }
-                            catch { }
+                            MessageBox.Show(this,
+                                "Failed to persist imported settings. See log for details.",
+                                "Settings",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Information);
                         }
-                    });
-                }
-                catch { }
+                        catch { }
+                    }
+                });
 
                 MessageBox.Show(this, "Settings imported successfully.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -357,22 +356,22 @@ namespace GSADUs.Revit.Addin.UI
                 .ToList();
             _settings.StagingAuthorizedUids = _stageWhitelistUids.Distinct(System.StringComparer.OrdinalIgnoreCase).ToList();
 
-            // Fire-and-forget persistence via ExternalEvent-backed pipeline when available.
-            try
+            // Fire-and-forget persistence via ExternalEvent-backed save service.
+            _saveService.RequestSave(_settings, success =>
             {
-                _settingsSaver?.SaveSettings(success =>
+                if (!success)
                 {
-                    if (!success)
+                    try
                     {
-                        try
-                        {
-                            MessageBox.Show(this, "Failed to persist settings. See log for details.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
-                        }
-                        catch { }
+                        MessageBox.Show(this,
+                            "Failed to persist settings. See log for details.",
+                            "Settings",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
                     }
-                });
-            }
-            catch { }
+                    catch { }
+                }
+            });
 
             DialogResult = true;
         }

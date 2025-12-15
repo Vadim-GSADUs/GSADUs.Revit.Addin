@@ -11,4 +11,13 @@ namespace GSADUs.Revit.Addin
         AppSettings Load();
         void Save(AppSettings settings);
     }
+
+    /// <summary>
+    /// ExternalEvent-backed save service for project settings.
+    /// Ensures settings are applied to the authoritative catalog before persisting.
+    /// </summary>
+    public interface IProjectSettingsSaveService
+    {
+        void RequestSave(AppSettings newSettings, Action<bool>? onCompleted = null);
+    }
 }

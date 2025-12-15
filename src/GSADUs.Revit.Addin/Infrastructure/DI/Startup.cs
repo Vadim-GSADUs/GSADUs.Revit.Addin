@@ -55,6 +55,7 @@ namespace GSADUs.Revit.Addin
             // Phase 2: settings persistence abstraction and catalog/presenter scaffolding
             services.AddSingleton<ISettingsPersistence, SettingsPersistence>();
             services.AddSingleton<IProjectSettingsProvider, EsProjectSettingsProvider>();
+            services.AddSingleton<IProjectSettingsSaveService, ProjectSettingsSaveService>();
             services.AddSingleton<WorkflowCatalogService>();
             services.AddSingleton<GSADUs.Revit.Addin.UI.WorkflowManagerPresenter>();
 
