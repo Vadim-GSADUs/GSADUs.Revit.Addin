@@ -12,15 +12,8 @@ namespace GSADUs.Revit.Addin.Logging
         public static string CorrId { get; private set; }
         public static string FilePath { get; private set; }
         static bool _inited;
-        private static readonly IProjectSettingsProvider _settingsProvider;
+        private static IProjectSettingsProvider? _settingsProvider;
         private static AppSettings? _settings;
-
-        static RunLog()
-        {
-            _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                               ?? new EsProjectSettingsProvider();
-            TryRefreshSettings();
-        }
 
         private static AppSettings Settings
         {
@@ -36,8 +29,28 @@ namespace GSADUs.Revit.Addin.Logging
 
         private static void TryRefreshSettings()
         {
-            try { _settings = _settingsProvider.Load(); }
-            catch { _settings = new AppSettings(); }
+            try
+            {
+                if (_settingsProvider == null)
+                {
+                    try
+                    {
+                        // Resolve via DI if available; otherwise fall back to direct ES provider.
+                        _settingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                                            ?? new EsProjectSettingsProvider();
+                    }
+                    catch
+                    {
+                        _settingsProvider = new EsProjectSettingsProvider();
+                    }
+                }
+
+                _settings = _settingsProvider.Load();
+            }
+            catch
+            {
+                _settings = new AppSettings();
+            }
         }
 
         private static string ResolveLogDir()

@@ -12,6 +12,22 @@ namespace GSADUs.Revit.Addin
     {
         public Result Execute(ExternalCommandData data, ref string msg, ElementSet set)
         {
+            // Ensure DI and ExternalEvent-backed services are created while in a valid Revit API context.
+            ServiceBootstrap.InitializeOrThrow(data.Application);
+            RevitUiContext.Current = data.Application;
+
+            // Eagerly resolve settings save infrastructure so ExternalEvent.Create runs under API context.
+            try
+            {
+                var provider = ServiceBootstrap.Provider;
+                _ = provider.GetService(typeof(GSADUs.Revit.Addin.UI.ProjectSettingsSaveExternalEvent));
+                _ = provider.GetService(typeof(IProjectSettingsSaveService));
+            }
+            catch
+            {
+                // Swallow; logging below will still function with defaults if DI is unavailable.
+            }
+
             var sw = Stopwatch.StartNew();
 
             // Retrieve the active document's file name for logging

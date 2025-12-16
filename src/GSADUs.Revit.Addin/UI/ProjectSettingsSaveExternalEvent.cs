@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.Json;
 using System.Windows.Threading;
 using Autodesk.Revit.UI;
 
@@ -13,6 +14,7 @@ namespace GSADUs.Revit.Addin.UI
         private readonly ExternalEvent _externalEvent;
         private readonly object _sync = new();
         private readonly Queue<Action<bool>> _callbacks = new();
+        private AppSettings? _pendingSnapshot;
 
         public ProjectSettingsSaveExternalEvent(WorkflowCatalogService catalog, Dispatcher dispatcher)
         {
@@ -21,10 +23,19 @@ namespace GSADUs.Revit.Addin.UI
             _externalEvent = ExternalEvent.Create(this);
         }
 
-        public void RequestSave(Action<bool>? onCompleted = null)
+        public void RequestSave(AppSettings snapshot, Action<bool>? onCompleted = null)
         {
+            if (snapshot == null)
+            {
+                onCompleted?.Invoke(false);
+                return;
+            }
+
             lock (_sync)
             {
+                // Latest snapshot wins; callers expect the most recent state to be persisted.
+                _pendingSnapshot = DeepClone(snapshot);
+
                 if (onCompleted != null)
                 {
                     _callbacks.Enqueue(onCompleted);
@@ -37,26 +48,92 @@ namespace GSADUs.Revit.Addin.UI
         public void Execute(UIApplication app)
         {
             bool success = false;
+            AppSettings? snapshot;
+            Action<bool>[] callbacks;
+
+            // Capture and clear the pending snapshot + callbacks under a single lock to avoid
+            // races where callbacks are enqueued during Execute.
+            lock (_sync)
+            {
+                snapshot = _pendingSnapshot;
+                _pendingSnapshot = null;
+                callbacks = _callbacks.ToArray();
+                _callbacks.Clear();
+            }
+
             try
             {
+                if (snapshot != null)
+                {
+                    // Apply the snapshot onto the catalog's settings inside API context so
+                    // the persisted state matches exactly what the caller requested.
+                    var current = _catalog.Settings;
+                    if (current != null)
+                    {
+                        current.Version = snapshot.Version;
+                        current.LogDir = snapshot.LogDir;
+                        current.DefaultOutputDir = snapshot.DefaultOutputDir;
+                        current.DefaultRunAuditBeforeExport = snapshot.DefaultRunAuditBeforeExport;
+                        current.DefaultSaveBefore = snapshot.DefaultSaveBefore;
+                        current.DefaultOverwrite = snapshot.DefaultOverwrite;
+                        current.DeepAnnoStatus = snapshot.DeepAnnoStatus;
+                        current.DryrunDiagnostics = snapshot.DryrunDiagnostics;
+                        current.PerfDiagnostics = snapshot.PerfDiagnostics;
+                        current.OpenOutputFolder = snapshot.OpenOutputFolder;
+                        current.ValidateStagingArea = snapshot.ValidateStagingArea;
+                        current.DrawAmbiguousRectangles = snapshot.DrawAmbiguousRectangles;
+                        current.SelectionSeedCategories = snapshot.SelectionSeedCategories != null ? new System.Collections.Generic.List<int>(snapshot.SelectionSeedCategories) : null;
+                        current.SelectionProxyCategories = snapshot.SelectionProxyCategories != null ? new System.Collections.Generic.List<int>(snapshot.SelectionProxyCategories) : null;
+                        current.CleanupBlacklistCategories = snapshot.CleanupBlacklistCategories != null ? new System.Collections.Generic.List<int>(snapshot.CleanupBlacklistCategories) : null;
+                        current.SelectionProxyDistance = snapshot.SelectionProxyDistance;
+                        current.CurrentSetParameterName = snapshot.CurrentSetParameterName;
+                        current.StagingWidth = snapshot.StagingWidth;
+                        current.StagingHeight = snapshot.StagingHeight;
+                        current.StagingBuffer = snapshot.StagingBuffer;
+                        current.StageMoveMode = snapshot.StageMoveMode;
+                        current.StagingAuthorizedCategoryNames = snapshot.StagingAuthorizedCategoryNames != null ? new System.Collections.Generic.List<string>(snapshot.StagingAuthorizedCategoryNames) : null;
+                        current.StagingAuthorizedUids = snapshot.StagingAuthorizedUids != null ? new System.Collections.Generic.List<string>(snapshot.StagingAuthorizedUids) : null;
+                        current.Workflows = snapshot.Workflows != null ? new System.Collections.Generic.List<WorkflowDefinition>(snapshot.Workflows) : null;
+                        current.SelectedWorkflowIds = snapshot.SelectedWorkflowIds != null ? new System.Collections.Generic.List<string>(snapshot.SelectedWorkflowIds) : null;
+                    }
+                }
+
                 _catalog.Save(force: true);
                 success = true;
             }
             catch (Exception ex)
             {
+                // TEMP: surface underlying save exception for diagnostics.
+                var details = ex.ToString();
                 Trace.WriteLine(ex);
+                try
+                {
+                    // Do not block the Revit API thread with UI; dispatch to the WPF dispatcher.
+                    _dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            System.Windows.MessageBox.Show(
+                                details,
+                                "Project Settings Save Failed",
+                                System.Windows.MessageBoxButton.OK,
+                                System.Windows.MessageBoxImage.Error);
+                        }
+                        catch
+                        {
+                            // Swallow any UI exceptions; failure is still reported via success flag and trace.
+                        }
+                    }));
+                }
+                catch
+                {
+                    // Swallow any dispatcher exceptions; failure is still reported via success flag and trace.
+                }
             }
 
             Trace.WriteLine(success
                 ? "[SettingsSave] Extensible Storage save completed."
                 : "[SettingsSave] Extensible Storage save failed.");
-
-            Action<bool>[] callbacks;
-            lock (_sync)
-            {
-                callbacks = _callbacks.ToArray();
-                _callbacks.Clear();
-            }
 
             if (callbacks.Length == 0)
             {
@@ -81,5 +158,21 @@ namespace GSADUs.Revit.Addin.UI
         }
 
         public string GetName() => "Project Settings Save";
+
+        // Defensive deep clone of AppSettings so later UI mutations cannot affect the
+        // snapshot that will be persisted by the ExternalEvent.
+        private static AppSettings DeepClone(AppSettings source)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(source);
+                var clone = JsonSerializer.Deserialize<AppSettings>(json);
+                return clone ?? new AppSettings();
+            }
+            catch
+            {
+                return new AppSettings();
+            }
+        }
     }
 }

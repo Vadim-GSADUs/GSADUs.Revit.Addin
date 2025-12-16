@@ -770,7 +770,8 @@ namespace GSADUs.Revit.Addin.UI
                     return;
                 }
 
-                _settingsSaver.RequestSave(success =>
+                // Persist the current catalog settings snapshot via ExternalEvent.
+                _settingsSaver.RequestSave(_catalog.Settings, success =>
                 {
                     if (success)
                     {

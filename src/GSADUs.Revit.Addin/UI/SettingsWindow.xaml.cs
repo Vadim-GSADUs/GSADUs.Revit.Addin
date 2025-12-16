@@ -290,21 +290,30 @@ namespace GSADUs.Revit.Addin.UI
 
                 _saveService.RequestSave(_settings, success =>
                 {
-                    if (!success)
+                    try
                     {
-                        try
+                        if (success)
                         {
-                            MessageBox.Show(this,
-                                "Failed to persist imported settings. See log for details.",
+                            // TEMP: explicit confirmation that ExternalEvent-backed save completed.
+                            MessageBox.Show(
+                                "Settings saved (confirmed)",
                                 "Settings",
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Information);
                         }
-                        catch { }
+                        else
+                        {
+                            MessageBox.Show(
+                                "Settings save FAILED (confirmed)",
+                                "Settings",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error);
+                        }
                     }
+                    catch { }
                 });
 
-                MessageBox.Show(this, "Settings imported successfully.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("Settings imported successfully.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -362,18 +371,27 @@ namespace GSADUs.Revit.Addin.UI
             // Fire-and-forget persistence via ExternalEvent-backed save service.
             _saveService.RequestSave(_settings, success =>
             {
-                if (!success)
+                try
                 {
-                    try
+                    if (success)
                     {
-                        MessageBox.Show(this,
-                            "Failed to persist settings. See log for details.",
+                        // TEMP: explicit confirmation that ExternalEvent-backed save completed.
+                        MessageBox.Show(
+                            "Settings saved (confirmed)",
                             "Settings",
                             MessageBoxButton.OK,
                             MessageBoxImage.Information);
                     }
-                    catch { }
+                    else
+                    {
+                        MessageBox.Show(
+                            "Settings save FAILED (confirmed)",
+                            "Settings",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error);
+                    }
                 }
+                catch { }
             });
 
             Close();
