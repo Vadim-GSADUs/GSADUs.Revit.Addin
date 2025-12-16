@@ -30,6 +30,20 @@ namespace GSADUs.Revit.Addin
         public AppSettings Settings => _settings;
         public bool HasPendingChanges => _hasPendingChanges;
 
+        /// <summary>
+        /// Replace the current settings instance with the provided snapshot
+        /// and refresh in-memory caches. Used by the ExternalEvent-backed
+        /// save pipeline so that the catalog reflects the latest UI-edited
+        /// state 1:1 before persisting to storage.
+        /// </summary>
+        /// <param name="snapshot">New settings snapshot to apply.</param>
+        public void ApplySettings(AppSettings snapshot)
+        {
+            _settings = snapshot ?? new AppSettings();
+            _hasPendingChanges = true;
+            RefreshCaches();
+        }
+
         public void RefreshCaches()
         {
             Workflows.Clear();

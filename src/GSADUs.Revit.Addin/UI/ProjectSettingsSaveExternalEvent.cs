@@ -65,37 +65,12 @@ namespace GSADUs.Revit.Addin.UI
             {
                 if (snapshot != null)
                 {
-                    // Apply the snapshot onto the catalog's settings inside API context so
-                    // the persisted state matches exactly what the caller requested.
-                    var current = _catalog.Settings;
-                    if (current != null)
-                    {
-                        current.Version = snapshot.Version;
-                        current.LogDir = snapshot.LogDir;
-                        current.DefaultOutputDir = snapshot.DefaultOutputDir;
-                        current.DefaultRunAuditBeforeExport = snapshot.DefaultRunAuditBeforeExport;
-                        current.DefaultSaveBefore = snapshot.DefaultSaveBefore;
-                        current.DefaultOverwrite = snapshot.DefaultOverwrite;
-                        current.DeepAnnoStatus = snapshot.DeepAnnoStatus;
-                        current.DryrunDiagnostics = snapshot.DryrunDiagnostics;
-                        current.PerfDiagnostics = snapshot.PerfDiagnostics;
-                        current.OpenOutputFolder = snapshot.OpenOutputFolder;
-                        current.ValidateStagingArea = snapshot.ValidateStagingArea;
-                        current.DrawAmbiguousRectangles = snapshot.DrawAmbiguousRectangles;
-                        current.SelectionSeedCategories = snapshot.SelectionSeedCategories != null ? new System.Collections.Generic.List<int>(snapshot.SelectionSeedCategories) : null;
-                        current.SelectionProxyCategories = snapshot.SelectionProxyCategories != null ? new System.Collections.Generic.List<int>(snapshot.SelectionProxyCategories) : null;
-                        current.CleanupBlacklistCategories = snapshot.CleanupBlacklistCategories != null ? new System.Collections.Generic.List<int>(snapshot.CleanupBlacklistCategories) : null;
-                        current.SelectionProxyDistance = snapshot.SelectionProxyDistance;
-                        current.CurrentSetParameterName = snapshot.CurrentSetParameterName;
-                        current.StagingWidth = snapshot.StagingWidth;
-                        current.StagingHeight = snapshot.StagingHeight;
-                        current.StagingBuffer = snapshot.StagingBuffer;
-                        current.StageMoveMode = snapshot.StageMoveMode;
-                        current.StagingAuthorizedCategoryNames = snapshot.StagingAuthorizedCategoryNames != null ? new System.Collections.Generic.List<string>(snapshot.StagingAuthorizedCategoryNames) : null;
-                        current.StagingAuthorizedUids = snapshot.StagingAuthorizedUids != null ? new System.Collections.Generic.List<string>(snapshot.StagingAuthorizedUids) : null;
-                        current.Workflows = snapshot.Workflows != null ? new System.Collections.Generic.List<WorkflowDefinition>(snapshot.Workflows) : null;
-                        current.SelectedWorkflowIds = snapshot.SelectedWorkflowIds != null ? new System.Collections.Generic.List<string>(snapshot.SelectedWorkflowIds) : null;
-                    }
+                    // Apply the snapshot onto the catalog's settings inside API
+                    // context so the persisted state matches exactly what the
+                    // caller requested. Deep-clone again to ensure isolation
+                    // between the catalog and any remaining UI references.
+                    var applied = DeepClone(snapshot);
+                    _catalog.ApplySettings(applied);
                 }
 
                 _catalog.Save(force: true);

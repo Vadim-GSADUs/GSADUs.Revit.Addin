@@ -330,8 +330,11 @@ namespace GSADUs.Revit.Addin.Infrastructure
 
         private static string SerializeForStorage(AppSettings settings)
         {
+            // Serialize the provided settings as-is so that all user-editable
+            // values round-trip through Extensible Storage without hidden
+            // sanitization or stripping. Any runtime-only concerns should be
+            // handled outside of AppSettings.
             var snapshot = CloneSettings(settings);
-            StripRuntimeFields(snapshot);
             return JsonSerializer.Serialize(snapshot, WriteOptions);
         }
 
@@ -340,17 +343,6 @@ namespace GSADUs.Revit.Addin.Infrastructure
             if (source == null) return new AppSettings();
             var buffer = JsonSerializer.Serialize(source, WriteOptions);
             return JsonSerializer.Deserialize<AppSettings>(buffer, ReadOptions) ?? new AppSettings();
-        }
-
-        private static void StripRuntimeFields(AppSettings s)
-        {
-            if (s == null) return;
-            s.LogDir = null;
-            s.OpenOutputFolder = false;
-            s.DryrunDiagnostics = false;
-            s.PerfDiagnostics = false;
-            s.DrawAmbiguousRectangles = false;
-            s.PreferredBatchLogColumns = null;
         }
     }
 }
