@@ -141,6 +141,10 @@ namespace GSADUs.Revit.Addin.Orchestration
                 chosenActionIds.Add("export-pdf");
             if (workflows.Any(w => w.Output == OutputType.Image) && !chosenActionIds.Any(a => string.Equals(a, "export-image", StringComparison.OrdinalIgnoreCase)))
                 chosenActionIds.Add("export-image");
+            if (workflows.Any(w => w.Output == OutputType.Rvt) && !chosenActionIds.Any(a => string.Equals(a, "export-rvt", StringComparison.OrdinalIgnoreCase)))
+                chosenActionIds.Add("export-rvt");
+            if (workflows.Any(w => w.Output == OutputType.Csv) && !chosenActionIds.Any(a => string.Equals(a, "export-csv", StringComparison.OrdinalIgnoreCase)))
+                chosenActionIds.Add("export-csv");
 
             // BatchExportSettings includes SetIds (optional)
             var request = new BatchExportSettings(
