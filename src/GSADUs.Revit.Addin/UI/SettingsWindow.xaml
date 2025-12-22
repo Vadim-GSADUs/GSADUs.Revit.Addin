@@ -25,6 +25,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="170"/> <!-- wider label column -->
@@ -41,34 +42,38 @@
                     <TextBox x:Name="OutDirBox" Grid.Row="1" Grid.Column="1" Margin="0,0,8,8" HorizontalAlignment="Stretch" MinWidth="300"/>
                     <Button Grid.Row="1" Grid.Column="2" Content="Browse..." Margin="0,0,0,8" Padding="10,2" Click="BrowseOut_Click"/>
 
-                    <!-- Display-only paths -->
-                    <TextBlock Grid.Row="2" Text="Settings file (read-only):" Margin="0,0,8,8" VerticalAlignment="Center"/>
-                    <TextBox x:Name="SettingsPathBox" Grid.Row="2" Grid.Column="1" Margin="0,0,8,8" IsReadOnly="True" HorizontalAlignment="Stretch" MinWidth="300"/>
+                    <TextBlock Grid.Row="2" Text="RVT export template (.rte):" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBox x:Name="RvtTemplateBox" Grid.Row="2" Grid.Column="1" Margin="0,0,8,8" HorizontalAlignment="Stretch" MinWidth="300"/>
+                    <Button Grid.Row="2" Grid.Column="2" Content="Browse..." Margin="0,0,0,8" Padding="10,2" Click="BrowseRvtTemplate_Click"/>
 
-                    <TextBlock Grid.Row="3" Text="Shared parameters file (read-only):" Margin="0,0,8,8" VerticalAlignment="Center"/>
-                    <TextBox x:Name="SharedParamsPathBox" Grid.Row="3" Grid.Column="1" Margin="0,0,8,8" IsReadOnly="True" HorizontalAlignment="Stretch" MinWidth="300"/>
+                    <!-- Display-only paths -->
+                    <TextBlock Grid.Row="3" Text="Settings file (read-only):" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBox x:Name="SettingsPathBox" Grid.Row="3" Grid.Column="1" Margin="0,0,8,8" IsReadOnly="True" HorizontalAlignment="Stretch" MinWidth="300"/>
+
+                    <TextBlock Grid.Row="4" Text="Shared parameters file (read-only):" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBox x:Name="SharedParamsPathBox" Grid.Row="4" Grid.Column="1" Margin="0,0,8,8" IsReadOnly="True" HorizontalAlignment="Stretch" MinWidth="300"/>
 
                     <!-- Cross-workflow toggles with inline descriptions -->
-                    <CheckBox x:Name="RunAuditBox" Grid.Row="4" Content="Audit before export" Margin="0,0,0,2"/>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Text="Pre-audit selected sets before export; updates only selected rows in the Batch Export log." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="RunAuditBox" Grid.Row="5" Content="Audit before export" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="5" Grid.Column="1" Text="Pre-audit selected sets before export; updates only selected rows in the Batch Export log." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="SaveBeforeBox" Grid.Row="5" Content="Save before export" Margin="0,0,0,2"/>
-                    <TextBlock Grid.Row="5" Grid.Column="1" Text="Save the active model before making file copies." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="SaveBeforeBox" Grid.Row="6" Content="Save before export" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="6" Grid.Column="1" Text="Save the active model before making file copies." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="OverwriteBox" Grid.Row="6" Content="Overwrite" Margin="0,0,0,2"/>
-                    <TextBlock Grid.Row="6" Grid.Column="1" Text="Allow replacing existing output files with the same name." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="OverwriteBox" Grid.Row="7" Content="Overwrite" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="7" Grid.Column="1" Text="Allow replacing existing output files with the same name." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="DeepAnnoBox" Grid.Row="7" Content="Deep-Anno Status" Margin="0,0,0,2"/>
-                    <TextBlock Grid.Row="7" Grid.Column="1" Text="Include annotation text/dimension values in status checks (marks Needs Update when these change)." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="DeepAnnoBox" Grid.Row="8" Content="Deep-Anno Status" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="8" Grid.Column="1" Text="Include annotation text/dimension values in status checks (marks Needs Update when these change)." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="DryrunDiagBox" Grid.Row="8" Content="Dryrun &amp; Diagnostics" Margin="0,0,0,2"/>
-                    <TextBlock Grid.Row="8" Grid.Column="1" Text="Use dry-run mode with open copy and unsuppressed warnings; processes only the first selected set." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="DryrunDiagBox" Grid.Row="9" Content="Dryrun &amp; Diagnostics" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="9" Grid.Column="1" Text="Use dry-run mode with open copy and unsuppressed warnings; processes only the first selected set." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="PerfDiagBox" Grid.Row="9" Content="Performance Diagnostics" Margin="0,0,0,2"/>
-                    <TextBlock Grid.Row="9" Grid.Column="1" Text="Write timing rows to 'Performance Log.csv' in the log directory." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="PerfDiagBox" Grid.Row="10" Content="Performance Diagnostics" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="10" Grid.Column="1" Text="Write timing rows to 'Performance Log.csv' in the log directory." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="OpenOutputFolderBox" Grid.Row="10" Content="Open Output Folder" Margin="0,0,0,2"/>
-                    <TextBlock Grid.Row="10" Grid.Column="1" Text="After a batch export completes, open the output directory in Explorer (ignored if already open)." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="OpenOutputFolderBox" Grid.Row="11" Content="Open Output Folder" Margin="0,0,0,2"/>
+                    <TextBlock Grid.Row="11" Grid.Column="1" Text="After a batch export completes, open the output directory in Explorer (ignored if already open)." Foreground="Gray" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
                 </Grid>
             </TabItem>
 

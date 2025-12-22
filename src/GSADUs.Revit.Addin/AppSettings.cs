@@ -48,6 +48,9 @@ namespace GSADUs.Revit.Addin
         // New: Preferred floor plan view to use for thumbnail generation on save
         public string? ThumbnailViewName { get; set; }
 
+        // RVT export: optional template override (.rte). If null/empty, ExportRvtAction uses its built-in default.
+        public string? RvtExportTemplatePath { get; set; }
+
         // New: enable performance diagnostics logging
         public bool PerfDiagnostics { get; set; } = false;
 

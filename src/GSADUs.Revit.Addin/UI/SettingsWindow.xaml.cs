@@ -82,6 +82,7 @@ namespace GSADUs.Revit.Addin.UI
         {
             LogDirBox.Text = string.IsNullOrWhiteSpace(_settings.LogDir) ? _settingsProvider.GetEffectiveLogDir(_settings) : _settings.LogDir;
             OutDirBox.Text = string.IsNullOrWhiteSpace(_settings.DefaultOutputDir) ? _settingsProvider.GetEffectiveOutputDir(_settings) : _settings.DefaultOutputDir;
+            try { RvtTemplateBox.Text = _settings.RvtExportTemplatePath ?? string.Empty; } catch { }
             RunAuditBox.IsChecked = _settings.DefaultRunAuditBeforeExport;
             SaveBeforeBox.IsChecked = _settings.DefaultSaveBefore;
             OverwriteBox.IsChecked = _settings.DefaultOverwrite;
@@ -238,6 +239,20 @@ namespace GSADUs.Revit.Addin.UI
             }
         }
 
+        private void BrowseRvtTemplate_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog
+            {
+                Filter = "Revit Template (*.rte)|*.rte|All Files (*.*)|*.*",
+                CheckFileExists = true,
+                Title = "Select RVT export template (.rte)"
+            };
+            if (dlg.ShowDialog(this) == true)
+            {
+                RvtTemplateBox.Text = dlg.FileName;
+            }
+        }
+
         private void ExportSettings_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -345,6 +360,16 @@ namespace GSADUs.Revit.Addin.UI
 
             _settings.LogDir = string.IsNullOrWhiteSpace(LogDirBox.Text) ? null : LogDirBox.Text;
             _settings.DefaultOutputDir = string.IsNullOrWhiteSpace(OutDirBox.Text) ? null : OutDirBox.Text;
+            _settings.RvtExportTemplatePath = string.IsNullOrWhiteSpace(RvtTemplateBox.Text) ? null : RvtTemplateBox.Text.Trim();
+
+            // Persist immediately into the runtime cache so reopening Settings in the same Revit session
+            // reflects the user's edits even if the ES save is delayed.
+            try
+            {
+                var docKey = _doc?.PathName ?? _doc?.Title ?? string.Empty;
+                ProjectSettingsRuntimeCache.Set(_settings, docKey);
+            }
+            catch { }
             _settings.DefaultRunAuditBeforeExport = RunAuditBox.IsChecked == true;
             _settings.DefaultSaveBefore = SaveBeforeBox.IsChecked == true;
             _settings.DefaultOverwrite = OverwriteBox.IsChecked == true;
@@ -373,19 +398,21 @@ namespace GSADUs.Revit.Addin.UI
             {
                 try
                 {
-                    if (success)
+                    // Refresh runtime cache so subsequent reads in this session return the updated snapshot
+                    // even if the underlying ES save fails or is delayed.
+                    try
                     {
-                        // TEMP: explicit confirmation that ExternalEvent-backed save completed.
-                        MessageBox.Show(
-                            "Settings saved (confirmed)",
-                            "Settings",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+                        var docKey = _doc?.PathName ?? _doc?.Title ?? string.Empty;
+                        ProjectSettingsRuntimeCache.Set(_settings, docKey);
                     }
-                    else
+                    catch { }
+
+                    // Avoid modal "confirmed" message boxes here; they can mislead and also risk
+                    // running UI after the window closes. Only surface errors.
+                    if (!success)
                     {
                         MessageBox.Show(
-                            "Settings save FAILED (confirmed)",
+                            "Settings save failed. Changes may not persist after closing Revit.",
                             "Settings",
                             MessageBoxButton.OK,
                             MessageBoxImage.Error);

@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using GSADUs.Revit.Addin.Abstractions;
+using GSADUs.Revit.Addin.Infrastructure;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,7 +42,27 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
         {
             if (uiapp == null || sourceDoc == null) return;
             var dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
-            var settings = _projectSettingsProvider.Load();
+            // IMPORTANT: Prefer the runtime cache snapshot over a fresh provider.Load() so that
+            // settings edited in a modeless window during this session (and written into the cache)
+            // are honored immediately by exports.
+            AppSettings settings;
+            try
+            {
+                var docKey = string.Empty;
+                try { docKey = sourceDoc?.PathName ?? string.Empty; } catch { docKey = string.Empty; }
+                if (ProjectSettingsRuntimeCache.TryGet(docKey, out var cached) && cached != null)
+                {
+                    settings = cached;
+                }
+                else
+                {
+                    settings = _projectSettingsProvider.Load();
+                }
+            }
+            catch
+            {
+                settings = _projectSettingsProvider.Load();
+            }
             var selectedIds = new HashSet<string>(settings.SelectedWorkflowIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             var workflows = (settings.Workflows ?? new List<WorkflowDefinition>())
                 .Where(w => w.Output == OutputType.Rvt && selectedIds.Contains(w.Id) && (w.ActionIds?.Any(a => string.Equals(a, Id, StringComparison.OrdinalIgnoreCase)) ?? false))
@@ -122,10 +143,12 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
             }
 
             // Proceed even if no copyable elements; we'll still create and save an empty deliverable
-            var templatePath = HardcodedTemplatePath;
+            var templatePath = string.IsNullOrWhiteSpace(settings.RvtExportTemplatePath)
+                ? HardcodedTemplatePath
+                : settings.RvtExportTemplatePath!;
             if (string.IsNullOrWhiteSpace(templatePath) || !System.IO.File.Exists(templatePath))
             {
-                dialogs.Info("Export RVT", "Template path missing or invalid. Update the hardcoded path or ensure the file exists.");
+                dialogs.Info("Export RVT", "Template path missing or invalid. Set it in Settings > General (RVT export template) or ensure the file exists.");
                 return;
             }
 
