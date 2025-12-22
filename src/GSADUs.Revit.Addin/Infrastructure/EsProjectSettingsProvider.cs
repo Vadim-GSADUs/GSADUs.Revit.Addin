@@ -43,10 +43,17 @@ namespace GSADUs.Revit.Addin.Infrastructure
         public AppSettings Load()
         {
             var doc = GetDocument();
+            var docKey = GetDocumentKey(doc);
+            if (ProjectSettingsRuntimeCache.TryGet(docKey, out var cached))
+            {
+                return cached;
+            }
+
             if (doc == null)
             {
                 var fallbackSettings = CreateDefaultAppSettings();
                 RunStandardMigrations(fallbackSettings);
+                ProjectSettingsRuntimeCache.Set(fallbackSettings, docKey);
                 return fallbackSettings;
             }
 
@@ -55,6 +62,7 @@ namespace GSADUs.Revit.Addin.Infrastructure
             {
                 var fallbackSettings = CreateDefaultAppSettings();
                 RunStandardMigrations(fallbackSettings);
+                ProjectSettingsRuntimeCache.Set(fallbackSettings, docKey);
                 return fallbackSettings;
             }
 
@@ -74,6 +82,7 @@ namespace GSADUs.Revit.Addin.Infrastructure
                         {
                             var settings = JsonSerializer.Deserialize<AppSettings>(json, ReadOptions) ?? new AppSettings();
                             RunStandardMigrations(settings);
+                            ProjectSettingsRuntimeCache.Set(settings, docKey);
                             return settings;
                         }
                     }
@@ -87,6 +96,7 @@ namespace GSADUs.Revit.Addin.Infrastructure
             var defaultSettings = CreateDefaultAppSettings();
             RunStandardMigrations(defaultSettings);
             TrySeedSettings(doc, anchor, schema, defaultSettings);
+            ProjectSettingsRuntimeCache.Set(defaultSettings, docKey);
             return defaultSettings;
         }
 
@@ -98,6 +108,8 @@ namespace GSADUs.Revit.Addin.Infrastructure
             }
 
             var doc = GetDocument();
+            var docKey = GetDocumentKey(doc);
+            ProjectSettingsRuntimeCache.Set(settings, docKey);
             var anchor = doc?.ProjectInformation;
             if (doc == null || anchor == null || doc.IsReadOnly)
             {
@@ -192,6 +204,24 @@ namespace GSADUs.Revit.Addin.Infrastructure
         private Document? GetDocument()
         {
             return _documentResolver?.Invoke();
+        }
+
+        private static string GetDocumentKey(Document? doc)
+        {
+            if (doc == null) return string.Empty;
+            try
+            {
+                var path = doc.PathName;
+                if (!string.IsNullOrWhiteSpace(path)) return path;
+            }
+            catch { }
+            try
+            {
+                var title = doc.Title;
+                if (!string.IsNullOrWhiteSpace(title)) return title;
+            }
+            catch { }
+            return string.Empty;
         }
 
         private static void RunStandardMigrations(AppSettings settings)

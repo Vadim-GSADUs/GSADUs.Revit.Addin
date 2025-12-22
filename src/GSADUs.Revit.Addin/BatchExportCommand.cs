@@ -22,6 +22,9 @@ namespace GSADUs.Revit.Addin
                 var provider = ServiceBootstrap.Provider;
                 _ = provider.GetService(typeof(GSADUs.Revit.Addin.UI.ProjectSettingsSaveExternalEvent));
                 _ = provider.GetService(typeof(IProjectSettingsSaveService));
+
+                // Ensure Batch Run ExternalEvent is created under a valid API context.
+                try { GSADUs.Revit.Addin.Orchestration.BatchRunCoordinator.InitializeExternalEvent(data.Application); } catch { }
             }
             catch
             {

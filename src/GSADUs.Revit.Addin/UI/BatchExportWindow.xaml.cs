@@ -3,6 +3,7 @@ using GSADUs.Revit.Addin.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel; // for ICollectionView & INotifyPropertyChanged
+using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -174,6 +175,7 @@ namespace GSADUs.Revit.Addin.UI
                 SaveColumnOrder((FindName("SetsList") as ListView)!, _prefs.Sets.ColumnOrder, skipFirst: true);
                 SaveColumnOrder((FindName("WorkflowsListView") as ListView)!, _prefs.Workflows.ColumnOrder, skipFirst: true);
                 SaveSelectedWorkflowIds();
+                PersistWorkflowSelectionIfNeeded();
                 BatchExportPrefs.Save(_prefs);
             }
             catch { }
@@ -437,6 +439,20 @@ namespace GSADUs.Revit.Addin.UI
             catch { }
         }
 
+        private void PersistWorkflowSelectionIfNeeded()
+        {
+            if (!_workflowSelectionDirty) return;
+            try
+            {
+                _settingsProvider.Save(_settings);
+                _workflowSelectionDirty = false;
+            }
+            catch (Exception ex)
+            {
+                try { Trace.WriteLine($"FAIL workflow-selection-save ex={ex.GetType().Name} msg={ex.Message}"); } catch { }
+            }
+        }
+
         private void MainSplitter_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
         {
             try
@@ -693,6 +709,7 @@ namespace GSADUs.Revit.Addin.UI
         private void Run_Click(object sender, RoutedEventArgs e)
         {
             SaveSelectedWorkflowIds();
+            PersistWorkflowSelectionIfNeeded();
             var visibleSetRows = _setsView != null ? _setsView.Cast<SetRow>().ToList() : _setRows;
             try { (FindName("SetsList") as ListView)?.UpdateLayout(); } catch { }
 
@@ -840,7 +857,8 @@ namespace GSADUs.Revit.Addin.UI
                 SetNames = selectedNames,
                 OutputDir = _settingsProvider.GetEffectiveOutputDir(_settings),
                 Overwrite = _settings.DefaultOverwrite,
-                SaveBefore = _settings.DefaultSaveBefore
+                SaveBefore = _settings.DefaultSaveBefore,
+                SelectedWorkflowIds = (_settings.SelectedWorkflowIds ?? new List<string>()).ToList()
             };
 
             try

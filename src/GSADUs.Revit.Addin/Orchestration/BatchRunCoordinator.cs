@@ -18,6 +18,17 @@ namespace GSADUs.Revit.Addin.Orchestration
     {
         internal enum RunOutcome { CanceledBeforeStart, CancelledDuringRun, Completed, Failed }
 
+        private static readonly BatchRunExternalEvent _batchRunEvent = new();
+
+        internal static void InitializeExternalEvent(UIApplication uiapp)
+        {
+            try
+            {
+                _batchRunEvent.Initialize(uiapp);
+            }
+            catch { }
+        }
+
         internal static Result RunCore(UIApplication uiapp, UIDocument uidoc)
         {
             var dialogs = ServiceBootstrap.Provider.GetService(typeof(IDialogService)) as IDialogService ?? new DialogService();
@@ -105,13 +116,25 @@ namespace GSADUs.Revit.Addin.Orchestration
 
             try
             {
-                var projectSettingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
-                                              ?? new EsProjectSettingsProvider();
-                var logFactory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory ?? new CsvBatchLogger();
-                var actionRegistry = ServiceBootstrap.Provider.GetService(typeof(IActionRegistry)) as IActionRegistry ?? new ActionRegistry();
-                var allActions = ServiceBootstrap.Provider.GetServices<IExportAction>().ToList();
+                // ExternalEvent must already be initialized from a valid API context.
+                // (e.g., during the initial external command execution)
+                _batchRunEvent.Raise(app =>
+                {
+                    try
+                    {
+                        var projectSettingsProvider = ServiceBootstrap.Provider.GetService(typeof(IProjectSettingsProvider)) as IProjectSettingsProvider
+                                                      ?? new EsProjectSettingsProvider();
+                        var logFactory = ServiceBootstrap.Provider.GetService(typeof(IBatchLogFactory)) as IBatchLogFactory ?? new CsvBatchLogger();
+                        var actionRegistry = ServiceBootstrap.Provider.GetService(typeof(IActionRegistry)) as IActionRegistry ?? new ActionRegistry();
+                        var allActions = ServiceBootstrap.Provider.GetServices<IExportAction>().ToList();
 
-                _ = ExecuteRun(uiapp, uidoc, projectSettingsProvider, logFactory, actionRegistry, allActions, uiOpts);
+                        _ = ExecuteRun(app, app.ActiveUIDocument, projectSettingsProvider, logFactory, actionRegistry, allActions, uiOpts);
+                    }
+                    catch (Exception ex)
+                    {
+                        try { Trace.WriteLine(ex); } catch { }
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -125,6 +148,14 @@ namespace GSADUs.Revit.Addin.Orchestration
             var doc = uidoc.Document;
 
             var appSettings = projectSettingsProvider.Load();
+            var uiSelectedWorkflowIds = uiOpts.SelectedWorkflowIds?.Where(id => !string.IsNullOrWhiteSpace(id))
+                                                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                                                .ToList();
+            if (uiSelectedWorkflowIds is { Count: > 0 })
+            {
+                appSettings.SelectedWorkflowIds = uiSelectedWorkflowIds;
+            }
+            ProjectSettingsRuntimeCache.Set(appSettings, doc?.PathName);
             var isDryRun = appSettings.DryrunDiagnostics;
 
             // Build action ids list from selected workflows into settings DTO

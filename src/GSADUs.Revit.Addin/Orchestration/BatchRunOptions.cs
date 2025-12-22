@@ -12,5 +12,6 @@ namespace GSADUs.Revit.Addin
         public string OutputDir { get; init; } = string.Empty;
         public bool Overwrite { get; init; }
         public bool SaveBefore { get; init; }
+        public IReadOnlyList<string>? SelectedWorkflowIds { get; init; }
     }
 }
