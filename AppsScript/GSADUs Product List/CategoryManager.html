@@ -10,6 +10,7 @@
       select, input, textarea { display: block; width: 100%; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; padding: 5px; box-sizing: border-box; }
       textarea { height: 60px; resize: none; }
       label { font-weight: bold; color: #555; }
+      .hint-text { font-size: 10px; color: #888; margin-top: -8px; margin-bottom: 10px; }
     </style>
   </head>
   <body>
@@ -22,6 +23,9 @@
       <input type="text" id="newName">
       <label>Category Description</label>
       <textarea id="newDesc"></textarea>
+      <label>Show Fields (Optional)</label>
+      <input type="text" id="showFields" placeholder="Bundle, Finish, or Bundle,Finish">
+      <p class="hint-text">Leave blank for most categories</p>
       <button class="btn btn-action blue darken-4" onclick="handleAdd()">Create Category</button>
     </div>
     <div class="card" style="border-top: 4px solid #f57c00;">
@@ -52,8 +56,15 @@
         const div = document.getElementById('addDiv').value;
         const name = document.getElementById('newName').value;
         const desc = document.getElementById('newDesc').value;
+        const showFields = document.getElementById('showFields').value;
         if(!div || !name) return alert("Required: Division and Name.");
-        google.script.run.withSuccessHandler(msg => { alert(msg); load(); }).addCategory(div, name, desc);
+        google.script.run.withSuccessHandler(msg => { 
+          alert(msg); 
+          document.getElementById('newName').value = '';
+          document.getElementById('newDesc').value = '';
+          document.getElementById('showFields').value = '';
+          load(); 
+        }).addCategory(div, name, desc, showFields);
       }
       function handleMerge() {
         const keep = document.getElementById('keepId').value;
