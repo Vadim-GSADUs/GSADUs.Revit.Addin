@@ -165,6 +165,8 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                     // NEW: avoid modal duplicate-type prompts
                     opts.SetDuplicateTypeNamesHandler(new DuplicateTypeHandler_UseDestination());
 
+                    // Tagging strategy note: mapping is handled later (after copy) when rebuilding selection sets.
+
                     // Preflight: ensure required work planes (ReferencePlanes and SketchPlanes) exist in destination for doc-level elements
                     EnsureWorkPlanesForElements(sourceDoc, newDoc, docLevelIds);
 
@@ -194,7 +196,11 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                                 tx.Start();
                                 foreach (var id in docLevelIds)
                                 {
-                                    try { ElementTransformUtils.CopyElements(sourceDoc, new List<ElementId> { id }, newDoc, Transform.Identity, opts); } catch { }
+                                    try
+                                    {
+                                        ElementTransformUtils.CopyElements(sourceDoc, new List<ElementId> { id }, newDoc, Transform.Identity, opts);
+                                    }
+                                    catch { }
                                 }
                                 try { tx.Commit(); } catch { try { tx.RollBack(); } catch { } }
                             }
@@ -237,7 +243,11 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                                         tx2.Start();
                                         foreach (var id in ids)
                                         {
-                                            try { ElementTransformUtils.CopyElements(srcView, new List<ElementId> { id }, dstView, Transform.Identity, opts); } catch { }
+                                            try
+                                            {
+                                                ElementTransformUtils.CopyElements(srcView, new List<ElementId> { id }, dstView, Transform.Identity, opts);
+                                            }
+                                            catch { }
                                         }
                                         try { tx2.Commit(); } catch { try { tx2.RollBack(); } catch { } }
                                     }
@@ -347,13 +357,33 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                         }
                     }
 
-                    // Save-as {SetName}.rvt in global output dir
+                    // 4) Recreate saved selection set in destination (name + members)
+                    // NOTE: Revit does not automatically copy SelectionFilterElement definitions.
+                    // We rebuild membership in the destination using the shared instance text parameter
+                    // 'ModelGroup' (already used by the add-in) matching this SetName.
+                    try
+                    {
+                        var mapped = CollectMembersByModelGroupValue(newDoc, setName);
+                        CreateOrReplaceSelectionSet(newDoc, setName, mapped);
+                    }
+                    catch { }
+
+                    // Prepare output path
                     var fileSafe = San(setName);
                     if (string.IsNullOrWhiteSpace(fileSafe)) fileSafe = "export";
 
                     var outDir = _projectSettingsProvider.GetEffectiveOutputDir(settings);
                     try { System.IO.Directory.CreateDirectory(outDir); } catch { }
                     var fullPath = System.IO.Path.Combine(outDir, fileSafe + ".rvt");
+
+                    // Write per-export trace alongside output
+                    try
+                    {
+                        var tracePath = System.IO.Path.Combine(outDir, fileSafe + "_Trace.log");
+                        var mapped = CollectMembersByModelGroupValue(newDoc, setName);
+                        WriteExportTrace(tracePath, newDoc, setName, mapped);
+                    }
+                    catch { }
 
                     // Overwrite policy
                     bool overwrite = settings.DefaultOverwrite;
@@ -378,6 +408,55 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                             }
                         }
                     }
+
+        private static void WriteExportTrace(string tracePath, Document newDoc, string setName, IList<ElementId> mapped)
+        {
+            try
+            {
+                var target = (setName ?? string.Empty).Trim();
+                var lines = new List<string>
+                {
+                    "ExportRvtAction Trace",
+                    "-------------------",
+                    "UTC: " + DateTime.UtcNow.ToString("O"),
+                    "NewDoc.Title: " + (newDoc?.Title ?? string.Empty),
+                    "NewDoc.PathName: " + (newDoc?.PathName ?? string.Empty),
+                    "SetName: " + target,
+                    "MappedMemberCount: " + (mapped?.Count ?? 0)
+                };
+
+                int scanned = 0;
+                int hasParam = 0;
+                int matches = 0;
+                var sample = new List<string>();
+
+                foreach (var e in new FilteredElementCollector(newDoc).WhereElementIsNotElementType().ToElements())
+                {
+                    scanned++;
+                    try
+                    {
+                        var p = e.LookupParameter("ModelGroup");
+                        if (p == null || p.StorageType != StorageType.String) continue;
+                        hasParam++;
+                        var v = (p.AsString() ?? string.Empty).Trim();
+                        if (string.Equals(v, target, StringComparison.OrdinalIgnoreCase)) matches++;
+                        if (sample.Count < 10 && !string.IsNullOrWhiteSpace(v))
+                            sample.Add($"{e.Id}: {e.Category?.Name ?? "?"} ModelGroup='{v}'");
+                    }
+                    catch { }
+                }
+
+                lines.Add("ScannedNonTypes: " + scanned);
+                lines.Add("HasModelGroupParam: " + hasParam);
+                lines.Add("ModelGroupMatchesSetName: " + matches);
+                lines.Add("SampleNonEmptyModelGroupValues (up to 10):");
+                if (sample.Count == 0) lines.Add("(none)"); else lines.AddRange(sample.Select(s => "  " + s));
+
+                try { System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(tracePath) ?? string.Empty); } catch { }
+                try { System.IO.File.WriteAllLines(tracePath, lines); } catch { }
+            }
+            catch { }
+        }
                     catch { }
 
                     // Optional: journal success note
@@ -388,6 +467,73 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                     try { if (newDoc != null && newDoc.IsModifiable) { /* ensure closed above */ } } catch { }
                 }
             }
+        }
+
+        private static void CreateOrReplaceSelectionSet(Document destDoc, string setName, IList<ElementId> destMemberIds)
+        {
+            if (destDoc == null) return;
+            if (string.IsNullOrWhiteSpace(setName)) return;
+
+            using var tx = new Transaction(destDoc, "Create Selection Set");
+            tx.Start();
+            try
+            {
+                try
+                {
+                    var existing = new FilteredElementCollector(destDoc)
+                        .OfClass(typeof(SelectionFilterElement))
+                        .Cast<SelectionFilterElement>()
+                        .FirstOrDefault(f => string.Equals(f.Name, setName, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null) destDoc.Delete(existing.Id);
+                }
+                catch { }
+
+                var s = SelectionFilterElement.Create(destDoc, setName);
+                if (s != null)
+                {
+                    try { s.SetElementIds(destMemberIds ?? new List<ElementId>()); } catch { }
+                }
+                tx.Commit();
+            }
+            catch
+            {
+                try { tx.RollBack(); } catch { }
+            }
+        }
+
+        private static IList<ElementId> CollectMembersByModelGroupValue(Document destDoc, string setName)
+        {
+            var ids = new HashSet<ElementId>();
+            if (destDoc == null) return new List<ElementId>();
+            var target = (setName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(target)) return new List<ElementId>();
+
+            try
+            {
+                foreach (var e in new FilteredElementCollector(destDoc)
+                    .WhereElementIsNotElementType()
+                    .ToElements())
+                {
+                    try
+                    {
+                        if (e == null) continue;
+
+                        // Skip view/sheet container-like items
+                        if (e is View || e is ViewSheet || e is Viewport) continue;
+
+                        var p = e.LookupParameter("ModelGroup");
+                        if (p == null || p.StorageType != StorageType.String) continue;
+                        var v = (p.AsString() ?? string.Empty).Trim();
+                        if (v.Length == 0) continue;
+                        if (string.Equals(v, target, StringComparison.OrdinalIgnoreCase))
+                            ids.Add(e.Id);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            return ids.ToList();
         }
 
         private static void EnsureWorkPlanesForElements(Document source, Document dest, IList<ElementId> elementIds)

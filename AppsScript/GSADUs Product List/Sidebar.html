@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <style>
+      body { padding: 15px; font-size: 13px; background-color: #f9f9f9; }
+      .section-label { font-weight: bold; color: #1b5e20; border-bottom: 2px solid #1b5e20; margin-top: 15px; margin-bottom: 5px; padding-bottom: 3px; }
+      .helper-text { font-size: 11px; color: #666; font-style: italic; background: #e8f5e9; padding: 8px; border-radius: 4px; margin-bottom: 10px; }
+      .input-field label { pointer-events: none; transform: translateY(-14px) scale(0.8); transform-origin: 0 0; color: #1b5e20 !important; }
+      select { display: block; width: 100%; height: 35px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+      .btn-save { width: 100%; background-color: #1b5e20 !important; margin-top: 20px; font-weight: bold; height: 45px; }
+      .id-view { background-color: #eee !important; border: none !important; font-weight: bold; color: #d32f2f; padding-left: 8px !important; }
+    </style>
+  </head>
+  <body>
+    <h6 style="text-align:center; font-weight:bold;">GSADU PRODUCT ENTRY</h6>
+    <p class="section-label">1. Categorization</p>
+    <label>Division</label>
+    <select id="division" onchange="filterCategories()">
+      <option value="" disabled selected>Select Division</option>
+    </select>
+    <label>Category</label>
+    <select id="category" onchange="updateCategoryInfo()">
+      <option value="" disabled selected>Select Division First</option>
+    </select>
+    <div id="catDesc" class="helper-text">Description will appear here...</div>
+    <div class="input-field">
+      <input type="text" id="itemId" class="id-view" readonly>
+      <label>Item ID (DIV-CAT-ITEM)</label>
+    </div>
+    <p class="section-label">2. Product Details</p>
+    <div class="input-field"><input type="text" id="name" placeholder="Name"><label>Product Name</label></div>
+    <label>Selection Tier</label><select id="tier"><option value="" disabled selected>Choose Tier</option></select>
+    <p class="section-label">3. Design & Finish</p>
+    <label>Bundle</label><select id="bundle"><option value="N/A">N/A</option></select>
+    <label>Finish</label><select id="finish"><option value="N/A">N/A</option></select>
+    <p class="section-label">4. Resources</p>
+    <div class="input-field"><input type="text" id="imgUrl" placeholder="URL"><label>Image URL</label></div>
+    <div class="input-field"><input type="text" id="manualUrl" placeholder="URL"><label>Spec Sheet</label></div>
+    <button class="btn btn-save" onclick="submitData()">Save Product</button>
+    <script>
+      let fullConfig = {};
+      google.script.run.withSuccessHandler(data => {
+        fullConfig = data;
+        ['division','tier','bundle','finish'].forEach(id => {
+          const s = document.getElementById(id);
+          data[id === 'division' ? 'divisions' : id + 's'].forEach(v => s.add(new Option(v, v)));
+        });
+      }).getSelectionData();
+      function filterCategories() {
+        const div = document.getElementById('division').value;
+        const s = document.getElementById('category');
+        s.innerHTML = '<option value="" disabled selected>Select Category</option>';
+        fullConfig.categoryData.filter(c => c[0] === div).forEach(c => {
+          let o = new Option(c[2], c[1]);
+          o.dataset.desc = c[3];
+          s.add(o);
+        });
+      }
+      function updateCategoryInfo() {
+        const s = document.getElementById('category');
+        const o = s.options[s.selectedIndex];
+        document.getElementById('catDesc').innerText = o.dataset.desc || "No description.";
+        google.script.run.withSuccessHandler(id => document.getElementById('itemId').value = id).generateNextItemID(o.value);
+      }
+      function submitData() {
+        const p = {
+          division: document.getElementById('division').value,
+          category: document.getElementById('category').options[document.getElementById('category').selectedIndex].text,
+          itemId: document.getElementById('itemId').value,
+          name: document.getElementById('name').value,
+          tier: document.getElementById('tier').value,
+          specs: "B: " + document.getElementById('bundle').value + " | F: " + document.getElementById('finish').value,
+          imgUrl: document.getElementById('imgUrl').value,
+          manualUrl: document.getElementById('manualUrl').value
+        };
+        google.script.run.withSuccessHandler(msg => { alert(msg); location.reload(); }).saveToDatabase(p);
+      }
+    </script>
+  </body>
+</html>
