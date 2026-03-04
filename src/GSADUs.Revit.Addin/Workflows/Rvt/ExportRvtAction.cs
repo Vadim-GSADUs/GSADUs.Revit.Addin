@@ -408,6 +408,17 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                             }
                         }
                     }
+                    catch { }
+
+                    // Optional: journal success note
+                    try { if (saved) newDoc?.Application?.WriteJournalComment($"ExportRvtAction: saved '{fullPath}'", false); } catch { }
+                }
+                finally
+                {
+                    try { if (newDoc != null && newDoc.IsModifiable) { /* ensure closed above */ } } catch { }
+                }
+            }
+        }
 
         private static void WriteExportTrace(string tracePath, Document newDoc, string setName, IList<ElementId> mapped)
         {
@@ -456,17 +467,6 @@ namespace GSADUs.Revit.Addin.Workflows.Rvt
                 try { System.IO.File.WriteAllLines(tracePath, lines); } catch { }
             }
             catch { }
-        }
-                    catch { }
-
-                    // Optional: journal success note
-                    try { if (saved) newDoc?.Application?.WriteJournalComment($"ExportRvtAction: saved '{fullPath}'", false); } catch { }
-                }
-                finally
-                {
-                    try { if (newDoc != null && newDoc.IsModifiable) { /* ensure closed above */ } } catch { }
-                }
-            }
         }
 
         private static void CreateOrReplaceSelectionSet(Document destDoc, string setName, IList<ElementId> destMemberIds)

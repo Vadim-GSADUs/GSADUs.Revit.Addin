@@ -67,6 +67,14 @@
 
   <!-- Ensure custom XAML pages are compiled -->
 
+  <!-- Copy the .addin manifest to Revit's discovery folder so it loads automatically -->
+  <Target Name="DeployAddinManifest" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\deploy\GSADUs.Revit.Addin.addin"
+          DestinationFolder="$(APPDATA)\Autodesk\Revit\Addins\2026\"
+          SkipUnchangedFiles="false"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
   <!-- Force a deploy step after every successful build -->
   <Target Name="DeployToRevitFolder" AfterTargets="Build">
     <ItemGroup>
