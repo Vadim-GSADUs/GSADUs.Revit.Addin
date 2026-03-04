@@ -4,6 +4,7 @@ obj/
 *.user
 *.suo
 *.addin
+!src/**/deploy/*.addin
 .vscode/
 .vs/**/copilot-chat/
 

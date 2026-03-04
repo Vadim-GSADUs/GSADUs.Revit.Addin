@@ -20,10 +20,6 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
-    <DeployDir>C:\GSADUs\RevitAddin\</DeployDir>
-  </PropertyGroup>
-
-	<PropertyGroup>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
@@ -75,16 +71,5 @@
           OverwriteReadOnlyFiles="true" />
   </Target>
 
-  <!-- Force a deploy step after every successful build -->
-  <Target Name="DeployToRevitFolder" AfterTargets="Build">
-    <ItemGroup>
-      <DeployFiles Include="$(TargetPath)" />
-      <DeployFiles Include="$(TargetDir)$(TargetName).pdb" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
-      <DeployFiles Include="$(TargetDir)*.json" Condition="Exists('$(TargetDir)')" />
-    </ItemGroup>
-    <Message Text="Deploying @(DeployFiles) to $(DeployDir)" Importance="High" />
-    <MakeDir Directories="$(DeployDir)" />
-    <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" />
-  </Target>
 
 </Project>

@@ -1,4 +1,4 @@
-# C:\GSADUs\Dev\Powershell\Install-GSADUsAddin.ps1
+# C:\GSADUs\BatchExportV1\Powershell\Install-GSADUsAddin.ps1
 # GSADUs Revit Add-in installer with auto-detect (net8.0-windows aware)
 
 param([switch]$Force)
@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 # --- Config ---
 $RevitYear      = 2026
-$DeployDir      = "C:\GSADUs\RevitAddin"
+$DeployDir      = "C:\GSADUs\BatchExportV1\src\GSADUs.Revit.Addin\bin\x64\Debug"
 $BackupDir      = Join-Path $DeployDir "Backups"
 $AddinFileName  = "GSADUs.BatchExport.addin"
 $AppFullClass   = "GSADUs.Revit.Addin.Startup"
@@ -18,7 +18,7 @@ $AppAddInId     = "8F0A0000-0000-4000-9000-000000000002"
 $CmdAddInId     = "E5B48D43-DD13-4A93-BD12-5D3A523C53FD"
 
 # --- Project root ---
-$ProjectRoot = "C:\GSADUs\Dev\src\GSADUs.Revit.Addin"
+$ProjectRoot = "C:\GSADUs\BatchExportV1\src\GSADUs.Revit.Addin"
 
 # --- Locate latest build output (x64 Debug/Release) ---
 $binRoot = Join-Path $ProjectRoot "bin\x64"
